@@ -56,6 +56,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 |---|---|
 | Azure Front Door | Global load balancing and WAF |
 | Azure Container Apps | Hosting frontend and backend services |
+| Azure Container Registry | Container image storage and management |
 | Azure Cosmos DB | Multi-tenant data storage |
 | Azure Service Bus | Asynchronous messaging |
 | Microsoft Foundry | Agent framework and orchestration |
@@ -96,6 +97,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 6. **Test coverage.** Write tests for new functionality. Place frontend tests in `tests/frontend/`, backend tests in `tests/backend/`, and integration tests in `tests/integration/`.
 7. **Use Azure Verified Modules.** When provisioning Azure resources with Terraform, always prefer Azure Verified Modules over custom resource definitions.
 8. **Use UV for Python.** All Python dependency management must go through UV. Do not use pip directly.
+9. **Cost optimization by default.** This solution is biased towards minimizing Azure spend. Prefer serverless and consumption-based services (e.g. Azure Container Apps consumption workload profiles, Azure Functions Consumption plan, Cosmos DB serverless, Service Bus Basic/Standard tiers) over provisioned or premium alternatives unless a specific workload requirement justifies the extra cost. Always evaluate the cost impact of architectural decisions and choose the lowest-cost option that meets the requirements.
 
 ## Agent Tools
 
