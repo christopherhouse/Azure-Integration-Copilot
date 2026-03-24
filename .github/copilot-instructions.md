@@ -42,6 +42,14 @@ Never bypass the orchestrator. Never execute implementation work without a plan 
 - Place environment-specific configurations under `infra/terraform/environments/`
 - Always pin provider and module versions
 
+### Agent Workers
+
+- One or more **agent worker** Container Apps handle asynchronous processing (e.g. long-running agent tasks, background jobs triggered via Azure Service Bus).
+- Workers run as separate Container Apps (not the same app as the API/frontend) so they can scale independently.
+- Use KEDA Service Bus scalers to scale workers based on queue/topic message counts.
+- Place worker source code under `src/backend/workers/`.
+- Workers must be stateless; all state is persisted in Cosmos DB or Azure Storage.
+
 ### CI/CD
 
 - **Platform:** GitHub Actions
@@ -55,7 +63,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 | Component | Purpose |
 |---|---|
 | Azure Front Door | Global load balancing and WAF |
-| Azure Container Apps | Hosting frontend and backend services |
+| Azure Container Apps | Hosting frontend, backend services, and async agent workers |
 | Azure Container Registry | Container image storage and management |
 | Azure Cosmos DB | Multi-tenant data storage |
 | Azure Service Bus | Asynchronous messaging |
