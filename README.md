@@ -23,6 +23,7 @@
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
+  - [CI/CD Authentication Setup](#cicd-authentication-setup)
   - [First Deployment](#first-deployment)
 - [Development Conventions](#development-conventions)
 - [GitHub Copilot Agents](#github-copilot-agents)
@@ -241,6 +242,156 @@ flowchart LR
 | Azure Subscription | With permissions to create the resources listed in [Azure Services](#azure-services) |
 | Azure AD Tenant | For managed identity provisioning and RBAC assignments |
 | GitHub OIDC Secrets | `AZURE_CLIENT_ID_DEV`, `AZURE_CLIENT_ID_PROD`, `AZURE_SUBSCRIPTION_ID_DEV`, `AZURE_SUBSCRIPTION_ID_PROD`, `AZURE_TENANT_ID` |
+
+### CI/CD Authentication Setup
+
+The CI/CD pipeline authenticates to Azure using **OpenID Connect (OIDC) federated credentials** — no secrets or passwords are stored in GitHub. Terraform state is stored in Azure Storage with **Entra ID authentication only** (shared access keys are disabled).
+
+Complete the steps below once per environment (`dev` and `prod`).
+
+#### 1. Create Entra ID App Registrations
+
+Create one App Registration per environment. Each gets its own service principal that the GitHub Actions workflow uses to deploy resources.
+
+```bash
+# Dev
+az ad app create --display-name "github-aic-dev"
+DEV_APP_ID=$(az ad app list --display-name "github-aic-dev" --query "[0].appId" -o tsv)
+az ad sp create --id $DEV_APP_ID
+
+# Prod
+az ad app create --display-name "github-aic-prod"
+PROD_APP_ID=$(az ad app list --display-name "github-aic-prod" --query "[0].appId" -o tsv)
+az ad sp create --id $PROD_APP_ID
+```
+
+#### 2. Add Federated Credentials for GitHub Actions
+
+Federated credentials let GitHub Actions exchange its OIDC token for an Azure access token without storing a client secret. Create one credential per app registration, scoped to the matching GitHub Actions **environment**.
+
+> Replace `<OWNER>/<REPO>` with your GitHub repository (e.g. `christopherhouse/Azure-Integration-Copilot`).
+
+```bash
+# Dev — trusts the "dev" GitHub environment
+az ad app federated-credential create --id $DEV_APP_ID --parameters '{
+  "name": "github-actions-dev",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:<OWNER>/<REPO>:environment:dev",
+  "audiences": ["api://AzureADTokenExchange"],
+  "description": "GitHub Actions OIDC — dev environment"
+}'
+
+# Prod — trusts the "prod" GitHub environment
+az ad app federated-credential create --id $PROD_APP_ID --parameters '{
+  "name": "github-actions-prod",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:<OWNER>/<REPO>:environment:prod",
+  "audiences": ["api://AzureADTokenExchange"],
+  "description": "GitHub Actions OIDC — prod environment"
+}'
+```
+
+> **Why `environment:` subjects?** The workflow declares `environment: dev` and `environment: prod` on its plan/apply jobs. The federated credential subject must match the environment name exactly, otherwise the token exchange will fail.
+
+#### 3. Create Terraform State Storage Accounts
+
+Each environment stores its state in a dedicated storage account with **shared access keys disabled** so that all access goes through Entra ID RBAC.
+
+```bash
+# Shared resource group for state storage
+az group create --name rg-tfstate-aic --location <LOCATION>
+
+# Dev state storage
+az storage account create \
+  --name sttfstateaicdev \
+  --resource-group rg-tfstate-aic \
+  --location <LOCATION> \
+  --sku Standard_LRS \
+  --allow-blob-public-access false \
+  --allow-shared-key-access false
+
+az storage container create \
+  --name tfstate \
+  --account-name sttfstateaicdev \
+  --auth-mode login
+
+# Prod state storage
+az storage account create \
+  --name sttfstateaicprod \
+  --resource-group rg-tfstate-aic \
+  --location <LOCATION> \
+  --sku Standard_LRS \
+  --allow-blob-public-access false \
+  --allow-shared-key-access false
+
+az storage container create \
+  --name tfstate \
+  --account-name sttfstateaicprod \
+  --auth-mode login
+```
+
+> The backend configuration in `infra/terraform/environments/*/backend.tf` already sets `use_azuread_auth = true`, which tells the AzureRM provider to authenticate to the storage account using Entra ID instead of storage account keys.
+
+#### 4. Assign RBAC Roles
+
+Each service principal needs two roles:
+
+| Role | Scope | Purpose |
+|---|---|---|
+| **Storage Blob Data Contributor** | State storage account | Read/write Terraform state blobs |
+| **Contributor** | Target Azure subscription | Create and manage Azure resources |
+
+```bash
+# Dev
+DEV_SP_OBJECT_ID=$(az ad sp show --id $DEV_APP_ID --query id -o tsv)
+DEV_STORAGE_ID=$(az storage account show --name sttfstateaicdev \
+  --resource-group rg-tfstate-aic --query id -o tsv)
+
+az role assignment create \
+  --assignee-object-id $DEV_SP_OBJECT_ID \
+  --assignee-principal-type ServicePrincipal \
+  --role "Storage Blob Data Contributor" \
+  --scope $DEV_STORAGE_ID
+
+az role assignment create \
+  --assignee-object-id $DEV_SP_OBJECT_ID \
+  --assignee-principal-type ServicePrincipal \
+  --role "Contributor" \
+  --scope "/subscriptions/<DEV_SUBSCRIPTION_ID>"
+
+# Prod
+PROD_SP_OBJECT_ID=$(az ad sp show --id $PROD_APP_ID --query id -o tsv)
+PROD_STORAGE_ID=$(az storage account show --name sttfstateaicprod \
+  --resource-group rg-tfstate-aic --query id -o tsv)
+
+az role assignment create \
+  --assignee-object-id $PROD_SP_OBJECT_ID \
+  --assignee-principal-type ServicePrincipal \
+  --role "Storage Blob Data Contributor" \
+  --scope $PROD_STORAGE_ID
+
+az role assignment create \
+  --assignee-object-id $PROD_SP_OBJECT_ID \
+  --assignee-principal-type ServicePrincipal \
+  --role "Contributor" \
+  --scope "/subscriptions/<PROD_SUBSCRIPTION_ID>"
+```
+
+#### 5. Configure GitHub Secrets
+
+In your GitHub repository, go to **Settings → Environments** and create `dev` and `prod` environments. Then add the following **environment secrets**:
+
+| Secret | Environment | Value |
+|---|---|---|
+| `AZURE_CLIENT_ID_DEV` | `dev` | Application (client) ID of the dev App Registration |
+| `AZURE_SUBSCRIPTION_ID_DEV` | `dev` | Azure subscription ID for the dev environment |
+| `AZURE_CLIENT_ID_PROD` | `prod` | Application (client) ID of the prod App Registration |
+| `AZURE_SUBSCRIPTION_ID_PROD` | `prod` | Azure subscription ID for the prod environment |
+| `AZURE_TENANT_ID` | both | Directory (tenant) ID of your Entra ID tenant |
+
+> **Tip:** Use environment secrets (not repository secrets) so that each workflow job can only access the credentials for the environment it targets.
+
+Once complete, the Terraform workflow (`.github/workflows/terraform.yml`) will authenticate to Azure and access Terraform state without any stored passwords or access keys.
 
 ### First Deployment
 
