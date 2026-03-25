@@ -45,7 +45,7 @@ The application consists of a **Next.js frontend**, a **Python backend**, and **
 | Layer | Technology |
 |---|---|
 | **Frontend** | Next.js (App Router), TypeScript (strict mode), Azure Container Apps |
-| **Backend** | Python 3.13, UV package manager, Azure Container Apps |
+| **Backend** | Python 3.13, FastAPI, UV package manager, Azure Container Apps |
 | **Agent Workers** | Azure Container Apps with KEDA scalers, Azure Service Bus triggers |
 | **Agent Framework** | Microsoft Foundry |
 | **Infrastructure** | Terraform with [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) |

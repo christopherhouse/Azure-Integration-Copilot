@@ -1,0 +1,47 @@
+import logging
+
+import structlog
+from azure.cosmos.aio import CosmosClient
+from azure.identity.aio import DefaultAzureCredential
+
+from config import settings
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+class CosmosService:
+    """Async wrapper around Azure Cosmos DB client."""
+
+    def __init__(self) -> None:
+        self._client: CosmosClient | None = None
+        self._credential: DefaultAzureCredential | None = None
+
+    async def _get_client(self) -> CosmosClient:
+        if self._client is None:
+            self._credential = DefaultAzureCredential()
+            self._client = CosmosClient(url=settings.cosmos_db_endpoint, credential=self._credential)
+        return self._client
+
+    async def ping(self) -> bool:
+        """Check connectivity to Cosmos DB. Returns True if reachable."""
+        try:
+            client = await self._get_client()
+            # List databases as a connectivity check
+            async for _ in client.list_databases():
+                break
+            return True
+        except Exception:
+            logger.warning("cosmos_ping_failed", exc_info=True, level=logging.WARNING)
+            return False
+
+    async def close(self) -> None:
+        """Close the Cosmos DB client and credential."""
+        if self._client is not None:
+            await self._client.close()
+            self._client = None
+        if self._credential is not None:
+            await self._credential.close()
+            self._credential = None
+
+
+cosmos_service = CosmosService()

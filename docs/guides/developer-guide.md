@@ -30,27 +30,36 @@ The backend will be available at `http://localhost:8000` and the frontend at `ht
 
 ```
 src/
-├── backend/            # Python 3.13 FastAPI backend
-│   ├── main.py         # FastAPI app with health endpoint
-│   ├── config.py       # Application configuration (placeholder)
-│   ├── middleware/      # HTTP middleware (placeholder)
-│   ├── shared/         # Shared utilities (placeholder)
-│   ├── domains/        # Domain modules (placeholder)
-│   ├── pyproject.toml  # Python project config and dependencies
-│   ├── uv.lock         # Locked dependency versions
-│   └── Dockerfile      # Multi-stage production image
-└── frontend/           # Next.js 16 TypeScript frontend
+├── backend/                  # Python 3.13 FastAPI backend
+│   ├── main.py               # FastAPI app, middleware registration, health endpoints
+│   ├── config.py             # pydantic-settings configuration (env vars / .env)
+│   ├── middleware/
+│   │   ├── auth.py           # Authentication middleware (stub — task 004)
+│   │   ├── tenant_context.py # Tenant resolution middleware (stub — task 004)
+│   │   └── quota.py          # Quota enforcement middleware (stub — task 004)
+│   ├── shared/
+│   │   ├── models.py         # ResponseEnvelope[T], PaginatedResponse[T], ErrorResponse
+│   │   ├── exceptions.py     # AppError hierarchy (404, 401, 403, 422, 429)
+│   │   ├── cosmos.py         # Cosmos DB async client wrapper
+│   │   ├── blob.py           # Blob Storage async client wrapper
+│   │   ├── events.py         # Event Grid publisher wrapper
+│   │   └── logging.py        # structlog + OpenTelemetry setup
+│   ├── domains/              # Domain modules (placeholder)
+│   ├── pyproject.toml        # Python project config and dependencies
+│   ├── uv.lock               # Locked dependency versions
+│   └── Dockerfile            # Multi-stage production image
+└── frontend/                 # Next.js 16 TypeScript frontend
     ├── src/
-    │   ├── app/        # Next.js App Router pages
-    │   ├── components/ # Reusable UI components (shadcn/ui)
-    │   └── lib/        # Shared utilities
-    ├── package.json    # Node.js project config
-    └── Dockerfile      # Multi-stage production image
+    │   ├── app/              # Next.js App Router pages
+    │   ├── components/       # Reusable UI components (shadcn/ui)
+    │   └── lib/              # Shared utilities
+    ├── package.json          # Node.js project config
+    └── Dockerfile            # Multi-stage production image
 
 tests/
-├── backend/            # Python tests (pytest)
-├── frontend/           # Frontend tests (Jest + React Testing Library)
-└── integration/        # End-to-end tests (placeholder)
+├── backend/                  # Python tests (pytest)
+├── frontend/                 # Frontend tests (Jest + React Testing Library)
+└── integration/              # End-to-end tests (placeholder)
 ```
 
 ## Backend Development
@@ -71,7 +80,106 @@ uv run uvicorn main:app --reload --port 8000
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/health` | Health check — returns `{"status": "ok"}` |
+| `GET` | `/api/v1/health` | Liveness probe — returns `200` when the process is running |
+| `GET` | `/api/v1/health/ready` | Readiness probe — checks Cosmos DB connectivity |
+
+### Configuration
+
+The backend uses [pydantic-settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) to load configuration from environment variables and an optional `.env` file in `src/backend/`.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENVIRONMENT` | `development` | Runtime environment (`development`, `production`) |
+| `COSMOS_DB_ENDPOINT` | *(empty)* | Cosmos DB account endpoint URL |
+| `BLOB_STORAGE_ENDPOINT` | *(empty)* | Azure Blob Storage endpoint URL |
+| `EVENT_GRID_NAMESPACE_ENDPOINT` | *(empty)* | Event Grid namespace endpoint URL |
+| `EVENT_GRID_TOPIC` | `integration-events` | Event Grid topic name |
+| `WEB_PUBSUB_ENDPOINT` | *(empty)* | Azure Web PubSub endpoint URL |
+| `AZURE_CLIENT_ID` | *(empty)* | Managed identity client ID for Azure SDK authentication |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | *(empty)* | Application Insights connection string for telemetry export |
+| `DEFENDER_SCAN_ENABLED` | `false` | Enable Microsoft Defender content scanning |
+
+For local development, create a `.env` file in `src/backend/`:
+
+```bash
+# src/backend/.env (not committed to source control)
+ENVIRONMENT=development
+COSMOS_DB_ENDPOINT=https://your-cosmos-account.documents.azure.com:443/
+```
+
+> **Note**: All Azure service endpoints are optional for local development. The backend starts without them but the `/api/v1/health/ready` endpoint will return `503` until Cosmos DB is configured.
+
+### API Response Format
+
+All API responses follow a consistent envelope structure.
+
+**Success responses** use `ResponseEnvelope`:
+
+```json
+{
+  "data": { "status": "ok" },
+  "meta": {
+    "request_id": "550e8400-e29b-41d4-a716-446655440000",
+    "timestamp": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+**Error responses** use `ErrorResponse`:
+
+```json
+{
+  "error": {
+    "code": "RESOURCE_NOT_FOUND",
+    "message": "The requested resource was not found.",
+    "detail": null,
+    "request_id": "550e8400-e29b-41d4-a716-446655440000"
+  }
+}
+```
+
+Standard error codes:
+
+| Code | HTTP Status | Thrown by |
+|------|-------------|----------|
+| `RESOURCE_NOT_FOUND` | 404 | `NotFoundError` |
+| `UNAUTHORIZED` | 401 | `UnauthorizedError` |
+| `FORBIDDEN` | 403 | `ForbiddenError` |
+| `VALIDATION_ERROR` | 422 | `ValidationError` |
+| `QUOTA_EXCEEDED` | 429 | `QuotaExceededError` |
+| `INTERNAL_ERROR` | 500 | `AppError` (base) |
+
+All error classes live in `src/backend/shared/exceptions.py` and are automatically converted to `ErrorResponse` JSON by the exception handler in `main.py`.
+
+### Middleware Pipeline
+
+Requests pass through three middleware layers before reaching the route handler:
+
+```
+Request → AuthMiddleware → TenantContextMiddleware → QuotaMiddleware → Route Handler
+```
+
+| Middleware | Sets on `request.state` | Status |
+|------------|------------------------|--------|
+| `AuthMiddleware` | `user_id` | Stub — hardcodes `dev-user-001`; skips health paths |
+| `TenantContextMiddleware` | `tenant`, `tier` | Stub — hardcodes `dev-tenant-001` / `free` |
+| `QuotaMiddleware` | *(none)* | Stub — passes through all requests |
+
+> These middleware stubs will be replaced with real implementations in task 004.
+
+### Observability
+
+The backend integrates **structlog** for structured logging and **OpenTelemetry** for distributed tracing.
+
+**Logging** — structlog is configured in `shared/logging.py`:
+- **Development**: Colored console output for readability
+- **Production** (`ENVIRONMENT=production`): JSON-formatted logs for ingestion by log aggregators
+- All log entries include `trace_id` and `span_id` from OpenTelemetry for trace correlation
+
+**Tracing** — OpenTelemetry is configured with:
+- Automatic FastAPI request/response instrumentation
+- Azure Monitor export via `azure-monitor-opentelemetry-exporter` (when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set)
+- Request IDs are propagated via the `X-Request-ID` header (auto-generated if absent)
 
 ### Linting
 
@@ -256,6 +364,9 @@ The root `Makefile` provides convenient shortcuts:
 | Backend runtime | Python | 3.13 |
 | Backend package manager | UV | Latest |
 | Backend linter | Ruff | Latest |
+| Backend logging | structlog | Latest |
+| Backend tracing | OpenTelemetry + Azure Monitor Exporter | Latest |
+| Backend config | pydantic-settings | Latest |
 | Frontend framework | Next.js | 16 |
 | Frontend language | TypeScript | 5 |
 | Frontend styling | Tailwind CSS | 4 |
