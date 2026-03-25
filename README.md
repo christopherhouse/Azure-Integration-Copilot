@@ -13,6 +13,7 @@
 - [Overview](#overview)
 - [Technology Stack](#technology-stack)
 - [Repository Structure](#repository-structure)
+- [Local Development](#local-development)
 - [Azure Services](#azure-services)
 - [Infrastructure Architecture](#infrastructure-architecture)
   - [Network Layout](#network-layout)
@@ -89,6 +90,38 @@ The application consists of a **Next.js frontend**, a **Python backend**, and **
 ├── LICENSE                      # MIT License
 └── README.md                    # This file
 ```
+
+---
+
+## Local Development
+
+Get up and running quickly with the backend and frontend:
+
+```bash
+# Backend (Python 3.13 + FastAPI)
+cd src/backend
+uv sync                                          # Install dependencies
+uv run uvicorn main:app --reload --port 8000     # Start dev server
+
+# Frontend (Next.js 16 + TypeScript)
+cd src/frontend
+npm install                                      # Install dependencies
+npm run dev                                      # Start dev server
+
+# Or start both services with Docker Compose
+make up
+```
+
+| Command | Description |
+|---------|-------------|
+| `make dev-backend` | Start backend with hot reload |
+| `make dev-frontend` | Start frontend with hot reload |
+| `make lint` | Run linters for both projects |
+| `make test` | Run tests for both projects |
+| `make build` | Build Docker images |
+| `make up` | Build and start both services |
+
+For the full developer guide — including setup, testing, and tooling details — see **[docs/guides/developer-guide.md](docs/guides/developer-guide.md)**.
 
 ---
 
