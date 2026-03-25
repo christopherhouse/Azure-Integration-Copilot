@@ -20,6 +20,14 @@ webpubsub_hostname = "pubsub.christopher-house.com"
 
 vnet_address_space = ["10.1.0.0/16"]
 
+# Cosmos DB SQL databases and containers
+cosmos_sql_databases = {
+  "integration-cp" = {
+    name       = "integration-cp"
+    containers = {}
+  }
+}
+
 tags = {
   project     = "azure-integration-copilot"
   cost_center = "engineering"

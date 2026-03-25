@@ -59,14 +59,24 @@ output "front_door_pubsub_endpoint" {
   value       = var.deploy_front_door ? module.front_door[0].pubsub_endpoint_hostname : null
 }
 
-output "frontend_app_fqdn" {
-  description = "FQDN of the frontend container app (internal)"
-  value       = module.container_apps.frontend_fqdn
+output "frontend_identity_resource_id" {
+  description = "Resource ID of the frontend user-assigned managed identity"
+  value       = module.identity_frontend.resource_id
 }
 
-output "backend_app_fqdn" {
-  description = "FQDN of the backend container app (internal)"
-  value       = module.container_apps.backend_fqdn
+output "backend_identity_resource_id" {
+  description = "Resource ID of the backend user-assigned managed identity"
+  value       = module.identity_backend.resource_id
+}
+
+output "worker_identity_resource_id" {
+  description = "Resource ID of the worker user-assigned managed identity"
+  value       = module.identity_worker.resource_id
+}
+
+output "container_apps_environment_id" {
+  description = "ID of the Container Apps environment"
+  value       = module.container_apps.environment_id
 }
 
 output "web_pubsub_hostname" {

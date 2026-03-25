@@ -23,33 +23,6 @@ variable "log_analytics_workspace_id" {
   type        = string
 }
 
-variable "registry_login_server" {
-  description = "Login server URL for the container registry"
-  type        = string
-}
-
-variable "image_tag" {
-  description = "Container image tag to deploy for placeholder apps"
-  type        = string
-  default     = "latest"
-}
-
-variable "min_replicas" {
-  description = "Minimum number of replicas for container apps (set to 0 to allow scale-to-zero)"
-  type        = number
-  default     = 0
-}
-
-variable "frontend_identity_resource_id" {
-  description = "Resource ID of the user-assigned managed identity for the frontend container app"
-  type        = string
-}
-
-variable "backend_identity_resource_id" {
-  description = "Resource ID of the user-assigned managed identity for the backend container app"
-  type        = string
-}
-
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)

@@ -152,7 +152,7 @@ jobs:
             --force
 
   # ---------------------------------------------------------------------------
-  # Dev — Deploy Container Apps
+  # Dev — Deploy Container Apps (via Terraform)
   # ---------------------------------------------------------------------------
   deploy-apps-dev:
     name: "Dev — Deploy Container Apps"
@@ -160,7 +160,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
 
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_USE_OIDC: 'true'
+
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
@@ -168,19 +179,22 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy frontend container app
-        run: |
-          az containerapp update \
-            --name ca-frontend \
-            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-dev.outputs.image_tag }}"
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.6
+          terraform_wrapper: false
 
-      - name: Deploy backend container app
+      - name: Terraform Init
+        working-directory: infra/terraform/environments/dev-containers
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: infra/terraform/environments/dev-containers
         run: |
-          az containerapp update \
-            --name ca-backend \
-            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/backend:${{ needs.promote-containers-dev.outputs.image_tag }}"
+          terraform apply -auto-approve \
+            -var-file="dev-containers.tfvars" \
+            -var="image_tag=${{ needs.promote-containers-dev.outputs.image_tag }}"
 
 # =============================================================================
 # PROD ENVIRONMENT
@@ -310,7 +324,7 @@ jobs:
             --force
 
   # ---------------------------------------------------------------------------
-  # Prod — Deploy Container Apps
+  # Prod — Deploy Container Apps (via Terraform)
   # ---------------------------------------------------------------------------
   deploy-apps-prod:
     name: "Prod — Deploy Container Apps"
@@ -318,7 +332,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod
 
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_USE_OIDC: 'true'
+
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
@@ -326,16 +351,19 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy frontend container app
-        run: |
-          az containerapp update \
-            --name ca-frontend \
-            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-prod.outputs.image_tag }}"
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.6
+          terraform_wrapper: false
 
-      - name: Deploy backend container app
+      - name: Terraform Init
+        working-directory: infra/terraform/environments/prod-containers
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: infra/terraform/environments/prod-containers
         run: |
-          az containerapp update \
-            --name ca-backend \
-            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/backend:${{ needs.promote-containers-prod.outputs.image_tag }}"
+          terraform apply -auto-approve \
+            -var-file="prod-containers.tfvars" \
+            -var="image_tag=${{ needs.promote-containers-prod.outputs.image_tag }}"
