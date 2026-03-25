@@ -1,6 +1,5 @@
 locals {
-  region_short = "eastus"
-  name_prefix  = "${var.workload}-${var.environment}-${local.region_short}"
+  name_prefix  = "${var.workload}-${var.environment}-${local.location}"
 
   resource_names = {
     resource_group     = "rg-${local.name_prefix}"
