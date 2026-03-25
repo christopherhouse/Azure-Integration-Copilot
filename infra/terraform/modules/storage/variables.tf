@@ -38,6 +38,18 @@ variable "log_analytics_workspace_id" {
   type        = string
 }
 
+variable "blob_delete_retention_days" {
+  description = "Number of days to retain deleted blobs"
+  type        = number
+  default     = 7
+}
+
+variable "container_delete_retention_days" {
+  description = "Number of days to retain deleted blob containers"
+  type        = number
+  default     = 7
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)

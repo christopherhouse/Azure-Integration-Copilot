@@ -81,15 +81,17 @@ module "key_vault" {
 module "storage" {
   source = "../../../modules/storage"
 
-  resource_group_name         = azurerm_resource_group.this.name
-  location                    = var.location
-  storage_account_name        = local.resource_names.storage_account
-  subnet_private_endpoints_id = module.networking.subnet_private_endpoints_id
-  private_dns_zone_blob_id    = module.networking.private_dns_zone_ids["privatelink.blob.core.windows.net"]
-  private_dns_zone_queue_id   = module.networking.private_dns_zone_ids["privatelink.queue.core.windows.net"]
-  private_dns_zone_table_id   = module.networking.private_dns_zone_ids["privatelink.table.core.windows.net"]
-  log_analytics_workspace_id  = module.observability.log_analytics_workspace_id
-  tags                        = local.common_tags
+  resource_group_name             = azurerm_resource_group.this.name
+  location                        = var.location
+  storage_account_name            = local.resource_names.storage_account
+  subnet_private_endpoints_id     = module.networking.subnet_private_endpoints_id
+  private_dns_zone_blob_id        = module.networking.private_dns_zone_ids["privatelink.blob.core.windows.net"]
+  private_dns_zone_queue_id       = module.networking.private_dns_zone_ids["privatelink.queue.core.windows.net"]
+  private_dns_zone_table_id       = module.networking.private_dns_zone_ids["privatelink.table.core.windows.net"]
+  log_analytics_workspace_id      = module.observability.log_analytics_workspace_id
+  blob_delete_retention_days      = 30
+  container_delete_retention_days = 30
+  tags                            = local.common_tags
 }
 
 module "cosmos_db" {
@@ -127,6 +129,7 @@ module "container_apps" {
   log_analytics_workspace_customer_id = module.observability.log_analytics_workspace_customer_id
   log_analytics_workspace_primary_key = module.observability.log_analytics_workspace_primary_key
   registry_login_server               = module.container_registry.login_server
+  min_replicas                        = 1
   tags                                = local.common_tags
 }
 

@@ -39,6 +39,18 @@ variable "registry_login_server" {
   type        = string
 }
 
+variable "image_tag" {
+  description = "Container image tag to deploy for placeholder apps"
+  type        = string
+  default     = "latest"
+}
+
+variable "min_replicas" {
+  description = "Minimum number of replicas for container apps (set to 0 to allow scale-to-zero)"
+  type        = number
+  default     = 0
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)

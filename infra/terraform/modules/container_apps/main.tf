@@ -23,7 +23,7 @@ resource "azurerm_container_app" "frontend" {
   template {
     container {
       name   = "frontend"
-      image  = "${var.registry_login_server}/frontend:latest"
+      image  = "${var.registry_login_server}/frontend:${var.image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -33,7 +33,7 @@ resource "azurerm_container_app" "frontend" {
       }
     }
 
-    min_replicas = 0
+    min_replicas = var.min_replicas
     max_replicas = 10
   }
 
@@ -59,7 +59,7 @@ resource "azurerm_container_app" "backend" {
   template {
     container {
       name   = "backend"
-      image  = "${var.registry_login_server}/backend:latest"
+      image  = "${var.registry_login_server}/backend:${var.image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -69,7 +69,7 @@ resource "azurerm_container_app" "backend" {
       }
     }
 
-    min_replicas = 0
+    min_replicas = var.min_replicas
     max_replicas = 10
   }
 
@@ -95,12 +95,12 @@ resource "azurerm_container_app" "worker" {
   template {
     container {
       name   = "worker"
-      image  = "${var.registry_login_server}/worker:latest"
+      image  = "${var.registry_login_server}/worker:${var.image_tag}"
       cpu    = 0.25
       memory = "0.5Gi"
     }
 
-    min_replicas = 0
+    min_replicas = var.min_replicas
     max_replicas = 10
   }
 }
