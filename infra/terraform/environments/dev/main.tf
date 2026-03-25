@@ -107,9 +107,11 @@ module "cosmos_db" {
 module "service_bus" {
   source = "../../../modules/service_bus"
 
-  resource_group_name         = azurerm_resource_group.this.name
-  location                    = var.location
-  namespace_name              = local.resource_names.service_bus
+  resource_group_name = azurerm_resource_group.this.name
+  location            = var.location
+  namespace_name      = local.resource_names.service_bus
+  # Standard SKU in dev: no private endpoint, lower cost
+  sku                         = "Standard"
   subnet_private_endpoints_id = module.networking.subnet_private_endpoints_id
   private_dns_zone_id         = module.networking.private_dns_zone_ids["privatelink.servicebus.windows.net"]
   log_analytics_workspace_id  = module.observability.log_analytics_workspace_id
@@ -136,7 +138,8 @@ module "front_door" {
   waf_policy_name            = local.resource_names.waf_policy
   frontend_origin_hostname   = module.container_apps.frontend_fqdn
   backend_origin_hostname    = module.container_apps.backend_fqdn
-  custom_domain_name         = var.custom_domain_name
+  frontend_custom_domain     = var.frontend_custom_domain
+  backend_custom_domain      = var.backend_custom_domain
   log_analytics_workspace_id = module.observability.log_analytics_workspace_id
   tags                       = local.common_tags
 }

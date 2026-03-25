@@ -109,9 +109,11 @@ module "cosmos_db" {
 module "service_bus" {
   source = "../../../modules/service_bus"
 
-  resource_group_name         = azurerm_resource_group.this.name
-  location                    = var.location
-  namespace_name              = local.resource_names.service_bus
+  resource_group_name = azurerm_resource_group.this.name
+  location            = var.location
+  namespace_name      = local.resource_names.service_bus
+  # Premium SKU in prod: required for private endpoint support
+  sku                         = "Premium"
   subnet_private_endpoints_id = module.networking.subnet_private_endpoints_id
   private_dns_zone_id         = module.networking.private_dns_zone_ids["privatelink.servicebus.windows.net"]
   log_analytics_workspace_id  = module.observability.log_analytics_workspace_id
@@ -127,8 +129,11 @@ module "container_apps" {
   subnet_container_apps_id   = module.networking.subnet_container_apps_id
   log_analytics_workspace_id = module.observability.log_analytics_workspace_id
   registry_login_server      = module.container_registry.login_server
-  min_replicas               = 1
-  tags                       = local.common_tags
+  # min_replicas=1 in prod avoids cold-start latency for user-facing traffic.
+  # Container Apps consumption billing is per-second of actual CPU/memory usage,
+  # so one idle replica adds minimal cost while ensuring immediate responsiveness.
+  min_replicas = 1
+  tags         = local.common_tags
 }
 
 module "front_door" {
@@ -139,7 +144,8 @@ module "front_door" {
   waf_policy_name            = local.resource_names.waf_policy
   frontend_origin_hostname   = module.container_apps.frontend_fqdn
   backend_origin_hostname    = module.container_apps.backend_fqdn
-  custom_domain_name         = var.custom_domain_name
+  frontend_custom_domain     = var.frontend_custom_domain
+  backend_custom_domain      = var.backend_custom_domain
   log_analytics_workspace_id = module.observability.log_analytics_workspace_id
   tags                       = local.common_tags
 }

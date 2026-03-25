@@ -2,14 +2,17 @@ resource "azurerm_servicebus_namespace" "this" {
   name                = var.namespace_name
   location            = var.location
   resource_group_name = var.resource_group_name
-  # Premium tier is required for private endpoint support
-  sku                           = "Premium"
+  # Premium tier is required for private endpoint support.
+  # Use Standard in dev (no private endpoint) and Premium in prod.
+  sku                           = var.sku
   local_auth_enabled            = false
-  public_network_access_enabled = false
+  public_network_access_enabled = var.sku == "Premium" ? false : true
   tags                          = var.tags
 }
 
 resource "azurerm_private_endpoint" "this" {
+  # Private endpoints are only supported on the Premium SKU
+  count               = var.sku == "Premium" ? 1 : 0
   name                = "pe-${var.namespace_name}"
   location            = var.location
   resource_group_name = var.resource_group_name

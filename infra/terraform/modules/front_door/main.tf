@@ -6,11 +6,25 @@ resource "azurerm_cdn_frontdoor_profile" "this" {
   tags                     = var.tags
 }
 
-resource "azurerm_cdn_frontdoor_endpoint" "this" {
-  name                     = "ep-${var.profile_name}"
+# ---------------------------------------------------------------------------
+# Endpoints — one per tier so each has its own hostname / custom domain
+# ---------------------------------------------------------------------------
+
+resource "azurerm_cdn_frontdoor_endpoint" "frontend" {
+  name                     = "ep-frontend-${var.profile_name}"
   cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.this.id
   tags                     = var.tags
 }
+
+resource "azurerm_cdn_frontdoor_endpoint" "backend" {
+  name                     = "ep-backend-${var.profile_name}"
+  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.this.id
+  tags                     = var.tags
+}
+
+# ---------------------------------------------------------------------------
+# Origin groups
+# ---------------------------------------------------------------------------
 
 resource "azurerm_cdn_frontdoor_origin_group" "frontend" {
   name                     = "og-frontend"
@@ -48,6 +62,10 @@ resource "azurerm_cdn_frontdoor_origin_group" "backend" {
   }
 }
 
+# ---------------------------------------------------------------------------
+# Origins
+# ---------------------------------------------------------------------------
+
 resource "azurerm_cdn_frontdoor_origin" "frontend" {
   name                          = "origin-frontend"
   cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.frontend.id
@@ -76,6 +94,72 @@ resource "azurerm_cdn_frontdoor_origin" "backend" {
   http_port                      = 80
 }
 
+# ---------------------------------------------------------------------------
+# Custom domains (optional — created only when the variable is non-empty)
+# ---------------------------------------------------------------------------
+
+resource "azurerm_cdn_frontdoor_custom_domain" "frontend" {
+  count                    = var.frontend_custom_domain != "" ? 1 : 0
+  name                     = "cd-frontend-${replace(var.frontend_custom_domain, ".", "-")}"
+  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.this.id
+  host_name                = var.frontend_custom_domain
+
+  tls {
+    certificate_type = "ManagedCertificate"
+  }
+}
+
+resource "azurerm_cdn_frontdoor_custom_domain" "backend" {
+  count                    = var.backend_custom_domain != "" ? 1 : 0
+  name                     = "cd-backend-${replace(var.backend_custom_domain, ".", "-")}"
+  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.this.id
+  host_name                = var.backend_custom_domain
+
+  tls {
+    certificate_type = "ManagedCertificate"
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+
+resource "azurerm_cdn_frontdoor_route" "frontend" {
+  name                          = "route-frontend"
+  cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.frontend.id
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.frontend.id
+  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.frontend.id]
+
+  enabled                = true
+  forwarding_protocol    = "HttpsOnly"
+  https_redirect_enabled = true
+  patterns_to_match      = ["/*"]
+  supported_protocols    = ["Http", "Https"]
+
+  cdn_frontdoor_custom_domain_ids = var.frontend_custom_domain != "" ? [azurerm_cdn_frontdoor_custom_domain.frontend[0].id] : []
+  link_to_default_domain          = var.frontend_custom_domain == ""
+}
+
+resource "azurerm_cdn_frontdoor_route" "backend" {
+  name                          = "route-backend"
+  cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.backend.id
+  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.backend.id
+  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.backend.id]
+
+  enabled                = true
+  forwarding_protocol    = "HttpsOnly"
+  https_redirect_enabled = true
+  patterns_to_match      = ["/*"]
+  supported_protocols    = ["Http", "Https"]
+
+  cdn_frontdoor_custom_domain_ids = var.backend_custom_domain != "" ? [azurerm_cdn_frontdoor_custom_domain.backend[0].id] : []
+  link_to_default_domain          = var.backend_custom_domain == ""
+}
+
+# ---------------------------------------------------------------------------
+# WAF policy (Prevention mode, DRS 2.1 + BotManager 1.1)
+# ---------------------------------------------------------------------------
+
 resource "azurerm_cdn_frontdoor_firewall_policy" "this" {
   name                              = var.waf_policy_name
   resource_group_name               = var.resource_group_name
@@ -99,6 +183,7 @@ resource "azurerm_cdn_frontdoor_firewall_policy" "this" {
   tags = var.tags
 }
 
+# Security policy — WAF applied to both endpoints and all custom domains
 resource "azurerm_cdn_frontdoor_security_policy" "this" {
   name                     = "secp-${var.profile_name}"
   cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.this.id
@@ -108,56 +193,41 @@ resource "azurerm_cdn_frontdoor_security_policy" "this" {
       cdn_frontdoor_firewall_policy_id = azurerm_cdn_frontdoor_firewall_policy.this.id
 
       association {
+        # Frontend endpoint default domain
         domain {
-          cdn_frontdoor_domain_id = azurerm_cdn_frontdoor_endpoint.this.id
+          cdn_frontdoor_domain_id = azurerm_cdn_frontdoor_endpoint.frontend.id
         }
+
+        # Frontend custom domain (when configured)
+        dynamic "domain" {
+          for_each = var.frontend_custom_domain != "" ? [1] : []
+          content {
+            cdn_frontdoor_domain_id = azurerm_cdn_frontdoor_custom_domain.frontend[0].id
+          }
+        }
+
+        # Backend endpoint default domain
+        domain {
+          cdn_frontdoor_domain_id = azurerm_cdn_frontdoor_endpoint.backend.id
+        }
+
+        # Backend custom domain (when configured)
+        dynamic "domain" {
+          for_each = var.backend_custom_domain != "" ? [1] : []
+          content {
+            cdn_frontdoor_domain_id = azurerm_cdn_frontdoor_custom_domain.backend[0].id
+          }
+        }
+
         patterns_to_match = ["/*"]
       }
     }
   }
 }
 
-resource "azurerm_cdn_frontdoor_custom_domain" "this" {
-  count                    = var.custom_domain_name != "" ? 1 : 0
-  name                     = "cd-${replace(var.custom_domain_name, ".", "-")}"
-  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.this.id
-  host_name                = var.custom_domain_name
-
-  tls {
-    certificate_type = "ManagedCertificate"
-  }
-}
-
-resource "azurerm_cdn_frontdoor_route" "frontend" {
-  name                          = "route-frontend"
-  cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.this.id
-  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.frontend.id
-  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.frontend.id]
-
-  enabled                = true
-  forwarding_protocol    = "HttpsOnly"
-  https_redirect_enabled = true
-  patterns_to_match      = ["/*"]
-  supported_protocols    = ["Http", "Https"]
-
-  cdn_frontdoor_custom_domain_ids = var.custom_domain_name != "" ? [azurerm_cdn_frontdoor_custom_domain.this[0].id] : []
-  link_to_default_domain          = var.custom_domain_name == ""
-}
-
-resource "azurerm_cdn_frontdoor_route" "backend" {
-  name                          = "route-backend"
-  cdn_frontdoor_endpoint_id     = azurerm_cdn_frontdoor_endpoint.this.id
-  cdn_frontdoor_origin_group_id = azurerm_cdn_frontdoor_origin_group.backend.id
-  cdn_frontdoor_origin_ids      = [azurerm_cdn_frontdoor_origin.backend.id]
-
-  enabled                = true
-  forwarding_protocol    = "HttpsOnly"
-  https_redirect_enabled = true
-  patterns_to_match      = ["/api/*"]
-  supported_protocols    = ["Http", "Https"]
-
-  link_to_default_domain = true
-}
+# ---------------------------------------------------------------------------
+# Diagnostic settings
+# ---------------------------------------------------------------------------
 
 resource "azurerm_monitor_diagnostic_setting" "this" {
   name                       = "diag-${var.profile_name}"

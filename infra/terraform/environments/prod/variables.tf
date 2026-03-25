@@ -21,8 +21,14 @@ variable "tenant_id" {
   type        = string
 }
 
-variable "custom_domain_name" {
-  description = "Custom domain name for Front Door (leave empty to skip)"
+variable "frontend_custom_domain" {
+  description = "Custom domain for the frontend AFD endpoint (e.g. app.example.com). Leave empty to use the AFD default hostname."
+  type        = string
+  default     = ""
+}
+
+variable "backend_custom_domain" {
+  description = "Custom domain for the backend AFD endpoint (e.g. api.example.com). Leave empty to use the AFD default hostname."
   type        = string
   default     = ""
 }

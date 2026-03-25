@@ -23,8 +23,14 @@ variable "backend_origin_hostname" {
   type        = string
 }
 
-variable "custom_domain_name" {
-  description = "Custom domain name for the Front Door endpoint"
+variable "frontend_custom_domain" {
+  description = "Custom domain name for the frontend (e.g. app.example.com). Leave empty to use the AFD default hostname."
+  type        = string
+  default     = ""
+}
+
+variable "backend_custom_domain" {
+  description = "Custom domain name for the backend/API (e.g. api.example.com). Leave empty to use the AFD default hostname."
   type        = string
   default     = ""
 }
