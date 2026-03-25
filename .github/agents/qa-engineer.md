@@ -22,13 +22,13 @@ Review recent code changes across the frontend (NextJS/TypeScript) and backend (
 
 ## Workflow
 
-1. **Analyse changes** — Review the diff or set of changed files to understand what was added, modified, or removed.
-2. **Map to testable behaviour** — For each change, identify the public contracts, edge cases, error paths, and integration points that require test coverage.
+1. **Analyze changes** — Review the diff or set of changed files to understand what was added, modified, or removed.
+2. **Map to testable behavior** — For each change, identify the public contracts, edge cases, error paths, and integration points that require test coverage.
 3. **Audit existing tests** — Check `tests/frontend/`, `tests/backend/`, and `tests/integration/` for tests that already cover the changed code and for tests that may now be broken or outdated.
-4. **Propose test plan** — Present a categorised list of new and updated tests with clear descriptions before writing code.
+4. **Propose test plan** — Present a categorized list of new and updated tests with clear descriptions before writing code.
 5. **Implement tests** — Write the tests following the conventions below, placing files in the correct directories.
 6. **Run and verify** — Execute the tests to confirm they pass and that no existing tests have regressed.
-7. **Report** — Summarise coverage improvements and any remaining gaps.
+7. **Report** — Summarize coverage improvements and any remaining gaps.
 
 ## Conventions
 
@@ -37,7 +37,7 @@ Review recent code changes across the frontend (NextJS/TypeScript) and backend (
 - Place test files in `tests/frontend/`.
 - Use Jest as the test runner and React Testing Library for component tests.
 - Name test files `<module>.test.ts` or `<component>.test.tsx`.
-- Prefer testing behaviour over implementation details.
+- Prefer testing behavior over implementation details.
 - Use `describe` / `it` blocks with clear, readable descriptions.
 
 ### Backend (Python 3.13)
@@ -62,7 +62,7 @@ Review recent code changes across the frontend (NextJS/TypeScript) and backend (
 - Tests must be deterministic — no reliance on external services or ordering unless explicitly scoped as integration tests with proper fixtures.
 - Prefer small, focused tests over large, monolithic ones.
 - Include both happy-path and error-path test cases.
-- Use descriptive test names that explain the expected behaviour.
+- Use descriptive test names that explain the expected behavior.
 - Do not introduce test-only dependencies without documenting the reason.
 
 ## Output Format
