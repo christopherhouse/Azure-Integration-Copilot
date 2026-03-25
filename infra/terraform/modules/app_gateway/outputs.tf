@@ -1,24 +1,27 @@
 output "id" {
   description = "Resource ID of the Application Gateway"
-  value       = azurerm_application_gateway.this.id
+  value       = module.app_gateway.resource_id
 }
 
 output "public_ip_address" {
   description = "Public IP address of the Application Gateway"
-  value       = azurerm_public_ip.this.ip_address
+  value       = module.public_ip.public_ip_address
 }
 
 output "public_ip_fqdn" {
   description = "FQDN associated with the Application Gateway public IP (Azure-assigned)"
-  value       = azurerm_public_ip.this.fqdn
+  # The AVM public IP module (avm-res-network-publicipaddress 0.2.1) does not expose the
+  # Azure-assigned FQDN as a top-level output. This output returns null; to get an
+  # Azure-assigned FQDN, add a domain_name_label to the public IP resource.
+  value = null
 }
 
 output "managed_identity_principal_id" {
   description = "Principal ID of the App Gateway managed identity (for additional RBAC assignments)"
-  value       = azurerm_user_assigned_identity.this.principal_id
+  value       = module.managed_identity.principal_id
 }
 
 output "managed_identity_client_id" {
   description = "Client ID of the App Gateway managed identity"
-  value       = azurerm_user_assigned_identity.this.client_id
+  value       = module.managed_identity.client_id
 }

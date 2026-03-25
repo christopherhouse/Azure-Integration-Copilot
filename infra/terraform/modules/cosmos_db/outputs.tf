@@ -1,14 +1,14 @@
 output "account_id" {
   description = "ID of the Cosmos DB account"
-  value       = azurerm_cosmosdb_account.this.id
+  value       = module.cosmos_db.resource_id
 }
 
 output "account_name" {
   description = "Name of the Cosmos DB account"
-  value       = azurerm_cosmosdb_account.this.name
+  value       = module.cosmos_db.name
 }
 
 output "endpoint" {
   description = "Endpoint of the Cosmos DB account"
-  value       = azurerm_cosmosdb_account.this.endpoint
+  value       = module.cosmos_db.endpoint
 }

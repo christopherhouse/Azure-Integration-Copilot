@@ -1,3 +1,5 @@
+# No AVM module available for Web PubSub (status: Proposed). Using raw azurerm resources.
+
 resource "azurerm_web_pubsub" "this" {
   name                          = var.name
   location                      = var.location

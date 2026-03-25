@@ -1,10 +1,12 @@
-resource "azurerm_virtual_network" "this" {
-  name                = var.vnet_name
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  address_space       = var.vnet_address_space
-  tags                = var.tags
+data "azurerm_resource_group" "this" {
+  name = var.resource_group_name
 }
+
+# ---------------------------------------------------------------------------
+# Network Security Groups — raw azurerm resources; IDs are passed into the
+# AVM VNet module's subnet definitions so NSG associations are handled by
+# the REST API via azapi_resource (no separate association resources needed).
+# ---------------------------------------------------------------------------
 
 resource "azurerm_network_security_group" "container_apps" {
   name                = "nsg-container-apps-${var.vnet_name}"
@@ -83,65 +85,63 @@ resource "azurerm_network_security_group" "integration" {
   tags                = var.tags
 }
 
-resource "azurerm_subnet" "container_apps" {
-  name                 = "snet-container-apps"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.this.name
-  address_prefixes     = [var.subnet_container_apps_prefix]
+# ---------------------------------------------------------------------------
+# Virtual Network + subnets — AVM manages subnets and NSG associations
+# ---------------------------------------------------------------------------
 
-  delegation {
-    name = "Microsoft.App.environments"
-    service_delegation {
-      name = "Microsoft.App/environments"
-      actions = [
-        "Microsoft.Network/virtualNetworks/subnets/join/action",
-      ]
+module "vnet" {
+  source  = "Azure/avm-res-network-virtualnetwork/azurerm"
+  version = "0.17.1"
+
+  name             = var.vnet_name
+  location         = var.location
+  parent_id        = data.azurerm_resource_group.this.id
+  address_space    = toset(var.vnet_address_space)
+  enable_telemetry = false
+  tags             = var.tags
+
+  subnets = {
+    "snet-container-apps" = {
+      name           = "snet-container-apps"
+      address_prefix = var.subnet_container_apps_prefix
+      network_security_group = {
+        id = azurerm_network_security_group.container_apps.id
+      }
+      delegations = [{
+        name = "Microsoft.App.environments"
+        service_delegation = {
+          name = "Microsoft.App/environments"
+        }
+      }]
+    }
+    "snet-private-endpoints" = {
+      name           = "snet-private-endpoints"
+      address_prefix = var.subnet_private_endpoints_prefix
+      network_security_group = {
+        id = azurerm_network_security_group.private_endpoints.id
+      }
+    }
+    "snet-integration" = {
+      name           = "snet-integration"
+      address_prefix = var.subnet_integration_prefix
+      network_security_group = {
+        id = azurerm_network_security_group.integration.id
+      }
+    }
+    "snet-app-gateway" = {
+      name           = "snet-app-gateway"
+      address_prefix = var.subnet_app_gateway_prefix
+      network_security_group = {
+        id = azurerm_network_security_group.app_gateway.id
+      }
     }
   }
 }
 
-resource "azurerm_subnet" "private_endpoints" {
-  name                 = "snet-private-endpoints"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.this.name
-  address_prefixes     = [var.subnet_private_endpoints_prefix]
-}
+# ---------------------------------------------------------------------------
+# Private DNS Zones — one AVM module instance per zone, linked to the VNet
+# ---------------------------------------------------------------------------
 
-resource "azurerm_subnet" "integration" {
-  name                 = "snet-integration"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.this.name
-  address_prefixes     = [var.subnet_integration_prefix]
-}
-
-resource "azurerm_subnet" "app_gateway" {
-  name                 = "snet-app-gateway"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.this.name
-  address_prefixes     = [var.subnet_app_gateway_prefix]
-}
-
-resource "azurerm_subnet_network_security_group_association" "container_apps" {
-  subnet_id                 = azurerm_subnet.container_apps.id
-  network_security_group_id = azurerm_network_security_group.container_apps.id
-}
-
-resource "azurerm_subnet_network_security_group_association" "private_endpoints" {
-  subnet_id                 = azurerm_subnet.private_endpoints.id
-  network_security_group_id = azurerm_network_security_group.private_endpoints.id
-}
-
-resource "azurerm_subnet_network_security_group_association" "integration" {
-  subnet_id                 = azurerm_subnet.integration.id
-  network_security_group_id = azurerm_network_security_group.integration.id
-}
-
-resource "azurerm_subnet_network_security_group_association" "app_gateway" {
-  subnet_id                 = azurerm_subnet.app_gateway.id
-  network_security_group_id = azurerm_network_security_group.app_gateway.id
-}
-
-# Private DNS Zones
 locals {
   private_dns_zones = [
     "privatelink.vaultcore.azure.net",
@@ -155,19 +155,20 @@ locals {
   ]
 }
 
-resource "azurerm_private_dns_zone" "this" {
-  for_each            = toset(local.private_dns_zones)
-  name                = each.value
-  resource_group_name = var.resource_group_name
-  tags                = var.tags
-}
+module "private_dns_zones" {
+  source   = "Azure/avm-res-network-privatednszone/azurerm"
+  version  = "0.5.0"
+  for_each = toset(local.private_dns_zones)
 
-resource "azurerm_private_dns_zone_virtual_network_link" "this" {
-  for_each              = toset(local.private_dns_zones)
-  name                  = "link-${replace(each.value, ".", "-")}"
-  resource_group_name   = var.resource_group_name
-  private_dns_zone_name = azurerm_private_dns_zone.this[each.value].name
-  virtual_network_id    = azurerm_virtual_network.this.id
-  registration_enabled  = false
-  tags                  = var.tags
+  domain_name      = each.value
+  parent_id        = data.azurerm_resource_group.this.id
+  enable_telemetry = false
+  tags             = var.tags
+
+  virtual_network_links = {
+    "link-${replace(each.value, ".", "-")}" = {
+      vnetlinkname = "link-${replace(each.value, ".", "-")}"
+      vnetid       = module.vnet.resource_id
+    }
+  }
 }
