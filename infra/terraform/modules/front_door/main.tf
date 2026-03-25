@@ -68,7 +68,7 @@ resource "azurerm_cdn_frontdoor_origin_group" "frontend" {
   health_probe {
     interval_in_seconds = 30
     path                = "/health"
-    protocol            = "Http"
+    protocol            = "Https"
     request_type        = "HEAD"
   }
 
@@ -86,7 +86,7 @@ resource "azurerm_cdn_frontdoor_origin_group" "backend" {
   health_probe {
     interval_in_seconds = 30
     path                = "/health"
-    protocol            = "Http"
+    protocol            = "Https"
     request_type        = "HEAD"
   }
 
@@ -217,7 +217,7 @@ resource "azurerm_cdn_frontdoor_route" "frontend" {
   cdn_frontdoor_custom_domain_ids = [azurerm_cdn_frontdoor_custom_domain.frontend.id]
   supported_protocols             = ["Http", "Https"]
   patterns_to_match               = ["/*"]
-  forwarding_protocol             = "HttpOnly"
+  forwarding_protocol             = "HttpsOnly"
   https_redirect_enabled          = true
   link_to_default_domain          = false
 }
@@ -230,7 +230,7 @@ resource "azurerm_cdn_frontdoor_route" "backend" {
   cdn_frontdoor_custom_domain_ids = [azurerm_cdn_frontdoor_custom_domain.backend.id]
   supported_protocols             = ["Http", "Https"]
   patterns_to_match               = ["/*"]
-  forwarding_protocol             = "HttpOnly"
+  forwarding_protocol             = "HttpsOnly"
   https_redirect_enabled          = true
   link_to_default_domain          = false
 }
