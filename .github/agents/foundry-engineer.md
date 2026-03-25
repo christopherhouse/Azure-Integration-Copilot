@@ -1,3 +1,8 @@
+---
+name: Foundry Engineer
+description: Expert in developing solutions using the Microsoft Agent Framework and Microsoft Foundry agent service.
+---
+
 # Foundry Engineer Agent
 
 ## Role

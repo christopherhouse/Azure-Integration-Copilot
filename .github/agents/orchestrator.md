@@ -1,3 +1,8 @@
+---
+name: Orchestrator
+description: Single entry point for all user prompts that coordinates planning and execution by delegating to the Planner and specialist agents.
+---
+
 # Orchestrator Agent
 
 ## Role

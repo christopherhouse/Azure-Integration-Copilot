@@ -1,3 +1,8 @@
+---
+name: Tech Writer
+description: Documentation specialist responsible for creating, structuring, and maintaining all project documentation.
+---
+
 # Tech Writer Agent
 
 ## Role
