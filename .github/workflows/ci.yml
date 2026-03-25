@@ -166,7 +166,61 @@ jobs:
         run: exit 1
 
   # -------------------------------------------------------------------------
-  # Job 4 — Containers: build, scan, push (push to GHCR only on main)
+  # Job 4 — Terraform: plan dev containers
+  # -------------------------------------------------------------------------
+  terraform-plan-containers:
+    name: "Terraform — Plan Containers (dev)"
+    runs-on: ubuntu-latest
+    environment: dev
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_USE_OIDC: 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.6
+
+      - name: Terraform Init
+        working-directory: infra/terraform/environments/dev-containers
+        run: terraform init
+
+      - name: Terraform Plan
+        id: plan
+        working-directory: infra/terraform/environments/dev-containers
+        continue-on-error: true
+        run: |
+          terraform plan \
+            -var-file="dev-containers.tfvars" \
+            -out=tfplan-dev-containers
+
+      - name: Upload Terraform plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-dev-containers
+          path: infra/terraform/environments/dev-containers/tfplan-dev-containers
+          retention-days: 7
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  # -------------------------------------------------------------------------
+  # Job 5 — Containers: build, scan, push (push to GHCR only on main)
   # -------------------------------------------------------------------------
   containers:
     name: "Containers — Build, Scan & Push"
