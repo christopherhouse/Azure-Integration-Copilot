@@ -104,7 +104,7 @@ resource "azurerm_monitor_diagnostic_setting" "this" {
     category = "StorageDelete"
   }
 
-  metric {
+  enabled_metric {
     category = "AllMetrics"
   }
 }

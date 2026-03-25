@@ -119,15 +119,13 @@ module "service_bus" {
 module "container_apps" {
   source = "../../../modules/container_apps"
 
-  resource_group_name                 = azurerm_resource_group.this.name
-  location                            = var.location
-  environment_name                    = local.resource_names.container_apps_env
-  subnet_container_apps_id            = module.networking.subnet_container_apps_id
-  log_analytics_workspace_id          = module.observability.log_analytics_workspace_id
-  log_analytics_workspace_customer_id = module.observability.log_analytics_workspace_customer_id
-  log_analytics_workspace_primary_key = module.observability.log_analytics_workspace_primary_key
-  registry_login_server               = module.container_registry.login_server
-  tags                                = local.common_tags
+  resource_group_name        = azurerm_resource_group.this.name
+  location                   = var.location
+  environment_name           = local.resource_names.container_apps_env
+  subnet_container_apps_id   = module.networking.subnet_container_apps_id
+  log_analytics_workspace_id = module.observability.log_analytics_workspace_id
+  registry_login_server      = module.container_registry.login_server
+  tags                       = local.common_tags
 }
 
 module "front_door" {

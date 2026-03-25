@@ -118,7 +118,7 @@ resource "azurerm_monitor_diagnostic_setting" "environment" {
     category = "ContainerAppSystemLogs"
   }
 
-  metric {
+  enabled_metric {
     category = "AllMetrics"
   }
 }

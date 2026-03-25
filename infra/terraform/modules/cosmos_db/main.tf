@@ -27,9 +27,12 @@ resource "azurerm_cosmosdb_account" "this" {
     name = "EnableNoSQLVectorSearch"
   }
 
+  # Serverless accounts support only Periodic backup
   backup {
-    type = "Continuous"
-    tier = "Continuous7Days"
+    type                = "Periodic"
+    interval_in_minutes = 240
+    retention_in_hours  = 8
+    storage_redundancy  = "Local"
   }
 
   network_acl_bypass_for_azure_services = true
@@ -76,7 +79,7 @@ resource "azurerm_monitor_diagnostic_setting" "this" {
     category = "ControlPlaneRequests"
   }
 
-  metric {
+  enabled_metric {
     category = "Requests"
   }
 }

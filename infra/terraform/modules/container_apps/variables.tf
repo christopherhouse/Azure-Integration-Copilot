@@ -23,17 +23,6 @@ variable "log_analytics_workspace_id" {
   type        = string
 }
 
-variable "log_analytics_workspace_customer_id" {
-  description = "Customer ID (workspace ID) of the Log Analytics workspace"
-  type        = string
-}
-
-variable "log_analytics_workspace_primary_key" {
-  description = "Primary shared key of the Log Analytics workspace"
-  type        = string
-  sensitive   = true
-}
-
 variable "registry_login_server" {
   description = "Login server URL for the container registry"
   type        = string

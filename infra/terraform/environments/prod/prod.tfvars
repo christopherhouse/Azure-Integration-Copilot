@@ -1,6 +1,6 @@
-location           = "eastus"
-environment        = "prod"
-workload           = "aic"
+location    = "eastus"
+environment = "prod"
+workload    = "aic"
 # Replace with your actual Azure AD tenant ID before deploying
 tenant_id          = "00000000-0000-0000-0000-000000000000"
 custom_domain_name = ""
