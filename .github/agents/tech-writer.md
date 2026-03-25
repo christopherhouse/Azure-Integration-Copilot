@@ -33,6 +33,8 @@ Documentation for this project lives in the `docs/` directory. The README.md at 
 6. **Include diagrams.** Use Mermaid syntax for diagrams wherever possible so they render natively in GitHub.
 7. **Cross-reference.** Link related documents together. Don't create information silos.
 8. **Version documentation.** When behavior changes between versions, document the differences clearly.
+9. **Create beautiful, engaging content.** Use emojis and icons (e.g. ✅, 🚀, ⚙️, 📦, 🔒, 💡) to make documentation visually appealing and easy to scan. Add them to section headings, list items, table headers, and callouts where they add clarity without cluttering the text.
+10. **Include generated images.** Where diagrams alone are insufficient, generate illustrative images (architecture overviews, workflow visualizations, conceptual illustrations) to help readers quickly grasp complex concepts. Prefer SVG or high-resolution PNG formats.
 
 ## Documentation Structure
 
