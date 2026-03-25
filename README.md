@@ -19,7 +19,7 @@
   - [Network Layout](#network-layout)
   - [Managed Identities](#managed-identities)
   - [Security](#security)
-  - [Conditional App Gateway Deployment](#conditional-app-gateway-deployment)
+  - [Conditional Front Door Deployment](#conditional-front-door-deployment)
   - [Environment Differences](#environment-differences)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Getting Started](#getting-started)
@@ -67,11 +67,11 @@ The application consists of a **Next.js frontend**, a **Python backend**, and **
 │   └── agents/                  # Microsoft Foundry agent definitions
 ├── infra/
 │   └── terraform/
-│       ├── modules/             # 11 reusable Terraform modules (AVM-based)
-│       │   ├── app_gateway/         # Application Gateway WAF_v2
+│       ├── modules/             # 11 reusable Terraform modules (AVM-based + azurerm)
 │       │   ├── container_apps/      # Container Apps Environment + apps
 │       │   ├── container_registry/  # Azure Container Registry
 │       │   ├── cosmos_db/           # Cosmos DB (serverless)
+│       │   ├── front_door/          # Azure Front Door Premium (azurerm)
 │       │   ├── key_vault/           # Azure Key Vault
 │       │   ├── managed_identity/    # User Assigned Managed Identities
 │       │   ├── networking/          # VNet, subnets, NSGs, Private DNS
@@ -129,24 +129,24 @@ For the full developer guide — including setup, testing, and tooling details �
 
 | Service | Purpose |
 |---|---|
-| **Azure Application Gateway** | Internet-facing ingress with WAF, TLS termination, Key Vault certificate integration |
+| **Azure Front Door Premium** | Internet-facing ingress with WAF, Microsoft managed TLS certificates, Private Link origin support |
 | **Azure Container Apps** | Hosts the frontend, backend, and async agent workers |
 | **Azure Container Registry** | Private container image storage |
 | **Azure Cosmos DB** | Multi-tenant data storage (serverless mode) |
 | **Azure Service Bus** | Asynchronous messaging between services and agent workers |
 | **Microsoft Foundry** | Agent framework and orchestration |
-| **Azure Key Vault** | Secrets and TLS certificate management |
+| **Azure Key Vault** | Secrets management |
 | **Azure Storage** | Blob, queue, and table storage |
 | **Azure Web PubSub** | Real-time messaging for live agent updates to clients |
-| **Virtual Network** | Network isolation with four dedicated subnets |
+| **Virtual Network** | Network isolation with three dedicated subnets |
 | **Private Endpoints** | Secure connectivity to all PaaS services |
-| **User Assigned Managed Identities** | RBAC-based authentication for frontend, backend, and App Gateway |
+| **User Assigned Managed Identities** | RBAC-based authentication for frontend and backend |
 
 ---
 
 ## Infrastructure Architecture
 
-All infrastructure is defined as Terraform using [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/). Each environment (`dev`, `prod`) has its own state file and configuration.
+All infrastructure is defined as Terraform using [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) where available. Azure Front Door uses native `azurerm` resources. Each environment (`dev`, `prod`) has its own state file and configuration.
 
 ### Network Layout
 
@@ -159,9 +159,6 @@ graph TB
             BE[Backend App]
             AW[Agent Workers]
         end
-        subgraph AGW ["App Gateway Subnet<br/><i>dev: 10.0.2.0/24 · prod: 10.1.2.0/24</i>"]
-            AppGW[Application Gateway<br/>WAF_v2]
-        end
         subgraph PES ["Private Endpoints Subnet"]
             PE[Private Endpoints]
         end
@@ -170,30 +167,30 @@ graph TB
         end
     end
 
-    Internet((Internet)) --> AppGW
-    AppGW --> FE
-    AppGW --> BE
+    AFD[Azure Front Door Premium<br/>WAF + Microsoft Managed Certs]
+    Internet((Internet)) --> AFD
+    AFD -- "Private Link" --> FE
+    AFD -- "Private Link" --> BE
+    AFD --> WPS[Web PubSub]
     PE --> CosmosDB[(Cosmos DB)]
     PE --> SB[Service Bus]
     PE --> KV[Key Vault]
     PE --> SA[Storage]
-    PE --> WPS[Web PubSub]
+    PE --> WPS
 ```
 
-- **Container Apps subnet** — Delegated to the Container Apps Environment with an internal load balancer.
-- **App Gateway subnet** — WAF_v2 with NSG rules for GatewayManager, Azure Load Balancer, and HTTP/HTTPS traffic.
+- **Container Apps subnet** — Delegated to the Container Apps Environment with an internal load balancer. AFD Premium connects via Private Link.
 - **Private Endpoints subnet** — Secure connectivity to PaaS services over the VNet backbone.
 - **Integration subnet** — Reserved for future integrations.
 
 ### Managed Identities
 
-Three **User Assigned Managed Identities** (UAMIs) are provisioned per environment:
+Two **User Assigned Managed Identities** (UAMIs) are provisioned per environment:
 
 | Identity | Resource ID Pattern | Assignment |
 |---|---|---|
 | Frontend UAMI | `id-frontend-*` | Frontend Container App |
 | Backend UAMI | `id-backend-*` | Backend Container App |
-| App Gateway UAMI | `id-agw-*` | Application Gateway — includes *Key Vault Secrets User* role for TLS certificate retrieval |
 
 ### Security
 
@@ -206,16 +203,19 @@ All services follow a **zero-trust, private-by-default** posture:
 - **Terraform state** — Stored in Azure Storage with Entra ID authentication.
 - **All service-to-service auth** — Via User Assigned Managed Identities and Azure RBAC.
 
-### Conditional App Gateway Deployment
+### Conditional Front Door Deployment
 
-The Application Gateway deployment is controlled by the `deploy_app_gateway` variable (default: `false`). This solves a **chicken-and-egg problem** where the gateway needs TLS certificates that are stored in a Key Vault that hasn't been created yet.
+The Azure Front Door deployment is controlled by the `deploy_front_door` variable (default: `false`). This allows other resources (Container Apps, Web PubSub, etc.) to be provisioned first so that origin hostnames are available.
 
 ```text
-Deployment 1 ──► deploy_app_gateway = false ──► Key Vault + all other resources created
+Deployment 1 ──► deploy_front_door = false ──► All other resources created
                                                      │
-                                          Upload TLS certificates to Key Vault
+                                          Note origin FQDNs from outputs
                                                      │
-Deployment 2 ──► deploy_app_gateway = true  ──► Application Gateway created with cert references
+Deployment 2 ──► deploy_front_door = true  ──► Front Door created with origin references
+                                                     │
+                                          Create DNS validation records (_dnsauth CNAME)
+                                          Approve Private Link connections on Container Apps
 ```
 
 ### Environment Differences
@@ -228,7 +228,7 @@ Deployment 2 ──► deploy_app_gateway = true  ──► Application Gateway 
 | Container Registry SKU | Basic | Standard |
 | Service Bus SKU | Standard (no PE) | Premium (with PE) |
 | Web PubSub SKU | Free F1 (no PE) | Standard S1 (with PE) |
-| App Gateway Scaling | min 0 / max 2 | min 1 / max 10 |
+| Front Door | Premium (global) | Premium (global) |
 | Container App Replicas | min 0 (scale to zero) | min 1 (always warm) |
 
 ---
@@ -434,7 +434,7 @@ Once complete, the CI workflow (`.github/workflows/ci.yml`) will authenticate to
 
 1. **Configure environment variables** — Edit the tfvars file (`dev.tfvars` or `prod.tfvars`) and set your `tenant_id`, listener hostnames, and any other environment-specific values.
 
-2. **Deploy infrastructure (without App Gateway)**
+2. **Deploy infrastructure (without Front Door)**
 
    ```bash
    cd infra/terraform/environments/dev
@@ -443,17 +443,20 @@ Once complete, the CI workflow (`.github/workflows/ci.yml`) will authenticate to
    terraform apply -var-file="dev.tfvars"
    ```
 
-   > `deploy_app_gateway` defaults to `false`, so the Application Gateway is skipped.
+   > `deploy_front_door` defaults to `false`, so Azure Front Door is skipped.
    >
    > In CI, `tenant_id` is injected from GitHub secrets via `-var="tenant_id=..."` to avoid committing real values.
 
-3. **Upload TLS certificates** — Add your TLS certificates to the provisioned Key Vault (manual or automated).
-
-4. **Deploy Application Gateway** — Update `deploy_app_gateway = true` and the certificate secret URIs in your tfvars, then apply again:
+3. **Deploy Front Door** — Update `deploy_front_door = true` in your tfvars, then apply again:
 
    ```bash
    terraform apply -var-file="dev.tfvars"
    ```
+
+4. **Complete DNS and Private Link setup**:
+   - Create `_dnsauth.<hostname>` CNAME records for domain validation (values available in the Azure portal).
+   - Approve the Private Link connections on the Container Apps environment.
+   - Create CNAME records for your custom domains pointing to the Front Door endpoints.
 
 ---
 

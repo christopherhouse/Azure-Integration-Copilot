@@ -62,7 +62,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 
 | Component | Purpose |
 |---|---|
-| Azure Application Gateway | Internet-facing ingress with WAF, TLS termination, and Key Vault certificate integration |
+| Azure Front Door Premium | Internet-facing ingress with WAF, TLS termination (Microsoft managed certificates), and Private Link origin support |
 | Azure Container Apps | Hosting frontend, backend services, and async agent workers |
 | Azure Container Registry | Container image storage and management |
 | Azure Cosmos DB | Multi-tenant data storage |

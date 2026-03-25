@@ -25,12 +25,6 @@ variable "subnet_container_apps_prefix" {
   default     = "10.0.0.0/23"
 }
 
-variable "subnet_app_gateway_prefix" {
-  description = "Address prefix for the Application Gateway subnet. Azure recommends /24 for WAF_v2 to accommodate autoscaling instance count."
-  type        = string
-  default     = "10.0.2.0/24"
-}
-
 variable "subnet_private_endpoints_prefix" {
   description = "Address prefix for private endpoints subnet. /26 gives 59 usable IPs — sufficient for all service private endpoints with room to grow."
   type        = string

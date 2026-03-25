@@ -74,7 +74,7 @@ MVP: platform-managed encryption, managed identities, private endpoints for data
 Internet
   │
   ▼
-App Gateway WAF (public IP, WAF_v2)
+Azure Front Door Premium (global edge, WAF + Microsoft Managed Certs)
   │
   ▼
 VNet: 10.0.0.0/16
@@ -87,8 +87,6 @@ VNet: 10.0.0.0/16
   │           ├── worker-graph
   │           ├── worker-analysis
   │           └── worker-notification
-  ├── Subnet: snet-app-gateway (10.0.2.0/24)
-  │     └── App Gateway
   ├── Subnet: snet-private-endpoints (10.0.3.0/26)
   │     ├── PE: Cosmos DB
   │     ├── PE: Blob Storage
@@ -114,9 +112,9 @@ VNet: 10.0.0.0/16
 
 ### Public Access
 
-- **App Gateway**: Public IP with WAF. Only entry point from the internet.
+- **Azure Front Door**: Global edge with WAF. Only entry point from the internet.
 - **All data services**: Public access disabled (private endpoint only).
-- **Container Apps**: Internal ingress only (no public IP). Reachable via App Gateway.
+- **Container Apps**: Internal ingress only (no public IP). Reachable via Azure Front Door Private Link.
 
 ---
 
@@ -131,7 +129,6 @@ VNet: 10.0.0.0/16
 ### Key Vault Usage
 
 Key Vault stores:
-- TLS certificates for App Gateway
 - Any secrets that cannot be provided via managed identity (edge cases)
 
 Key Vault does **not** store:

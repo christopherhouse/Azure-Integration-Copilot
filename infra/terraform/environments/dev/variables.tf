@@ -22,55 +22,32 @@ variable "tenant_id" {
 }
 
 # ---------------------------------------------------------------------------
-# Application Gateway — deployment toggle
+# Azure Front Door — deployment toggle
 # ---------------------------------------------------------------------------
 
-variable "deploy_app_gateway" {
-  description = "Whether to deploy the Application Gateway. Set to false on the first deployment so Key Vault and other resources are provisioned before TLS certificates are uploaded. After uploading certs, set to true and re-apply."
+variable "deploy_front_door" {
+  description = "Whether to deploy the Azure Front Door Premium profile. Set to false on the first deployment so other resources are provisioned first. After deployment, set to true, re-apply, then create DNS validation records for custom domains and approve Private Link connections."
   type        = bool
   default     = false
 }
 
 # ---------------------------------------------------------------------------
-# Application Gateway — listener hostnames
+# Azure Front Door — custom domain hostnames
 # ---------------------------------------------------------------------------
 
 variable "frontend_hostname" {
-  description = "Hostname for the Application Gateway frontend listener (e.g. app.example.com)"
+  description = "Custom domain hostname for the frontend (e.g. app.example.com)"
   type        = string
 }
 
 variable "backend_hostname" {
-  description = "Hostname for the Application Gateway backend API listener (e.g. api.example.com)"
+  description = "Custom domain hostname for the backend API (e.g. api.example.com)"
   type        = string
 }
 
 variable "webpubsub_hostname" {
-  description = "Hostname for the Application Gateway Web PubSub listener (e.g. pubsub.example.com)"
+  description = "Custom domain hostname for Web PubSub (e.g. pubsub.example.com)"
   type        = string
-}
-
-# ---------------------------------------------------------------------------
-# Application Gateway — TLS certificates (versionless Key Vault secret URIs)
-# Only required when deploy_app_gateway = true.
-# ---------------------------------------------------------------------------
-
-variable "frontend_cert_secret_id" {
-  description = "Versionless Key Vault secret URI for the frontend TLS certificate"
-  type        = string
-  default     = ""
-}
-
-variable "backend_cert_secret_id" {
-  description = "Versionless Key Vault secret URI for the backend TLS certificate"
-  type        = string
-  default     = ""
-}
-
-variable "webpubsub_cert_secret_id" {
-  description = "Versionless Key Vault secret URI for the Web PubSub TLS certificate"
-  type        = string
-  default     = ""
 }
 
 variable "vnet_address_space" {

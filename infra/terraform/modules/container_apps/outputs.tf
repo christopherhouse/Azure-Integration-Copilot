@@ -16,7 +16,7 @@ output "static_ip_address" {
 output "frontend_fqdn" {
   description = "FQDN of the frontend container app"
   # The AVM container app module returns fqdn_url with an 'https://' prefix; strip it so
-  # callers receive a bare hostname consistent with how the App Gateway backend pool expects it.
+  # callers receive a bare hostname suitable for use as an origin host in Front Door or other proxies.
   value = trimprefix(module.ca_frontend.fqdn_url, "https://")
 }
 

@@ -7,7 +7,7 @@ locals {
     vnet               = "vnet-${local.name_prefix}"
     log_analytics      = "law-${local.name_prefix}"
     app_insights       = "appi-${local.name_prefix}"
-    app_gateway        = "agw-${local.name_prefix}"
+    front_door         = "afd-${local.name_prefix}"
     container_registry = replace("cr${var.workload}${var.environment}${local.region_short}", "-", "")
     key_vault          = "kv-${local.name_prefix}"
     storage_account    = replace("st${var.workload}${var.environment}${local.region_short}", "-", "")
@@ -17,7 +17,6 @@ locals {
     web_pubsub         = "wps-${local.name_prefix}"
     id_frontend        = "id-frontend-${local.name_prefix}"
     id_backend         = "id-backend-${local.name_prefix}"
-    id_app_gateway     = "id-agw-${local.name_prefix}"
   }
 
   common_tags = merge(var.tags, {
@@ -145,22 +144,6 @@ module "identity_backend" {
   tags                = local.common_tags
 }
 
-module "identity_app_gateway" {
-  source = "../../modules/managed_identity"
-
-  name                = local.resource_names.id_app_gateway
-  resource_group_name = azurerm_resource_group.this.name
-  location            = var.location
-  tags                = local.common_tags
-
-  role_assignments = {
-    kv_secrets_user = {
-      role_definition_id_or_name = "Key Vault Secrets User"
-      scope                      = module.key_vault.key_vault_id
-    }
-  }
-}
-
 # ---------------------------------------------------------------------------
 # Container Apps
 # ---------------------------------------------------------------------------
@@ -198,35 +181,25 @@ module "web_pubsub" {
 }
 
 # ---------------------------------------------------------------------------
-# Application Gateway — conditionally deployed.
-# On first deployment, set deploy_app_gateway = false so that the Key Vault
-# and all other resources are provisioned first. After uploading TLS
-# certificates to Key Vault, set to true and re-apply.
+# Azure Front Door Premium — conditionally deployed.
+# After first deployment, create DNS validation records for custom domains
+# and approve the Private Link connections on the Container Apps environment.
 # ---------------------------------------------------------------------------
 
-module "app_gateway" {
-  source = "../../modules/app_gateway"
-  count  = var.deploy_app_gateway ? 1 : 0
+module "front_door" {
+  source = "../../modules/front_door"
+  count  = var.deploy_front_door ? 1 : 0
 
-  resource_group_name          = azurerm_resource_group.this.name
-  location                     = var.location
-  name                         = local.resource_names.app_gateway
-  subnet_app_gateway_id        = module.networking.subnet_app_gateway_id
-  managed_identity_resource_id = module.identity_app_gateway.resource_id
-  frontend_hostname            = var.frontend_hostname
-  backend_hostname             = var.backend_hostname
-  webpubsub_hostname           = var.webpubsub_hostname
-  frontend_cert_secret_id      = var.frontend_cert_secret_id
-  backend_cert_secret_id       = var.backend_cert_secret_id
-  webpubsub_cert_secret_id     = var.webpubsub_cert_secret_id
-  # Container Apps share one internal load balancer IP; Host header routes per-app
-  container_apps_static_ip = module.container_apps.static_ip_address
-  frontend_backend_fqdn    = module.container_apps.frontend_fqdn
-  backend_backend_fqdn     = module.container_apps.backend_fqdn
-  webpubsub_backend_fqdn   = module.web_pubsub.hostname
-  # prod: keep min 1 instance for HA; max 10 for peak load
-  min_capacity               = 1
-  max_capacity               = 10
-  log_analytics_workspace_id = module.observability.log_analytics_workspace_id
-  tags                       = local.common_tags
+  resource_group_name           = azurerm_resource_group.this.name
+  location                      = var.location
+  name                          = local.resource_names.front_door
+  frontend_hostname             = var.frontend_hostname
+  backend_hostname              = var.backend_hostname
+  webpubsub_hostname            = var.webpubsub_hostname
+  frontend_origin_hostname      = module.container_apps.frontend_fqdn
+  backend_origin_hostname       = module.container_apps.backend_fqdn
+  webpubsub_origin_hostname     = module.web_pubsub.hostname
+  container_apps_environment_id = module.container_apps.environment_id
+  log_analytics_workspace_id    = module.observability.log_analytics_workspace_id
+  tags                          = local.common_tags
 }
