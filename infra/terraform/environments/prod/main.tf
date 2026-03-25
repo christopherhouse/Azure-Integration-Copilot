@@ -7,9 +7,9 @@ locals {
     log_analytics      = "law-${local.name_prefix}"
     app_insights       = "appi-${local.name_prefix}"
     front_door         = "afd-${local.name_prefix}"
-    container_registry = replace("cr${var.workload}${var.environment}${local.region_short}", "-", "")
+    container_registry = replace("cr${var.workload}${var.environment}${var.location}", "-", "")
     key_vault          = "kv-${local.name_prefix}"
-    storage_account    = replace("st${var.workload}${var.environment}${local.region_short}", "-", "")
+    storage_account    = replace("st${var.workload}${var.environment}${var.location}", "-", "")
     cosmos_db          = "cosmos-${local.name_prefix}"
     service_bus        = "sb-${local.name_prefix}"
     container_apps_env = "cae-${local.name_prefix}"
