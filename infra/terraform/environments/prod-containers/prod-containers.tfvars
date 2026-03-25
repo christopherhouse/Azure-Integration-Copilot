@@ -5,6 +5,7 @@ container_apps_environment_id = ""
 registry_login_server         = ""
 frontend_identity_resource_id = ""
 backend_identity_resource_id  = ""
+worker_identity_resource_id   = ""
 
 image_tag = "latest"
 # min_replicas=1 in prod avoids cold-start latency for user-facing traffic.

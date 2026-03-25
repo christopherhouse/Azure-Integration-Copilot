@@ -23,6 +23,11 @@ variable "backend_identity_resource_id" {
   type        = string
 }
 
+variable "worker_identity_resource_id" {
+  description = "Resource ID of the worker user-assigned managed identity (from infra terraform output)"
+  type        = string
+}
+
 variable "image_tag" {
   description = "Container image tag to deploy"
   type        = string

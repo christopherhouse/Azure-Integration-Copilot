@@ -20,6 +20,7 @@ locals {
   registry_login_server         = coalesce(var.registry_login_server, data.terraform_remote_state.infra.outputs.container_registry_login_server)
   frontend_identity_resource_id = coalesce(var.frontend_identity_resource_id, data.terraform_remote_state.infra.outputs.frontend_identity_resource_id)
   backend_identity_resource_id  = coalesce(var.backend_identity_resource_id, data.terraform_remote_state.infra.outputs.backend_identity_resource_id)
+  worker_identity_resource_id   = coalesce(var.worker_identity_resource_id, data.terraform_remote_state.infra.outputs.worker_identity_resource_id)
 }
 
 module "ca_frontend" {
@@ -126,6 +127,15 @@ module "ca_worker" {
   revision_mode                         = "Single"
   enable_telemetry                      = false
   tags                                  = var.tags
+
+  managed_identities = {
+    user_assigned_resource_ids = toset([local.worker_identity_resource_id])
+  }
+
+  registries = [{
+    server   = local.registry_login_server
+    identity = local.worker_identity_resource_id
+  }]
 
   template = {
     min_replicas = var.min_replicas

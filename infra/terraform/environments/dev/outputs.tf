@@ -69,6 +69,11 @@ output "backend_identity_resource_id" {
   value       = module.identity_backend.resource_id
 }
 
+output "worker_identity_resource_id" {
+  description = "Resource ID of the worker user-assigned managed identity"
+  value       = module.identity_worker.resource_id
+}
+
 output "container_apps_environment_id" {
   description = "ID of the Container Apps environment"
   value       = module.container_apps.environment_id

@@ -15,6 +15,7 @@ locals {
     web_pubsub         = "wps-${local.name_prefix}"
     id_frontend        = "id-frontend-${local.name_prefix}"
     id_backend         = "id-backend-${local.name_prefix}"
+    id_worker          = "id-worker-${local.name_prefix}"
   }
 
   common_tags = merge(var.tags, {
@@ -141,6 +142,15 @@ module "identity_backend" {
   tags                = local.common_tags
 }
 
+module "identity_worker" {
+  source = "../../modules/managed_identity"
+
+  name                = local.resource_names.id_worker
+  resource_group_name = data.azurerm_resource_group.this.name
+  location            = var.location
+  tags                = local.common_tags
+}
+
 # ---------------------------------------------------------------------------
 # RBAC role assignments
 # ---------------------------------------------------------------------------
@@ -157,6 +167,12 @@ resource "azurerm_role_assignment" "backend_acr_pull" {
   principal_id         = module.identity_backend.principal_id
 }
 
+resource "azurerm_role_assignment" "worker_acr_pull" {
+  scope                = module.container_registry.registry_id
+  role_definition_name = "AcrPull"
+  principal_id         = module.identity_worker.principal_id
+}
+
 resource "azurerm_role_assignment" "frontend_kv_secrets" {
   scope                = module.key_vault.key_vault_id
   role_definition_name = "Key Vault Secrets User"
@@ -167,6 +183,12 @@ resource "azurerm_role_assignment" "backend_kv_secrets" {
   scope                = module.key_vault.key_vault_id
   role_definition_name = "Key Vault Secrets User"
   principal_id         = module.identity_backend.principal_id
+}
+
+resource "azurerm_role_assignment" "worker_kv_secrets" {
+  scope                = module.key_vault.key_vault_id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = module.identity_worker.principal_id
 }
 
 resource "azurerm_cosmosdb_sql_role_assignment" "backend_cosmos_data_contributor" {
