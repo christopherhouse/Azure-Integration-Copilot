@@ -115,10 +115,11 @@ jobs:
   terraform-plan:
     name: "Terraform — Plan (dev)"
     runs-on: ubuntu-latest
+    environment: dev
 
     env:
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID_DEV }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID_DEV }}
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_USE_OIDC: true
 
@@ -129,9 +130,9 @@ jobs:
       - name: Azure Login (OIDC)
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID_DEV }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_DEV }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -216,42 +217,35 @@ jobs:
           fi
 
           # Persist outputs
-          echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
-
-          # Multi-line outputs use delimiters
           {
+            echo "frontend_image=${FRONTEND_IMAGE}"
+            echo "backend_image=${BACKEND_IMAGE}"
             echo "frontend_tags<<EOF"
             echo "${FRONTEND_TAGS}"
             echo "EOF"
-          } >> "$GITHUB_OUTPUT"
-
-          {
             echo "backend_tags<<EOF"
             echo "${BACKEND_TAGS}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # -- Build images -------------------------------------------------------
+      # -- Build images (load locally for scanning) ----------------------------
       - name: Build frontend image
         id: build-frontend
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: src/frontend
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          tags: ${{ steps.meta.outputs.frontend_tags }}
           load: true
+          tags: ${{ steps.meta.outputs.frontend_tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Build backend image
         id: build-backend
-        uses: docker/build-push-action@v3
+        uses: docker/build-push-action@v6
         with:
           context: src/backend
-          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-          tags: ${{ steps.meta.outputs.backend_tags }}
           load: true
+          tags: ${{ steps.meta.outputs.backend_tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -289,13 +283,36 @@ jobs:
           sarif_file: backend-trivy-results.sarif
           category: trivy-backend
 
+      # -- Push images to GHCR (only on push to main) -------------------------
+      - name: Push frontend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: push-frontend
+        run: |
+          FRONTEND_IMAGE="${{ steps.meta.outputs.frontend_image }}"
+          RESULT=$(docker push --all-tags "${FRONTEND_IMAGE}" 2>&1)
+          echo "${RESULT}"
+          DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      - name: Push backend image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: push-backend
+        run: |
+          BACKEND_IMAGE="${{ steps.meta.outputs.backend_image }}"
+          RESULT=$(docker push --all-tags "${BACKEND_IMAGE}" 2>&1)
+          echo "${RESULT}"
+          DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
       # -- Container metadata (only on push to main) -------------------------
       - name: Generate container metadata
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          FRONTEND_DIGEST: ${{ steps.push-frontend.outputs.digest }}
+          BACKEND_DIGEST: ${{ steps.push-backend.outputs.digest }}
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-
-          cat <<METADATA > container-metadata.json
+          cat > container-metadata.json <<EOF
           {
             "build": {
               "commit_sha": "${{ github.sha }}",
@@ -312,7 +329,7 @@ jobs:
                 "repository": "${REPO_LOWER}/frontend",
                 "tag": "${SHORT_SHA}",
                 "full_image": "ghcr.io/${REPO_LOWER}/frontend:${SHORT_SHA}",
-                "digest": "${{ steps.build-frontend.outputs.digest }}"
+                "digest": "${FRONTEND_DIGEST}"
               },
               {
                 "name": "backend",
@@ -320,11 +337,11 @@ jobs:
                 "repository": "${REPO_LOWER}/backend",
                 "tag": "${SHORT_SHA}",
                 "full_image": "ghcr.io/${REPO_LOWER}/backend:${SHORT_SHA}",
-                "digest": "${{ steps.build-backend.outputs.digest }}"
+                "digest": "${BACKEND_DIGEST}"
               }
             ]
           }
-          METADATA
+          EOF
 
       - name: Upload container metadata
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
