@@ -223,21 +223,18 @@ jobs:
           terraform_version: 1.14.6
           terraform_wrapper: false
 
-      - name: Download Terraform plan artifact
-        uses: actions/download-artifact@v4.1.3
-        with:
-          name: tfplan-prod
-          path: infra/terraform/environments/prod
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Terraform Init
         working-directory: infra/terraform/environments/prod
         run: terraform init
 
-      - name: Terraform Apply
+      - name: Terraform Plan & Apply
         working-directory: infra/terraform/environments/prod
-        run: terraform apply -auto-approve tfplan-prod
+        run: |
+          terraform plan \
+            -var-file="prod.tfvars" \
+            -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+            -out=tfplan-prod
+          terraform apply -auto-approve tfplan-prod
 
       - name: Capture Terraform outputs
         id: tf-outputs
