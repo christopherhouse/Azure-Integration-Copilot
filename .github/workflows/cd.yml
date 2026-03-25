@@ -227,14 +227,17 @@ jobs:
         working-directory: infra/terraform/environments/prod
         run: terraform init
 
-      - name: Terraform Plan & Apply
+      - name: Terraform Plan
         working-directory: infra/terraform/environments/prod
         run: |
           terraform plan \
             -var-file="prod.tfvars" \
             -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
             -out=tfplan-prod
-          terraform apply -auto-approve tfplan-prod
+
+      - name: Terraform Apply
+        working-directory: infra/terraform/environments/prod
+        run: terraform apply -auto-approve tfplan-prod
 
       - name: Capture Terraform outputs
         id: tf-outputs
