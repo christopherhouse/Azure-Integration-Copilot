@@ -1,3 +1,8 @@
+---
+name: Planner
+description: Takes a user's prompt and produces a clear, phased execution plan that the Orchestrator can follow to deliver results using specialist agents.
+---
+
 # Planner Agent
 
 ## Role

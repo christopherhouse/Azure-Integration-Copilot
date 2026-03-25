@@ -1,3 +1,8 @@
+---
+name: SaaS Architect
+description: Designs multi-tenant commercial SaaS solutions on Azure with expertise in architecture patterns, tenant isolation, data partitioning, and cost optimization.
+---
+
 # SaaS Architect Agent
 
 ## Role
