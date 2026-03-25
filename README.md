@@ -247,7 +247,7 @@ flowchart LR
 
 The CI/CD pipeline authenticates to Azure using **OpenID Connect (OIDC) federated credentials** — no secrets or passwords are stored in GitHub. Terraform state is stored in Azure Storage with **Entra ID authentication only** (shared access keys are disabled).
 
-Complete the steps below once per environment (`dev` and `prod`).
+Complete the steps below once per environment (`dev` and `prod`). Replace `<LOCATION>` with your preferred Azure region (e.g. `eastus2`).
 
 #### 1. Create Entra ID App Registrations
 
@@ -346,6 +346,7 @@ Each service principal needs two roles:
 DEV_SP_OBJECT_ID=$(az ad sp show --id $DEV_APP_ID --query id -o tsv)
 DEV_STORAGE_ID=$(az storage account show --name sttfstateaicdev \
   --resource-group rg-tfstate-aic --query id -o tsv)
+DEV_SUB_ID="<DEV_SUBSCRIPTION_ID>"   # your dev Azure subscription ID
 
 az role assignment create \
   --assignee-object-id $DEV_SP_OBJECT_ID \
@@ -357,12 +358,13 @@ az role assignment create \
   --assignee-object-id $DEV_SP_OBJECT_ID \
   --assignee-principal-type ServicePrincipal \
   --role "Contributor" \
-  --scope "/subscriptions/<DEV_SUBSCRIPTION_ID>"
+  --scope "/subscriptions/$DEV_SUB_ID"
 
 # Prod
 PROD_SP_OBJECT_ID=$(az ad sp show --id $PROD_APP_ID --query id -o tsv)
 PROD_STORAGE_ID=$(az storage account show --name sttfstateaicprod \
   --resource-group rg-tfstate-aic --query id -o tsv)
+PROD_SUB_ID="<PROD_SUBSCRIPTION_ID>"   # your prod Azure subscription ID
 
 az role assignment create \
   --assignee-object-id $PROD_SP_OBJECT_ID \
@@ -374,7 +376,7 @@ az role assignment create \
   --assignee-object-id $PROD_SP_OBJECT_ID \
   --assignee-principal-type ServicePrincipal \
   --role "Contributor" \
-  --scope "/subscriptions/<PROD_SUBSCRIPTION_ID>"
+  --scope "/subscriptions/$PROD_SUB_ID"
 ```
 
 #### 5. Configure GitHub Secrets
