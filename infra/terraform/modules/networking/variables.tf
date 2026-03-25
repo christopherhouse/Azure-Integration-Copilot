@@ -20,21 +20,21 @@ variable "vnet_address_space" {
 }
 
 variable "subnet_container_apps_prefix" {
-  description = "Address prefix for container apps subnet. Must be at minimum /23 per Azure Container Apps requirements."
+  description = "Address prefix for container apps subnet. Must be at minimum /23 per Azure Container Apps workload profile environment requirements."
   type        = string
-  default     = "10.0.1.0/23"
+  default     = "10.0.0.0/23"
 }
 
 variable "subnet_private_endpoints_prefix" {
-  description = "Address prefix for private endpoints subnet"
+  description = "Address prefix for private endpoints subnet. /26 gives 59 usable IPs — sufficient for all service private endpoints with room to grow."
   type        = string
-  default     = "10.0.4.0/24"
+  default     = "10.0.2.0/26"
 }
 
 variable "subnet_integration_prefix" {
-  description = "Address prefix for service integration subnet"
+  description = "Address prefix for service integration subnet. /26 gives 59 usable IPs — sufficient for integration workloads."
   type        = string
-  default     = "10.0.5.0/24"
+  default     = "10.0.2.64/26"
 }
 
 variable "tags" {

@@ -1,7 +1,7 @@
 resource "azurerm_cdn_frontdoor_profile" "this" {
   name                     = var.profile_name
   resource_group_name      = var.resource_group_name
-  sku_name                 = "Premium_AzureFrontDoor"
+  sku_name                 = "Standard_AzureFrontDoor"
   response_timeout_seconds = 60
   tags                     = var.tags
 }
@@ -161,9 +161,10 @@ resource "azurerm_cdn_frontdoor_route" "backend" {
 # ---------------------------------------------------------------------------
 
 resource "azurerm_cdn_frontdoor_firewall_policy" "this" {
-  name                              = var.waf_policy_name
-  resource_group_name               = var.resource_group_name
-  sku_name                          = "Premium_AzureFrontDoor"
+  name                = var.waf_policy_name
+  resource_group_name = var.resource_group_name
+  # BotManagerRuleSet is only available on Premium SKU; Standard supports DRS only
+  sku_name                          = "Standard_AzureFrontDoor"
   enabled                           = true
   mode                              = "Prevention"
   custom_block_response_status_code = 403
@@ -171,12 +172,6 @@ resource "azurerm_cdn_frontdoor_firewall_policy" "this" {
   managed_rule {
     type    = "Microsoft_DefaultRuleSet"
     version = "2.1"
-    action  = "Block"
-  }
-
-  managed_rule {
-    type    = "Microsoft_BotManagerRuleSet"
-    version = "1.1"
     action  = "Block"
   }
 

@@ -1,0 +1,19 @@
+# Checkov configuration for Terraform scanning
+# Docs: https://www.checkov.io/2.Basics/CLI%20Command%20Reference.html
+
+framework:
+  - terraform
+
+# Checks to skip across all files (document reason for each skip)
+skip-check:
+  # CKV_AZURE_84 / CKV2_AZURE_1: AKS not used in this project
+  # CKV_AZURE_88: Container App public network access is intentional when using Standard AFD (no Private Link to origins)
+  - CKV_AZURE_88
+  # CKV_AZURE_211: Container Apps environment public access is intentional with Standard AFD
+  - CKV_AZURE_211
+
+# Output format
+output: cli
+
+# Compact output in CI
+compact: true

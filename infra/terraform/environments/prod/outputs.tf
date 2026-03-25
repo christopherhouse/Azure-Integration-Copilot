@@ -68,3 +68,8 @@ output "backend_app_fqdn" {
   description = "FQDN of the backend container app"
   value       = module.container_apps.backend_fqdn
 }
+
+output "web_pubsub_hostname" {
+  description = "Hostname of the Web PubSub service"
+  value       = module.web_pubsub.hostname
+}

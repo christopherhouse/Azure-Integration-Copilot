@@ -70,6 +70,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 | Microsoft Foundry | Agent framework and orchestration |
 | Azure Key Vault | Secrets and certificate management |
 | Azure Storage | Blob/queue/table storage |
+| Azure Web PubSub | Real-time messaging for live agent updates and notifications |
 | Virtual Network | Network isolation |
 | Private Endpoints | Secure connectivity to PaaS services |
 

@@ -83,6 +83,7 @@ locals {
     "privatelink.documents.azure.com",
     "privatelink.servicebus.windows.net",
     "privatelink.azurecr.io",
+    "privatelink.webpubsub.azure.com",
   ]
 }
 

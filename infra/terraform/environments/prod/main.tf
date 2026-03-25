@@ -15,6 +15,7 @@ locals {
     cosmos_db          = "cosmos-${local.name_prefix}"
     service_bus        = "sb-${local.name_prefix}"
     container_apps_env = "cae-${local.name_prefix}"
+    web_pubsub         = "wps-${local.name_prefix}"
   }
 
   common_tags = merge(var.tags, {
@@ -148,4 +149,18 @@ module "front_door" {
   backend_custom_domain      = var.backend_custom_domain
   log_analytics_workspace_id = module.observability.log_analytics_workspace_id
   tags                       = local.common_tags
+}
+
+module "web_pubsub" {
+  source = "../../../modules/web_pubsub"
+
+  resource_group_name = azurerm_resource_group.this.name
+  location            = var.location
+  name                = local.resource_names.web_pubsub
+  # Standard tier in prod: private endpoint support
+  sku                         = "Standard_S1"
+  subnet_private_endpoints_id = module.networking.subnet_private_endpoints_id
+  private_dns_zone_id         = module.networking.private_dns_zone_ids["privatelink.webpubsub.azure.com"]
+  log_analytics_workspace_id  = module.observability.log_analytics_workspace_id
+  tags                        = local.common_tags
 }
