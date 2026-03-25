@@ -240,7 +240,7 @@ These services must be implemented before any domain feature:
 
 ## Cosmos DB Storage
 
-Tenancy-related documents are stored in the `tenants` container.
+Tenancy-related documents are stored in the `tenants` container. See [04-domain-graph-and-metadata.md](04-domain-graph-and-metadata.md) for the full container strategy including `projects`, `graph`, and `analyses` containers.
 
 | Document Type | Partition Key | Example |
 |---------------|--------------|---------|

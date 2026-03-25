@@ -183,6 +183,7 @@ Notification Worker pulls terminal events (ArtifactParsed, GraphUpdated, Analysi
 | Azure Container Apps Environment | Hosts all apps | Consumption workload profile |
 | Container App: `frontend` | Next.js UI | Min 0, Max 2 replicas |
 | Container App: `api` | FastAPI backend | Min 1, Max 3 replicas |
+| Container App: `worker-scan-gate` | Malware scan gate | Min 0, scaled by Event Grid |
 | Container App: `worker-parser` | Artifact parsing | Min 0, scaled by Event Grid |
 | Container App: `worker-graph` | Graph building | Min 0, scaled by Event Grid |
 | Container App: `worker-analysis` | Agent analysis | Min 0, scaled by Event Grid |
