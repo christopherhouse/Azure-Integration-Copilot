@@ -1,5 +1,5 @@
 locals {
-  name_prefix  = "${var.workload}-${var.environment}-${local.location}"
+  name_prefix  = "${var.workload}-${var.environment}-${var.location}"
 
   resource_names = {
     resource_group     = "rg-${local.name_prefix}"
