@@ -358,11 +358,7 @@ The root `Makefile` provides convenient shortcuts:
 
 ## CI/CD
 
-The repository includes two GitHub Actions workflows that run automatically.
-
-### CI Workflow (`.github/workflows/ci.yml`)
-
-Triggers on every PR targeting `main` and on pushes to `main`.
+The CI workflow (`.github/workflows/ci.yml`) triggers on every PR targeting `main` and on pushes to `main`.
 
 | Job | What it does |
 |-----|------|
@@ -376,17 +372,6 @@ Container images are published to:
 - `ghcr.io/<owner>/<repo>/backend:<sha>`
 
 On pushes to `main`, images are also tagged as `latest`.
-
-### Terraform Workflow (`.github/workflows/terraform.yml`)
-
-Triggers on PRs and pushes to `main` that modify `infra/terraform/**`, and via manual `workflow_dispatch`.
-
-| Stage | What it does |
-|-------|------|
-| **Lint & Security Scan** | `terraform fmt` check, TFLint, Checkov |
-| **Validate** | `terraform validate` for dev and prod |
-| **Plan** | Creates plan artifacts for dev (PRs) and prod (main pushes) |
-| **Apply** | Manual dispatch only — applies the prod plan |
 
 ### Running CI Locally
 

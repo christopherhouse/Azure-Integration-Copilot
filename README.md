@@ -1,7 +1,6 @@
 # Azure Integration Copilot
 
 <!-- Badges -->
-[![Terraform CI/CD](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/terraform.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/terraform.yml)
 [![CI](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -60,8 +59,7 @@ The application consists of a **Next.js frontend**, a **Python backend**, and **
 ├── .github/
 │   ├── agents/                  # GitHub Copilot custom agent definitions (10 agents)
 │   ├── workflows/
-│   │   ├── ci.yml               # CI pipeline (build, test, scan, push)
-│   │   └── terraform.yml        # Terraform CI/CD pipeline
+│   │   └── ci.yml               # CI pipeline (build, test, scan, push)
 │   └── copilot-instructions.md  # Shared Copilot coding instructions
 ├── src/
 │   ├── frontend/                # Next.js application (TypeScript)
@@ -237,11 +235,7 @@ Deployment 2 ──► deploy_app_gateway = true  ──► Application Gateway 
 
 ## CI/CD Pipeline
 
-The project uses two GitHub Actions workflows. Both use **OIDC federated credentials** for Azure authentication — no stored secrets or service principal passwords.
-
-### CI Workflow
-
-The CI workflow (`.github/workflows/ci.yml`) runs on every PR and push to `main`. It builds, tests, scans, and publishes container images.
+The CI workflow (`.github/workflows/ci.yml`) runs on every PR and push to `main`. It uses **OIDC federated credentials** for Azure authentication — no stored secrets or service principal passwords.
 
 ```mermaid
 flowchart LR
@@ -263,33 +257,6 @@ flowchart LR
 | **Containers** | After tests pass | Docker Buildx build, Trivy scan (CRITICAL/HIGH → SARIF), push to GHCR on `main`, container metadata JSON artifact (90-day retention) |
 
 Container images are published to GHCR at `ghcr.io/<owner>/<repo>/frontend` and `ghcr.io/<owner>/<repo>/backend`, tagged with the 7-character commit SHA and `latest` on pushes to `main`.
-
-### Terraform Workflow
-
-The Terraform workflow (`.github/workflows/terraform.yml`) manages infrastructure deployment with plan/apply stages for `dev` and `prod` environments.
-
-```mermaid
-flowchart LR
-    A[PR opened] --> B[Lint & Security Scan]
-    B --> C[Validate dev + prod]
-    C --> D[Plan dev]
-    D --> E[PR Comment with plan summary]
-
-    F[Push to main] --> B
-    C --> G[Plan prod]
-    G --> H[Upload plan artifact]
-
-    I[Manual dispatch] --> G
-    G --> J[Apply prod]
-```
-
-| Stage | Trigger | Description |
-|---|---|---|
-| **Lint & Security Scan** | Every PR and push | `terraform fmt` check, [TFLint](https://github.com/terraform-linters/tflint) with azurerm plugin, [Checkov](https://www.checkov.io/) security scan |
-| **Validate** | Every PR and push | `terraform init -backend=false` + `terraform validate` for both `dev` and `prod` |
-| **Plan dev** | Pull requests | Creates a plan artifact; posts a summary as a PR comment |
-| **Plan prod** | Push to `main` | Creates a plan artifact for production |
-| **Apply prod** | `workflow_dispatch` only | Downloads the plan artifact and applies — requires manual approval |
 
 ---
 
@@ -461,7 +428,7 @@ In your GitHub repository, go to **Settings → Environments** and create `dev` 
 
 > **Tip:** `AZURE_CLIENT_ID` and `AZURE_SUBSCRIPTION_ID` use the same secret name in both environments — GitHub scopes them to the environment declared on each workflow job. `AZURE_TENANT_ID` is a repository-level secret since it's shared across all environments.
 
-Once complete, both workflows (`.github/workflows/ci.yml` and `.github/workflows/terraform.yml`) will authenticate to Azure using OIDC without any stored passwords or access keys.
+Once complete, the CI workflow (`.github/workflows/ci.yml`) will authenticate to Azure using OIDC without any stored passwords or access keys.
 
 ### First Deployment
 
