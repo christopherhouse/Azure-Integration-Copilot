@@ -2,6 +2,7 @@
 
 <!-- Badges -->
 [![Terraform CI/CD](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/terraform.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/terraform.yml)
+[![CI](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > A multi-agent SaaS application that helps Azure Integration Services developers **understand** their systems, **manage** dependencies, **operate** effectively, and **evolve** with confidence.
@@ -59,6 +60,7 @@ The application consists of a **Next.js frontend**, a **Python backend**, and **
 ├── .github/
 │   ├── agents/                  # GitHub Copilot custom agent definitions (10 agents)
 │   ├── workflows/
+│   │   ├── ci.yml               # CI pipeline (build, test, scan, push)
 │   │   └── terraform.yml        # Terraform CI/CD pipeline
 │   └── copilot-instructions.md  # Shared Copilot coding instructions
 ├── src/
@@ -235,7 +237,36 @@ Deployment 2 ──► deploy_app_gateway = true  ──► Application Gateway 
 
 ## CI/CD Pipeline
 
-The Terraform pipeline (`.github/workflows/terraform.yml`) uses **OIDC federated credentials** for Azure authentication — no stored secrets or service principal passwords.
+The project uses two GitHub Actions workflows. Both use **OIDC federated credentials** for Azure authentication — no stored secrets or service principal passwords.
+
+### CI Workflow
+
+The CI workflow (`.github/workflows/ci.yml`) runs on every PR and push to `main`. It builds, tests, scans, and publishes container images.
+
+```mermaid
+flowchart LR
+    A[PR / Push to main] --> B[Frontend Build & Test]
+    A --> C[Backend Build & Test]
+    A --> D[Terraform Plan dev]
+    B --> E[Container Build, Scan & Push]
+    C --> E
+    E --> F[Trivy SARIF → GitHub Security]
+    E -->|main only| G[Push to GHCR]
+    G --> H[Container Metadata Artifact]
+```
+
+| Job | Trigger | Description |
+|---|---|---|
+| **Frontend Build & Test** | Every PR and push | `npm ci`, ESLint, Next.js build, Jest tests with JUnit reporting |
+| **Backend Build & Test** | Every PR and push | UV dependency sync, Ruff lint, pytest with JUnit reporting |
+| **Terraform Plan (dev)** | Every PR and push | OIDC Azure login, `terraform plan`, uploads plan artifact (7-day retention) |
+| **Containers** | After tests pass | Docker Buildx build, Trivy scan (CRITICAL/HIGH → SARIF), push to GHCR on `main`, container metadata JSON artifact (90-day retention) |
+
+Container images are published to GHCR at `ghcr.io/<owner>/<repo>/frontend` and `ghcr.io/<owner>/<repo>/backend`, tagged with the 7-character commit SHA and `latest` on pushes to `main`.
+
+### Terraform Workflow
+
+The Terraform workflow (`.github/workflows/terraform.yml`) manages infrastructure deployment with plan/apply stages for `dev` and `prod` environments.
 
 ```mermaid
 flowchart LR
@@ -245,15 +276,12 @@ flowchart LR
     D --> E[PR Comment with plan summary]
 
     F[Push to main] --> B
-    B --> C
     C --> G[Plan prod]
     G --> H[Upload plan artifact]
 
     I[Manual dispatch] --> G
     G --> J[Apply prod]
 ```
-
-### Pipeline Stages
 
 | Stage | Trigger | Description |
 |---|---|---|
@@ -414,19 +442,26 @@ az role assignment create \
 
 #### 5. Configure GitHub Secrets
 
-In your GitHub repository, go to **Settings → Environments** and create `dev` and `prod` environments. Then add the following **environment secrets**:
+In your GitHub repository, go to **Settings → Environments** and create `dev` and `prod` environments. Then add the following secrets:
+
+**Environment secrets** (scoped to their respective environment):
 
 | Secret | Environment | Value |
 |---|---|---|
-| `AZURE_CLIENT_ID_DEV` | `dev` | Application (client) ID of the dev App Registration |
-| `AZURE_SUBSCRIPTION_ID_DEV` | `dev` | Azure subscription ID for the dev environment |
-| `AZURE_CLIENT_ID_PROD` | `prod` | Application (client) ID of the prod App Registration |
-| `AZURE_SUBSCRIPTION_ID_PROD` | `prod` | Azure subscription ID for the prod environment |
-| `AZURE_TENANT_ID` | both | Directory (tenant) ID of your Entra ID tenant |
+| `AZURE_CLIENT_ID` | `dev` | Application (client) ID of the dev App Registration |
+| `AZURE_SUBSCRIPTION_ID` | `dev` | Azure subscription ID for the dev environment |
+| `AZURE_CLIENT_ID` | `prod` | Application (client) ID of the prod App Registration |
+| `AZURE_SUBSCRIPTION_ID` | `prod` | Azure subscription ID for the prod environment |
 
-> **Tip:** Use environment secrets (not repository secrets) so that each workflow job can only access the credentials for the environment it targets.
+**Repository secret** (shared across all environments):
 
-Once complete, the Terraform workflow (`.github/workflows/terraform.yml`) will authenticate to Azure and access Terraform state without any stored passwords or access keys.
+| Secret | Value |
+|---|---|
+| `AZURE_TENANT_ID` | Directory (tenant) ID of your Entra ID tenant |
+
+> **Tip:** `AZURE_CLIENT_ID` and `AZURE_SUBSCRIPTION_ID` use the same secret name in both environments — GitHub scopes them to the environment declared on each workflow job. `AZURE_TENANT_ID` is a repository-level secret since it's shared across all environments.
+
+Once complete, both workflows (`.github/workflows/ci.yml` and `.github/workflows/terraform.yml`) will authenticate to Azure using OIDC without any stored passwords or access keys.
 
 ### First Deployment
 

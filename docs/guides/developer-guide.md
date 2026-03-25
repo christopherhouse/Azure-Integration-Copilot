@@ -356,6 +356,65 @@ The root `Makefile` provides convenient shortcuts:
 | `make build` | Build Docker images for both services |
 | `make up` | Build and start both services with Docker Compose |
 
+## CI/CD
+
+The repository includes two GitHub Actions workflows that run automatically.
+
+### CI Workflow (`.github/workflows/ci.yml`)
+
+Triggers on every PR targeting `main` and on pushes to `main`.
+
+| Job | What it does |
+|-----|------|
+| **Frontend Build & Test** | Installs deps (`npm ci`), lints (ESLint), builds (Next.js), runs tests (Jest), publishes JUnit results |
+| **Backend Build & Test** | Installs deps (`uv sync --frozen`), lints (Ruff), runs tests (pytest), publishes JUnit results |
+| **Terraform Plan** | Authenticates to Azure via OIDC, runs `terraform plan` for the dev environment, uploads the plan artifact |
+| **Containers** | Builds Docker images with Buildx, scans with [Trivy](https://github.com/aquasecurity/trivy) (SARIF → GitHub Security), pushes to GHCR on `main`, uploads container metadata JSON |
+
+Container images are published to:
+- `ghcr.io/<owner>/<repo>/frontend:<sha>`
+- `ghcr.io/<owner>/<repo>/backend:<sha>`
+
+On pushes to `main`, images are also tagged as `latest`.
+
+### Terraform Workflow (`.github/workflows/terraform.yml`)
+
+Triggers on PRs and pushes to `main` that modify `infra/terraform/**`, and via manual `workflow_dispatch`.
+
+| Stage | What it does |
+|-------|------|
+| **Lint & Security Scan** | `terraform fmt` check, TFLint, Checkov |
+| **Validate** | `terraform validate` for dev and prod |
+| **Plan** | Creates plan artifacts for dev (PRs) and prod (main pushes) |
+| **Apply** | Manual dispatch only — applies the prod plan |
+
+### Running CI Locally
+
+You can replicate the key CI steps locally:
+
+```bash
+# Frontend
+cd src/frontend
+npm ci
+npm run lint
+npm run build
+npm test
+
+# Backend
+cd src/backend
+uv sync --frozen
+uv run ruff check .
+uv run pytest -v
+
+# Docker
+docker compose build
+
+# Terraform
+cd infra/terraform/environments/dev
+terraform init
+terraform plan -var-file="dev.tfvars"
+```
+
 ## Technology Stack
 
 | Component | Technology | Version |
