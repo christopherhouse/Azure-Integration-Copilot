@@ -3,6 +3,9 @@ environment = "prod"
 workload    = "aic"
 # Replace with your actual Azure AD tenant ID before deploying
 tenant_id = "76de2d2d-77f8-438d-9a87-01806f2345da"
+
+# Name of the pre-existing resource group to deploy into
+resource_group_name = "rg-aic-prod-centralus"
 # Azure Front Door deployment toggle
 # Set to false on first deployment so other resources are provisioned first.
 # After deployment, set to true and re-apply. Then create DNS validation

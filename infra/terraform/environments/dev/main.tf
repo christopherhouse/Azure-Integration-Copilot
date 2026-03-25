@@ -1,8 +1,7 @@
 locals {
-  name_prefix  = "${var.workload}-${var.environment}-${var.location}"
+  name_prefix = "${var.workload}-${var.environment}-${var.location}"
 
   resource_names = {
-    resource_group     = "rg-${local.name_prefix}"
     vnet               = "vnet-${local.name_prefix}"
     log_analytics      = "law-${local.name_prefix}"
     app_insights       = "appi-${local.name_prefix}"
@@ -25,16 +24,14 @@ locals {
   })
 }
 
-resource "azurerm_resource_group" "this" {
-  name     = local.resource_names.resource_group
-  location = var.location
-  tags     = local.common_tags
+data "azurerm_resource_group" "this" {
+  name = var.resource_group_name
 }
 
 module "observability" {
   source = "../../modules/observability"
 
-  resource_group_name          = azurerm_resource_group.this.name
+  resource_group_name          = data.azurerm_resource_group.this.name
   location                     = var.location
   log_analytics_workspace_name = local.resource_names.log_analytics
   application_insights_name    = local.resource_names.app_insights
@@ -45,7 +42,7 @@ module "observability" {
 module "networking" {
   source = "../../modules/networking"
 
-  resource_group_name = azurerm_resource_group.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
   location            = var.location
   vnet_name           = local.resource_names.vnet
   vnet_address_space  = var.vnet_address_space
@@ -55,7 +52,7 @@ module "networking" {
 module "container_registry" {
   source = "../../modules/container_registry"
 
-  resource_group_name         = azurerm_resource_group.this.name
+  resource_group_name         = data.azurerm_resource_group.this.name
   location                    = var.location
   registry_name               = local.resource_names.container_registry
   sku                         = "Basic"
@@ -68,7 +65,7 @@ module "container_registry" {
 module "key_vault" {
   source = "../../modules/key_vault"
 
-  resource_group_name         = azurerm_resource_group.this.name
+  resource_group_name         = data.azurerm_resource_group.this.name
   location                    = var.location
   key_vault_name              = local.resource_names.key_vault
   tenant_id                   = var.tenant_id
@@ -82,7 +79,7 @@ module "key_vault" {
 module "storage" {
   source = "../../modules/storage"
 
-  resource_group_name         = azurerm_resource_group.this.name
+  resource_group_name         = data.azurerm_resource_group.this.name
   location                    = var.location
   storage_account_name        = local.resource_names.storage_account
   subnet_private_endpoints_id = module.networking.subnet_private_endpoints_id
@@ -96,7 +93,7 @@ module "storage" {
 module "cosmos_db" {
   source = "../../modules/cosmos_db"
 
-  resource_group_name         = azurerm_resource_group.this.name
+  resource_group_name         = data.azurerm_resource_group.this.name
   location                    = var.location
   account_name                = local.resource_names.cosmos_db
   subnet_private_endpoints_id = module.networking.subnet_private_endpoints_id
@@ -108,7 +105,7 @@ module "cosmos_db" {
 module "service_bus" {
   source = "../../modules/service_bus"
 
-  resource_group_name = azurerm_resource_group.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
   location            = var.location
   namespace_name      = local.resource_names.service_bus
   # Standard SKU in dev: no private endpoint, lower cost
@@ -127,7 +124,7 @@ module "identity_frontend" {
   source = "../../modules/managed_identity"
 
   name                = local.resource_names.id_frontend
-  resource_group_name = azurerm_resource_group.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
   location            = var.location
   tags                = local.common_tags
 }
@@ -136,7 +133,7 @@ module "identity_backend" {
   source = "../../modules/managed_identity"
 
   name                = local.resource_names.id_backend
-  resource_group_name = azurerm_resource_group.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
   location            = var.location
   tags                = local.common_tags
 }
@@ -148,7 +145,7 @@ module "identity_backend" {
 module "container_apps" {
   source = "../../modules/container_apps"
 
-  resource_group_name           = azurerm_resource_group.this.name
+  resource_group_name           = data.azurerm_resource_group.this.name
   location                      = var.location
   environment_name              = local.resource_names.container_apps_env
   subnet_container_apps_id      = module.networking.subnet_container_apps_id
@@ -162,7 +159,7 @@ module "container_apps" {
 module "web_pubsub" {
   source = "../../modules/web_pubsub"
 
-  resource_group_name = azurerm_resource_group.this.name
+  resource_group_name = data.azurerm_resource_group.this.name
   location            = var.location
   name                = local.resource_names.web_pubsub
   # Free tier in dev: no cost, no private endpoint
@@ -183,7 +180,7 @@ module "front_door" {
   source = "../../modules/front_door"
   count  = var.deploy_front_door ? 1 : 0
 
-  resource_group_name           = azurerm_resource_group.this.name
+  resource_group_name           = data.azurerm_resource_group.this.name
   location                      = var.location
   name                          = local.resource_names.front_door
   frontend_hostname             = var.frontend_hostname
