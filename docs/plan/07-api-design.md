@@ -323,7 +323,7 @@ Retry-After: 3600
 
 - FastAPI's built-in OpenAPI generation is used for API documentation.
 - Pydantic v2 is used for all models.
-- The API runs behind App Gateway; it does not handle TLS directly.
+- The API runs behind Azure Front Door; it does not handle TLS directly.
 
 ## Constraints
 

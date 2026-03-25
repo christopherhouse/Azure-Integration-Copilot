@@ -39,14 +39,24 @@ output "service_bus_endpoint" {
   value       = module.service_bus.endpoint
 }
 
-output "app_gateway_public_ip" {
-  description = "Public IP address of the Application Gateway"
-  value       = var.deploy_app_gateway ? module.app_gateway[0].public_ip_address : null
+output "front_door_id" {
+  description = "Resource ID of the Azure Front Door profile"
+  value       = var.deploy_front_door ? module.front_door[0].id : null
 }
 
-output "app_gateway_public_ip_fqdn" {
-  description = "Azure-assigned FQDN for the Application Gateway public IP"
-  value       = var.deploy_app_gateway ? module.app_gateway[0].public_ip_fqdn : null
+output "front_door_frontend_endpoint" {
+  description = "Azure-assigned hostname for the frontend endpoint (*.azurefd.net)"
+  value       = var.deploy_front_door ? module.front_door[0].frontend_endpoint_hostname : null
+}
+
+output "front_door_backend_endpoint" {
+  description = "Azure-assigned hostname for the backend endpoint (*.azurefd.net)"
+  value       = var.deploy_front_door ? module.front_door[0].backend_endpoint_hostname : null
+}
+
+output "front_door_pubsub_endpoint" {
+  description = "Azure-assigned hostname for the pubsub endpoint (*.azurefd.net)"
+  value       = var.deploy_front_door ? module.front_door[0].pubsub_endpoint_hostname : null
 }
 
 output "frontend_app_fqdn" {

@@ -15,62 +15,6 @@ resource "azurerm_network_security_group" "container_apps" {
   tags                = var.tags
 }
 
-resource "azurerm_network_security_group" "app_gateway" {
-  name                = "nsg-app-gateway-${var.vnet_name}"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  tags                = var.tags
-
-  # Required for Application Gateway v2 infrastructure health communication
-  security_rule {
-    name                       = "Allow-GatewayManager-Inbound"
-    priority                   = 100
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "65200-65535"
-    source_address_prefix      = "GatewayManager"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "Allow-AzureLoadBalancer-Inbound"
-    priority                   = 110
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "*"
-    source_port_range          = "*"
-    destination_port_range     = "*"
-    source_address_prefix      = "AzureLoadBalancer"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "Allow-HTTP-Inbound"
-    priority                   = 200
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "80"
-    source_address_prefix      = "Internet"
-    destination_address_prefix = "*"
-  }
-
-  security_rule {
-    name                       = "Allow-HTTPS-Inbound"
-    priority                   = 210
-    direction                  = "Inbound"
-    access                     = "Allow"
-    protocol                   = "Tcp"
-    source_port_range          = "*"
-    destination_port_range     = "443"
-    source_address_prefix      = "Internet"
-    destination_address_prefix = "*"
-  }
-}
-
 resource "azurerm_network_security_group" "private_endpoints" {
   name                = "nsg-private-endpoints-${var.vnet_name}"
   location            = var.location
@@ -126,13 +70,6 @@ module "vnet" {
       address_prefix = var.subnet_integration_prefix
       network_security_group = {
         id = azurerm_network_security_group.integration.id
-      }
-    }
-    "snet-app-gateway" = {
-      name           = "snet-app-gateway"
-      address_prefix = var.subnet_app_gateway_prefix
-      network_security_group = {
-        id = azurerm_network_security_group.app_gateway.id
       }
     }
   }

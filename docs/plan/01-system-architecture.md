@@ -16,7 +16,7 @@ MVP architecture only. Future evolution paths are noted but not designed in deta
 
 ```
 ┌─────────────┐     HTTPS      ┌──────────────────┐
-│   Browser    │ ◄────────────► │  App Gateway WAF  │
+│   Browser    │ ◄────────────► │  AFD Premium WAF  │
 │  (Next.js)   │                │  (TLS termination)│
 └─────────────┘                └────────┬─────────┘
                                         │
@@ -76,8 +76,8 @@ MVP architecture only. Future evolution paths are noted but not designed in deta
 | **Event Grid Namespace** | PaaS | Single topic with multiple pull-delivery subscriptions. Decouples API from async processing. |
 | **Azure Web PubSub** | PaaS | Delivers realtime notifications to connected browser clients. |
 | **Azure AI Foundry Agent Service** | PaaS | Hosts the integration-analyst agent with custom tool definitions. |
-| **App Gateway + WAF** | PaaS | TLS termination, WAF protection, routing to frontend/backend Container Apps. |
-| **Azure Key Vault** | PaaS | Stores TLS certificates, connection strings (where managed identity is not possible). |
+| **Azure Front Door Premium + WAF** | PaaS | TLS termination, WAF protection, routing to frontend/backend Container Apps via Private Link. |
+| **Azure Key Vault** | PaaS | Stores connection strings (where managed identity is not possible). |
 | **Defender for Storage** | PaaS | Scans uploaded blobs for malware before parsing proceeds. |
 
 ---
@@ -193,7 +193,7 @@ Notification Worker pulls terminal events (ArtifactParsed, GraphUpdated, Analysi
 | Event Grid Namespace | Event routing | Standard |
 | Azure Web PubSub | Realtime messaging | Free (dev) / Standard (prod) |
 | Azure AI Foundry | Agent hosting | Standard |
-| App Gateway + WAF | Ingress | WAF_v2 |
+| Azure Front Door Premium + WAF | Ingress | Premium |
 | Azure Key Vault | Secrets + certs | Standard |
 | Azure Container Registry | Image storage | Basic |
 | Application Insights | Telemetry | Workspace-based |
@@ -256,7 +256,7 @@ The MVP architecture is designed to evolve without a full redesign:
 | Storage | Blob + Cosmos DB (NoSQL API) | Blob for raw files, Cosmos for structured data; serverless for cost |
 | Realtime | Web PubSub | Managed WebSocket service; no custom WS server |
 | AI | Foundry Agent Service | Managed agent hosting; real tool calling |
-| Ingress | App Gateway WAF_v2 | TLS termination, WAF, Key Vault cert integration |
+| Ingress | Azure Front Door Premium | WAF, Microsoft managed TLS, Private Link origins |
 | Networking | VNet + private endpoints | Secure by default for data services |
 | IaC | Terraform + AVM | Required by project constraints |
 
