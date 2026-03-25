@@ -15,12 +15,12 @@ data "terraform_remote_state" "infra" {
 }
 
 locals {
-  resource_group_name           = coalesce(var.resource_group_name, data.terraform_remote_state.infra.outputs.resource_group_name)
-  container_apps_environment_id = coalesce(var.container_apps_environment_id, data.terraform_remote_state.infra.outputs.container_apps_environment_id)
-  registry_login_server         = coalesce(var.registry_login_server, data.terraform_remote_state.infra.outputs.container_registry_login_server)
-  frontend_identity_resource_id = coalesce(var.frontend_identity_resource_id, data.terraform_remote_state.infra.outputs.frontend_identity_resource_id)
-  backend_identity_resource_id  = coalesce(var.backend_identity_resource_id, data.terraform_remote_state.infra.outputs.backend_identity_resource_id)
-  worker_identity_resource_id   = coalesce(var.worker_identity_resource_id, data.terraform_remote_state.infra.outputs.worker_identity_resource_id)
+  resource_group_name           = try(coalesce(var.resource_group_name, data.terraform_remote_state.infra.outputs.resource_group_name), "")
+  container_apps_environment_id = try(coalesce(var.container_apps_environment_id, data.terraform_remote_state.infra.outputs.container_apps_environment_id), "")
+  registry_login_server         = try(coalesce(var.registry_login_server, data.terraform_remote_state.infra.outputs.container_registry_login_server), "")
+  frontend_identity_resource_id = try(coalesce(var.frontend_identity_resource_id, data.terraform_remote_state.infra.outputs.frontend_identity_resource_id), "")
+  backend_identity_resource_id  = try(coalesce(var.backend_identity_resource_id, data.terraform_remote_state.infra.outputs.backend_identity_resource_id), "")
+  worker_identity_resource_id   = try(coalesce(var.worker_identity_resource_id, data.terraform_remote_state.infra.outputs.worker_identity_resource_id), "")
 }
 
 module "ca_frontend" {
