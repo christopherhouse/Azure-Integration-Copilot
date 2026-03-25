@@ -43,6 +43,8 @@ module "cosmos_db" {
     total_throughput_limit = -1
   }
 
+  sql_databases = var.sql_databases
+
   private_endpoints = {
     "pe-${var.account_name}" = {
       name                            = "pe-${var.account_name}"

@@ -99,6 +99,7 @@ module "cosmos_db" {
   subnet_private_endpoints_id = module.networking.subnet_private_endpoints_id
   private_dns_zone_id         = module.networking.private_dns_zone_ids["privatelink.documents.azure.com"]
   log_analytics_workspace_id  = module.observability.log_analytics_workspace_id
+  sql_databases               = var.cosmos_sql_databases
   tags                        = local.common_tags
 }
 
@@ -139,21 +140,56 @@ module "identity_backend" {
 }
 
 # ---------------------------------------------------------------------------
-# Container Apps
+# RBAC role assignments
+# ---------------------------------------------------------------------------
+
+resource "azurerm_role_assignment" "frontend_acr_pull" {
+  scope                = module.container_registry.registry_id
+  role_definition_name = "AcrPull"
+  principal_id         = module.identity_frontend.principal_id
+}
+
+resource "azurerm_role_assignment" "backend_acr_pull" {
+  scope                = module.container_registry.registry_id
+  role_definition_name = "AcrPull"
+  principal_id         = module.identity_backend.principal_id
+}
+
+resource "azurerm_role_assignment" "frontend_kv_secrets" {
+  scope                = module.key_vault.key_vault_id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = module.identity_frontend.principal_id
+}
+
+resource "azurerm_role_assignment" "backend_kv_secrets" {
+  scope                = module.key_vault.key_vault_id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = module.identity_backend.principal_id
+}
+
+resource "azurerm_cosmosdb_sql_role_assignment" "backend_cosmos_data_contributor" {
+  resource_group_name = data.azurerm_resource_group.this.name
+  account_name        = module.cosmos_db.account_name
+  role_definition_id  = "${module.cosmos_db.account_id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002"
+  principal_id        = module.identity_backend.principal_id
+  scope               = module.cosmos_db.account_id
+}
+
+# ---------------------------------------------------------------------------
+# Container Apps — the environment is created above; individual container apps
+# are managed by the separate containers Terraform configuration, which runs
+# after container images have been pushed to ACR.
 # ---------------------------------------------------------------------------
 
 module "container_apps" {
   source = "../../modules/container_apps"
 
-  resource_group_name           = data.azurerm_resource_group.this.name
-  location                      = var.location
-  environment_name              = local.resource_names.container_apps_env
-  subnet_container_apps_id      = module.networking.subnet_container_apps_id
-  log_analytics_workspace_id    = module.observability.log_analytics_workspace_id
-  registry_login_server         = module.container_registry.login_server
-  frontend_identity_resource_id = module.identity_frontend.resource_id
-  backend_identity_resource_id  = module.identity_backend.resource_id
-  tags                          = local.common_tags
+  resource_group_name        = data.azurerm_resource_group.this.name
+  location                   = var.location
+  environment_name           = local.resource_names.container_apps_env
+  subnet_container_apps_id   = module.networking.subnet_container_apps_id
+  log_analytics_workspace_id = module.observability.log_analytics_workspace_id
+  tags                       = local.common_tags
 }
 
 module "web_pubsub" {
@@ -172,9 +208,22 @@ module "web_pubsub" {
 
 # ---------------------------------------------------------------------------
 # Azure Front Door Premium — conditionally deployed.
+# Container app FQDNs are read from the separate containers Terraform state.
 # After first deployment, create DNS validation records for custom domains
 # and approve the Private Link connections on the Container Apps environment.
 # ---------------------------------------------------------------------------
+
+data "terraform_remote_state" "containers" {
+  count   = var.deploy_front_door ? 1 : 0
+  backend = "azurerm"
+  config = {
+    resource_group_name  = "RG-CUS-DEPLOYMENT"
+    storage_account_name = "sacustfdeploy"
+    container_name       = "tfstate"
+    key                  = "dev/aic/aic-containers.tfstate"
+    use_azuread_auth     = true
+  }
+}
 
 module "front_door" {
   source = "../../modules/front_door"
@@ -186,8 +235,8 @@ module "front_door" {
   frontend_hostname             = var.frontend_hostname
   backend_hostname              = var.backend_hostname
   webpubsub_hostname            = var.webpubsub_hostname
-  frontend_origin_hostname      = module.container_apps.frontend_fqdn
-  backend_origin_hostname       = module.container_apps.backend_fqdn
+  frontend_origin_hostname      = data.terraform_remote_state.containers[0].outputs.frontend_fqdn
+  backend_origin_hostname       = data.terraform_remote_state.containers[0].outputs.backend_fqdn
   webpubsub_origin_hostname     = module.web_pubsub.hostname
   container_apps_environment_id = module.container_apps.environment_id
   log_analytics_workspace_id    = module.observability.log_analytics_workspace_id
