@@ -20,6 +20,7 @@ module "container_registry" {
   location                      = var.location
   sku                           = var.sku
   admin_enabled                 = false
+  zone_redundancy_enabled       = false
   public_network_access_enabled = var.sku == "Premium" ? false : true
   enable_telemetry              = false
   tags                          = var.tags
