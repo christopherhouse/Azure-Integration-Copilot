@@ -16,6 +16,11 @@ variable "workload" {
   default     = "aic"
 }
 
+variable "resource_group_name" {
+  description = "Name of the pre-existing resource group to deploy into"
+  type        = string
+}
+
 variable "tenant_id" {
   description = "Azure AD tenant ID"
   type        = string
