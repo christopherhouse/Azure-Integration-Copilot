@@ -20,3 +20,9 @@ def test_health_route_registered():
     """The /api/v1/health route is registered in the app."""
     routes = [route.path for route in app.routes]
     assert "/api/v1/health" in routes
+
+
+def test_health_ready_route_registered():
+    """The /api/v1/health/ready route is registered in the app."""
+    routes = [route.path for route in app.routes]
+    assert "/api/v1/health/ready" in routes
