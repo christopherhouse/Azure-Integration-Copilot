@@ -237,32 +237,34 @@ flowchart LR
 
 | Requirement | Details |
 |---|---|
-| Terraform | `>= 1.9.8` (pinned in the workflow; AVM Container Apps module requires `>= 1.11`) |
+| Terraform | `>= 1.9.0` (declared in code; CI pins `1.9.8`) |
 | Azure Subscription | With permissions to create the resources listed in [Azure Services](#azure-services) |
 | Azure AD Tenant | For managed identity provisioning and RBAC assignments |
 | GitHub OIDC Secrets | `AZURE_CLIENT_ID_DEV`, `AZURE_CLIENT_ID_PROD`, `AZURE_SUBSCRIPTION_ID_DEV`, `AZURE_SUBSCRIPTION_ID_PROD`, `AZURE_TENANT_ID` |
 
 ### First Deployment
 
-1. **Configure environment variables** — Set `tenant_id` and listener hostnames in the appropriate tfvars file (`dev.tfvars` or `prod.tfvars`).
+1. **Configure environment variables** — Edit the tfvars file (`dev.tfvars` or `prod.tfvars`) and set your `tenant_id`, listener hostnames, and any other environment-specific values.
 
 2. **Deploy infrastructure (without App Gateway)**
 
    ```bash
    cd infra/terraform/environments/dev
    terraform init
-   terraform plan -var-file="dev.tfvars" -var="tenant_id=<YOUR_TENANT_ID>"
-   terraform apply -var-file="dev.tfvars" -var="tenant_id=<YOUR_TENANT_ID>"
+   terraform plan -var-file="dev.tfvars"
+   terraform apply -var-file="dev.tfvars"
    ```
 
    > `deploy_app_gateway` defaults to `false`, so the Application Gateway is skipped.
+   >
+   > In CI, `tenant_id` is injected from GitHub secrets via `-var="tenant_id=..."` to avoid committing real values.
 
 3. **Upload TLS certificates** — Add your TLS certificates to the provisioned Key Vault (manual or automated).
 
 4. **Deploy Application Gateway** — Update `deploy_app_gateway = true` and the certificate secret URIs in your tfvars, then apply again:
 
    ```bash
-   terraform apply -var-file="dev.tfvars" -var="tenant_id=<YOUR_TENANT_ID>"
+   terraform apply -var-file="dev.tfvars"
    ```
 
 ---
