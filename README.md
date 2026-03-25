@@ -1,7 +1,7 @@
 # Azure Integration Copilot
 
 <!-- Badges -->
-[![Terraform CI/CD](https://github.com/yourorg/Azure-Integration-Copilot/actions/workflows/terraform.yml/badge.svg)](https://github.com/yourorg/Azure-Integration-Copilot/actions/workflows/terraform.yml)
+[![Terraform CI/CD](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/terraform.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/terraform.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > A multi-agent SaaS application that helps Azure Integration Services developers **understand** their systems, **manage** dependencies, **operate** effectively, and **evolve** with confidence.
@@ -237,7 +237,7 @@ flowchart LR
 
 | Requirement | Details |
 |---|---|
-| Terraform | `>= 1.9.0` (declared in code; CI pins `1.9.8`) |
+| Terraform | `>= 1.11` recommended (local modules declare `>= 1.9.0` but AVM dependencies require `~> 1.11`) |
 | Azure Subscription | With permissions to create the resources listed in [Azure Services](#azure-services) |
 | Azure AD Tenant | For managed identity provisioning and RBAC assignments |
 | GitHub OIDC Secrets | `AZURE_CLIENT_ID_DEV`, `AZURE_CLIENT_ID_PROD`, `AZURE_SUBSCRIPTION_ID_DEV`, `AZURE_SUBSCRIPTION_ID_PROD`, `AZURE_TENANT_ID` |
