@@ -11,7 +11,8 @@ from main import app  # noqa: E402
 
 
 @pytest.fixture
-def client():
+async def client():
     """Async HTTP client wired to the FastAPI application."""
     transport = ASGITransport(app=app)
-    return AsyncClient(transport=transport, base_url="http://test")
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
