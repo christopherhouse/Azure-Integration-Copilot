@@ -7,7 +7,6 @@ locals {
     vnet               = "vnet-${local.name_prefix}"
     log_analytics      = "law-${local.name_prefix}"
     app_insights       = "appi-${local.name_prefix}"
-    app_gateway        = "agw-${local.name_prefix}"
     front_door         = "afd-${local.name_prefix}"
     container_registry = replace("cr${var.workload}${var.environment}${local.region_short}", "-", "")
     key_vault          = "kv-${local.name_prefix}"
