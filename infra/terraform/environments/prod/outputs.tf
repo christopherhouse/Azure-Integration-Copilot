@@ -41,12 +41,12 @@ output "service_bus_endpoint" {
 
 output "app_gateway_public_ip" {
   description = "Public IP address of the Application Gateway"
-  value       = module.app_gateway.public_ip_address
+  value       = var.deploy_app_gateway ? module.app_gateway[0].public_ip_address : null
 }
 
 output "app_gateway_public_ip_fqdn" {
   description = "Azure-assigned FQDN for the Application Gateway public IP"
-  value       = module.app_gateway.public_ip_fqdn
+  value       = var.deploy_app_gateway ? module.app_gateway[0].public_ip_fqdn : null
 }
 
 output "frontend_app_fqdn" {

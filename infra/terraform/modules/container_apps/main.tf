@@ -40,6 +40,10 @@ module "ca_frontend" {
   enable_telemetry                      = false
   tags                                  = var.tags
 
+  managed_identities = {
+    user_assigned_resource_ids = toset([var.frontend_identity_resource_id])
+  }
+
   template = {
     min_replicas = var.min_replicas
     max_replicas = 10
@@ -78,6 +82,10 @@ module "ca_backend" {
   revision_mode                         = "Single"
   enable_telemetry                      = false
   tags                                  = var.tags
+
+  managed_identities = {
+    user_assigned_resource_ids = toset([var.backend_identity_resource_id])
+  }
 
   template = {
     min_replicas = var.min_replicas

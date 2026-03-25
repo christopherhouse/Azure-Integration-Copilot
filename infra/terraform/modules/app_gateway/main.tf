@@ -1,27 +1,4 @@
 # ---------------------------------------------------------------------------
-# User-assigned managed identity — grants App Gateway access to Key Vault certs
-# ---------------------------------------------------------------------------
-
-module "managed_identity" {
-  source  = "Azure/avm-res-managedidentity-userassignedidentity/azurerm"
-  version = "0.5.0"
-
-  name                = "id-${var.name}"
-  resource_group_name = var.resource_group_name
-  location            = var.location
-  enable_telemetry    = false
-  tags                = var.tags
-
-  # Grant the managed identity access to Key Vault secrets for certificate retrieval
-  role_assignments = {
-    kv_secrets_user = {
-      role_definition_id_or_name = "Key Vault Secrets User"
-      scope                      = var.key_vault_id
-    }
-  }
-}
-
-# ---------------------------------------------------------------------------
 # Public IP — created separately so we can expose ip_address/fqdn as outputs
 # ---------------------------------------------------------------------------
 
@@ -86,7 +63,7 @@ module "app_gateway" {
   tags                               = var.tags
 
   managed_identities = {
-    user_assigned_resource_ids = toset([module.managed_identity.resource_id])
+    user_assigned_resource_ids = toset([var.managed_identity_resource_id])
   }
 
   sku = {

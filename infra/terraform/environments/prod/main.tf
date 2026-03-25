@@ -15,6 +15,9 @@ locals {
     service_bus        = "sb-${local.name_prefix}"
     container_apps_env = "cae-${local.name_prefix}"
     web_pubsub         = "wps-${local.name_prefix}"
+    id_frontend        = "id-frontend-${local.name_prefix}"
+    id_backend         = "id-backend-${local.name_prefix}"
+    id_app_gateway     = "id-agw-${local.name_prefix}"
   }
 
   common_tags = merge(var.tags, {
@@ -31,7 +34,7 @@ resource "azurerm_resource_group" "this" {
 }
 
 module "observability" {
-  source = "../../../modules/observability"
+  source = "../../modules/observability"
 
   resource_group_name          = azurerm_resource_group.this.name
   location                     = var.location
@@ -42,7 +45,7 @@ module "observability" {
 }
 
 module "networking" {
-  source = "../../../modules/networking"
+  source = "../../modules/networking"
 
   resource_group_name = azurerm_resource_group.this.name
   location            = var.location
@@ -52,7 +55,7 @@ module "networking" {
 }
 
 module "container_registry" {
-  source = "../../../modules/container_registry"
+  source = "../../modules/container_registry"
 
   resource_group_name         = azurerm_resource_group.this.name
   location                    = var.location
@@ -65,7 +68,7 @@ module "container_registry" {
 }
 
 module "key_vault" {
-  source = "../../../modules/key_vault"
+  source = "../../modules/key_vault"
 
   resource_group_name         = azurerm_resource_group.this.name
   location                    = var.location
@@ -79,7 +82,7 @@ module "key_vault" {
 }
 
 module "storage" {
-  source = "../../../modules/storage"
+  source = "../../modules/storage"
 
   resource_group_name             = azurerm_resource_group.this.name
   location                        = var.location
@@ -95,7 +98,7 @@ module "storage" {
 }
 
 module "cosmos_db" {
-  source = "../../../modules/cosmos_db"
+  source = "../../modules/cosmos_db"
 
   resource_group_name         = azurerm_resource_group.this.name
   location                    = var.location
@@ -107,7 +110,7 @@ module "cosmos_db" {
 }
 
 module "service_bus" {
-  source = "../../../modules/service_bus"
+  source = "../../modules/service_bus"
 
   resource_group_name = azurerm_resource_group.this.name
   location            = var.location
@@ -120,15 +123,59 @@ module "service_bus" {
   tags                        = local.common_tags
 }
 
-module "container_apps" {
-  source = "../../../modules/container_apps"
+# ---------------------------------------------------------------------------
+# User-assigned managed identities
+# ---------------------------------------------------------------------------
 
-  resource_group_name        = azurerm_resource_group.this.name
-  location                   = var.location
-  environment_name           = local.resource_names.container_apps_env
-  subnet_container_apps_id   = module.networking.subnet_container_apps_id
-  log_analytics_workspace_id = module.observability.log_analytics_workspace_id
-  registry_login_server      = module.container_registry.login_server
+module "identity_frontend" {
+  source = "../../modules/managed_identity"
+
+  name                = local.resource_names.id_frontend
+  resource_group_name = azurerm_resource_group.this.name
+  location            = var.location
+  tags                = local.common_tags
+}
+
+module "identity_backend" {
+  source = "../../modules/managed_identity"
+
+  name                = local.resource_names.id_backend
+  resource_group_name = azurerm_resource_group.this.name
+  location            = var.location
+  tags                = local.common_tags
+}
+
+module "identity_app_gateway" {
+  source = "../../modules/managed_identity"
+
+  name                = local.resource_names.id_app_gateway
+  resource_group_name = azurerm_resource_group.this.name
+  location            = var.location
+  tags                = local.common_tags
+
+  role_assignments = {
+    kv_secrets_user = {
+      role_definition_id_or_name = "Key Vault Secrets User"
+      scope                      = module.key_vault.key_vault_id
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Container Apps
+# ---------------------------------------------------------------------------
+
+module "container_apps" {
+  source = "../../modules/container_apps"
+
+  resource_group_name           = azurerm_resource_group.this.name
+  location                      = var.location
+  environment_name              = local.resource_names.container_apps_env
+  subnet_container_apps_id      = module.networking.subnet_container_apps_id
+  log_analytics_workspace_id    = module.observability.log_analytics_workspace_id
+  registry_login_server         = module.container_registry.login_server
+  frontend_identity_resource_id = module.identity_frontend.resource_id
+  backend_identity_resource_id  = module.identity_backend.resource_id
   # min_replicas=1 in prod avoids cold-start latency for user-facing traffic.
   # Container Apps consumption billing is per-second of actual CPU/memory usage,
   # so one idle replica adds minimal cost while ensuring immediate responsiveness.
@@ -137,7 +184,7 @@ module "container_apps" {
 }
 
 module "web_pubsub" {
-  source = "../../../modules/web_pubsub"
+  source = "../../modules/web_pubsub"
 
   resource_group_name = azurerm_resource_group.this.name
   location            = var.location
@@ -150,20 +197,28 @@ module "web_pubsub" {
   tags                        = local.common_tags
 }
 
-module "app_gateway" {
-  source = "../../../modules/app_gateway"
+# ---------------------------------------------------------------------------
+# Application Gateway — conditionally deployed.
+# On first deployment, set deploy_app_gateway = false so that the Key Vault
+# and all other resources are provisioned first. After uploading TLS
+# certificates to Key Vault, set to true and re-apply.
+# ---------------------------------------------------------------------------
 
-  resource_group_name      = azurerm_resource_group.this.name
-  location                 = var.location
-  name                     = local.resource_names.app_gateway
-  subnet_app_gateway_id    = module.networking.subnet_app_gateway_id
-  key_vault_id             = module.key_vault.key_vault_id
-  frontend_hostname        = var.frontend_hostname
-  backend_hostname         = var.backend_hostname
-  webpubsub_hostname       = var.webpubsub_hostname
-  frontend_cert_secret_id  = var.frontend_cert_secret_id
-  backend_cert_secret_id   = var.backend_cert_secret_id
-  webpubsub_cert_secret_id = var.webpubsub_cert_secret_id
+module "app_gateway" {
+  source = "../../modules/app_gateway"
+  count  = var.deploy_app_gateway ? 1 : 0
+
+  resource_group_name          = azurerm_resource_group.this.name
+  location                     = var.location
+  name                         = local.resource_names.app_gateway
+  subnet_app_gateway_id        = module.networking.subnet_app_gateway_id
+  managed_identity_resource_id = module.identity_app_gateway.resource_id
+  frontend_hostname            = var.frontend_hostname
+  backend_hostname             = var.backend_hostname
+  webpubsub_hostname           = var.webpubsub_hostname
+  frontend_cert_secret_id      = var.frontend_cert_secret_id
+  backend_cert_secret_id       = var.backend_cert_secret_id
+  webpubsub_cert_secret_id     = var.webpubsub_cert_secret_id
   # Container Apps share one internal load balancer IP; Host header routes per-app
   container_apps_static_ip = module.container_apps.static_ip_address
   frontend_backend_fqdn    = module.container_apps.frontend_fqdn
