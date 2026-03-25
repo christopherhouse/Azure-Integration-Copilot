@@ -62,7 +62,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 
 | Component | Purpose |
 |---|---|
-| Azure Front Door | Global load balancing and WAF |
+| Azure Application Gateway | Internet-facing ingress with WAF, TLS termination, and Key Vault certificate integration |
 | Azure Container Apps | Hosting frontend, backend services, and async agent workers |
 | Azure Container Registry | Container image storage and management |
 | Azure Cosmos DB | Multi-tenant data storage |
@@ -70,6 +70,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 | Microsoft Foundry | Agent framework and orchestration |
 | Azure Key Vault | Secrets and certificate management |
 | Azure Storage | Blob/queue/table storage |
+| Azure Web PubSub | Real-time messaging for live agent updates and notifications |
 | Virtual Network | Network isolation |
 | Private Endpoints | Secure connectivity to PaaS services |
 

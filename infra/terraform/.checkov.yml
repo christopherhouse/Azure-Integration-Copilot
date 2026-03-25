@@ -1,0 +1,17 @@
+# Checkov configuration for Terraform scanning
+# Docs: https://www.checkov.io/2.Basics/CLI%20Command%20Reference.html
+
+framework:
+  - terraform
+
+# Checks to skip across all files (document reason for each skip)
+skip-check:
+  # CKV_AZURE_215: App Gateway WAF is enforced via azurerm_web_application_firewall_policy
+  # and associated via firewall_policy_id; the legacy inline waf_configuration block is not used.
+  - CKV_AZURE_215
+
+# Output format
+output: cli
+
+# Compact output in CI
+compact: true
