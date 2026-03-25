@@ -18,8 +18,8 @@ variable "subnet_app_gateway_id" {
   type        = string
 }
 
-variable "key_vault_id" {
-  description = "Resource ID of the Key Vault that stores the TLS certificates"
+variable "managed_identity_resource_id" {
+  description = "Resource ID of the user-assigned managed identity to assign to the Application Gateway (must have Key Vault Secrets User role on the Key Vault)"
   type        = string
 }
 

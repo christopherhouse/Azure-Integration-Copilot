@@ -40,6 +40,16 @@ variable "min_replicas" {
   default     = 0
 }
 
+variable "frontend_identity_resource_id" {
+  description = "Resource ID of the user-assigned managed identity for the frontend container app"
+  type        = string
+}
+
+variable "backend_identity_resource_id" {
+  description = "Resource ID of the user-assigned managed identity for the backend container app"
+  type        = string
+}
+
 variable "tags" {
   description = "Tags to apply to all resources"
   type        = map(string)

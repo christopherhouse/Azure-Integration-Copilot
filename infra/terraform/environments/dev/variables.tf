@@ -22,6 +22,16 @@ variable "tenant_id" {
 }
 
 # ---------------------------------------------------------------------------
+# Application Gateway — deployment toggle
+# ---------------------------------------------------------------------------
+
+variable "deploy_app_gateway" {
+  description = "Whether to deploy the Application Gateway. Set to false on the first deployment so Key Vault and other resources are provisioned before TLS certificates are uploaded. After uploading certs, set to true and re-apply."
+  type        = bool
+  default     = false
+}
+
+# ---------------------------------------------------------------------------
 # Application Gateway — listener hostnames
 # ---------------------------------------------------------------------------
 
@@ -42,21 +52,25 @@ variable "webpubsub_hostname" {
 
 # ---------------------------------------------------------------------------
 # Application Gateway — TLS certificates (versionless Key Vault secret URIs)
+# Only required when deploy_app_gateway = true.
 # ---------------------------------------------------------------------------
 
 variable "frontend_cert_secret_id" {
   description = "Versionless Key Vault secret URI for the frontend TLS certificate"
   type        = string
+  default     = ""
 }
 
 variable "backend_cert_secret_id" {
   description = "Versionless Key Vault secret URI for the backend TLS certificate"
   type        = string
+  default     = ""
 }
 
 variable "webpubsub_cert_secret_id" {
   description = "Versionless Key Vault secret URI for the Web PubSub TLS certificate"
   type        = string
+  default     = ""
 }
 
 variable "vnet_address_space" {

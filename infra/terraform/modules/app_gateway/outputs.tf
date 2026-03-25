@@ -15,13 +15,3 @@ output "public_ip_fqdn" {
   # Azure-assigned FQDN, add a domain_name_label to the public IP resource.
   value = null
 }
-
-output "managed_identity_principal_id" {
-  description = "Principal ID of the App Gateway managed identity (for additional RBAC assignments)"
-  value       = module.managed_identity.principal_id
-}
-
-output "managed_identity_client_id" {
-  description = "Client ID of the App Gateway managed identity"
-  value       = module.managed_identity.client_id
-}

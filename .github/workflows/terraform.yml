@@ -85,6 +85,7 @@ jobs:
           tflint --chdir modules/service_bus
           tflint --chdir modules/container_apps
           tflint --chdir modules/web_pubsub
+          tflint --chdir modules/managed_identity
 
       - name: Run Checkov Security Scan
         uses: bridgecrewio/checkov-action@v12
