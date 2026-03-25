@@ -46,6 +46,7 @@ module "cosmos_db" {
   private_endpoints = {
     "pe-${var.account_name}" = {
       name                            = "pe-${var.account_name}"
+      subresource_name                = "Sql"
       subnet_resource_id              = var.subnet_private_endpoints_id
       private_dns_zone_resource_ids   = toset([var.private_dns_zone_id])
       private_dns_zone_group_name     = "pdzg-${var.account_name}"
@@ -58,7 +59,7 @@ module "cosmos_db" {
       name                  = "diag-${var.account_name}"
       workspace_resource_id = var.log_analytics_workspace_id
       log_groups            = ["allLogs"]
-      metric_categories     = ["AllMetrics"]
+      metric_categories     = ["Requests"]
     }
   }
 }
