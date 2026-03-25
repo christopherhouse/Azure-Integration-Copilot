@@ -16,6 +16,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyc
 .Python
 .venv/
 venv/
@@ -26,6 +27,7 @@ build/
 *.egg-info/
 .eggs/
 *.egg
+.ruff_cache/
 
 # Node / Next.js
 node_modules/
