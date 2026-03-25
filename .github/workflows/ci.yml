@@ -137,7 +137,7 @@ jobs:
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: 1.9.8
+          terraform_version: 1.14.6
 
       - name: Terraform Init
         working-directory: infra/terraform/environments/dev
