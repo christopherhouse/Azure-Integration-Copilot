@@ -1,7 +1,7 @@
 # =============================================================================
 # CI Workflow — Azure Integration Copilot
 # =============================================================================
-# Runs on every PR targeting main and on pushes to main.
+# Runs on every PR targeting main, on pushes to main, and on manual dispatch.
 # Jobs: frontend build/test, backend build/test, Terraform plan, container
 #        build/scan/push.
 # =============================================================================
@@ -9,6 +9,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
   push:
