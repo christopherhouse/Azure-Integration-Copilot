@@ -7,8 +7,7 @@ locals {
     vnet               = "vnet-${local.name_prefix}"
     log_analytics      = "law-${local.name_prefix}"
     app_insights       = "appi-${local.name_prefix}"
-    front_door         = "afd-${local.name_prefix}"
-    waf_policy         = replace("waf${var.workload}${var.environment}", "-", "")
+    app_gateway        = "agw-${local.name_prefix}"
     container_registry = replace("cr${var.workload}${var.environment}${local.region_short}", "-", "")
     key_vault          = "kv-${local.name_prefix}"
     storage_account    = replace("st${var.workload}${var.environment}${local.region_short}", "-", "")
@@ -131,20 +130,6 @@ module "container_apps" {
   tags                       = local.common_tags
 }
 
-module "front_door" {
-  source = "../../../modules/front_door"
-
-  resource_group_name        = azurerm_resource_group.this.name
-  profile_name               = local.resource_names.front_door
-  waf_policy_name            = local.resource_names.waf_policy
-  frontend_origin_hostname   = module.container_apps.frontend_fqdn
-  backend_origin_hostname    = module.container_apps.backend_fqdn
-  frontend_custom_domain     = var.frontend_custom_domain
-  backend_custom_domain      = var.backend_custom_domain
-  log_analytics_workspace_id = module.observability.log_analytics_workspace_id
-  tags                       = local.common_tags
-}
-
 module "web_pubsub" {
   source = "../../../modules/web_pubsub"
 
@@ -157,4 +142,30 @@ module "web_pubsub" {
   private_dns_zone_id         = module.networking.private_dns_zone_ids["privatelink.webpubsub.azure.com"]
   log_analytics_workspace_id  = module.observability.log_analytics_workspace_id
   tags                        = local.common_tags
+}
+
+module "app_gateway" {
+  source = "../../../modules/app_gateway"
+
+  resource_group_name      = azurerm_resource_group.this.name
+  location                 = var.location
+  name                     = local.resource_names.app_gateway
+  subnet_app_gateway_id    = module.networking.subnet_app_gateway_id
+  key_vault_id             = module.key_vault.key_vault_id
+  frontend_hostname        = var.frontend_hostname
+  backend_hostname         = var.backend_hostname
+  webpubsub_hostname       = var.webpubsub_hostname
+  frontend_cert_secret_id  = var.frontend_cert_secret_id
+  backend_cert_secret_id   = var.backend_cert_secret_id
+  webpubsub_cert_secret_id = var.webpubsub_cert_secret_id
+  # Container Apps share one internal load balancer IP; Host header routes per-app
+  container_apps_static_ip = module.container_apps.static_ip_address
+  frontend_backend_fqdn    = module.container_apps.frontend_fqdn
+  backend_backend_fqdn     = module.container_apps.backend_fqdn
+  webpubsub_backend_fqdn   = module.web_pubsub.hostname
+  # dev: scale to zero when idle; prod: keep min 1 for HA
+  min_capacity               = 0
+  max_capacity               = 2
+  log_analytics_workspace_id = module.observability.log_analytics_workspace_id
+  tags                       = local.common_tags
 }

@@ -39,33 +39,23 @@ output "service_bus_endpoint" {
   value       = module.service_bus.endpoint
 }
 
-output "front_door_frontend_endpoint_hostname" {
-  description = "Default hostname of the frontend AFD endpoint"
-  value       = module.front_door.frontend_endpoint_hostname
+output "app_gateway_public_ip" {
+  description = "Public IP address of the Application Gateway"
+  value       = module.app_gateway.public_ip_address
 }
 
-output "front_door_backend_endpoint_hostname" {
-  description = "Default hostname of the backend AFD endpoint"
-  value       = module.front_door.backend_endpoint_hostname
-}
-
-output "front_door_frontend_custom_domain_validation_token" {
-  description = "TXT validation token for the frontend custom domain"
-  value       = module.front_door.frontend_custom_domain_validation_token
-}
-
-output "front_door_backend_custom_domain_validation_token" {
-  description = "TXT validation token for the backend custom domain"
-  value       = module.front_door.backend_custom_domain_validation_token
+output "app_gateway_public_ip_fqdn" {
+  description = "Azure-assigned FQDN for the Application Gateway public IP"
+  value       = module.app_gateway.public_ip_fqdn
 }
 
 output "frontend_app_fqdn" {
-  description = "FQDN of the frontend container app"
+  description = "FQDN of the frontend container app (internal)"
   value       = module.container_apps.frontend_fqdn
 }
 
 output "backend_app_fqdn" {
-  description = "FQDN of the backend container app"
+  description = "FQDN of the backend container app (internal)"
   value       = module.container_apps.backend_fqdn
 }
 

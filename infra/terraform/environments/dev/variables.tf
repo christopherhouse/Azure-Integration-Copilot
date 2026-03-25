@@ -21,16 +21,42 @@ variable "tenant_id" {
   type        = string
 }
 
-variable "frontend_custom_domain" {
-  description = "Custom domain for the frontend AFD endpoint (e.g. app.example.com). Leave empty to use the AFD default hostname."
+# ---------------------------------------------------------------------------
+# Application Gateway — listener hostnames
+# ---------------------------------------------------------------------------
+
+variable "frontend_hostname" {
+  description = "Hostname for the Application Gateway frontend listener (e.g. app.example.com)"
   type        = string
-  default     = ""
 }
 
-variable "backend_custom_domain" {
-  description = "Custom domain for the backend AFD endpoint (e.g. api.example.com). Leave empty to use the AFD default hostname."
+variable "backend_hostname" {
+  description = "Hostname for the Application Gateway backend API listener (e.g. api.example.com)"
   type        = string
-  default     = ""
+}
+
+variable "webpubsub_hostname" {
+  description = "Hostname for the Application Gateway Web PubSub listener (e.g. pubsub.example.com)"
+  type        = string
+}
+
+# ---------------------------------------------------------------------------
+# Application Gateway — TLS certificates (versionless Key Vault secret URIs)
+# ---------------------------------------------------------------------------
+
+variable "frontend_cert_secret_id" {
+  description = "Versionless Key Vault secret URI for the frontend TLS certificate"
+  type        = string
+}
+
+variable "backend_cert_secret_id" {
+  description = "Versionless Key Vault secret URI for the backend TLS certificate"
+  type        = string
+}
+
+variable "webpubsub_cert_secret_id" {
+  description = "Versionless Key Vault secret URI for the Web PubSub TLS certificate"
+  type        = string
 }
 
 variable "vnet_address_space" {

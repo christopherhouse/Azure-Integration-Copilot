@@ -1,10 +1,11 @@
 resource "azurerm_container_app_environment" "this" {
-  name                       = var.environment_name
-  location                   = var.location
-  resource_group_name        = var.resource_group_name
-  log_analytics_workspace_id = var.log_analytics_workspace_id
-  infrastructure_subnet_id   = var.subnet_container_apps_id
-  tags                       = var.tags
+  name                           = var.environment_name
+  location                       = var.location
+  resource_group_name            = var.resource_group_name
+  log_analytics_workspace_id     = var.log_analytics_workspace_id
+  infrastructure_subnet_id       = var.subnet_container_apps_id
+  internal_load_balancer_enabled = true
+  tags                           = var.tags
 
   workload_profile {
     name                  = "Consumption"
@@ -37,9 +38,11 @@ resource "azurerm_container_app" "frontend" {
   }
 
   ingress {
+    # external_enabled = true exposes the app via the environment's internal load balancer
+    # (VNet-internal only when internal_load_balancer_enabled = true on the environment)
     external_enabled = true
     target_port      = 3000
-    transport        = "auto"
+    transport        = "http"
 
     traffic_weight {
       percentage      = 100
@@ -75,7 +78,7 @@ resource "azurerm_container_app" "backend" {
   ingress {
     external_enabled = true
     target_port      = 8000
-    transport        = "auto"
+    transport        = "http"
 
     traffic_weight {
       percentage      = 100

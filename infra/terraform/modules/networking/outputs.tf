@@ -13,6 +13,11 @@ output "subnet_container_apps_id" {
   value       = azurerm_subnet.container_apps.id
 }
 
+output "subnet_app_gateway_id" {
+  description = "ID of the Application Gateway subnet"
+  value       = azurerm_subnet.app_gateway.id
+}
+
 output "subnet_private_endpoints_id" {
   description = "ID of the private endpoints subnet"
   value       = azurerm_subnet.private_endpoints.id
