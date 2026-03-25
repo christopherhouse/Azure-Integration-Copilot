@@ -2,6 +2,7 @@
 
 <!-- Badges -->
 [![CI](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/ci.yml)
+[![CD](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/cd.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/cd.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > A multi-agent SaaS application that helps Azure Integration Services developers **understand** their systems, **manage** dependencies, **operate** effectively, and **evolve** with confidence.
@@ -59,7 +60,8 @@ The application consists of a **Next.js frontend**, a **Python backend**, and **
 ├── .github/
 │   ├── agents/                  # GitHub Copilot custom agent definitions (10 agents)
 │   ├── workflows/
-│   │   └── ci.yml               # CI pipeline (build, test, scan, push)
+│   │   ├── ci.yml               # CI pipeline (build, test, scan, push)
+│   │   └── cd.yml               # CD pipeline (deploy infra & apps to dev, then prod)
 │   └── copilot-instructions.md  # Shared Copilot coding instructions
 ├── src/
 │   ├── frontend/                # Next.js application (TypeScript)
@@ -235,28 +237,52 @@ Deployment 2 ──► deploy_front_door = true  ──► Front Door created wi
 
 ## CI/CD Pipeline
 
-The CI workflow (`.github/workflows/ci.yml`) runs on every PR and push to `main`. It uses **OIDC federated credentials** for Azure authentication — no stored secrets or service principal passwords.
+The CI and CD workflows use **OIDC federated credentials** for Azure authentication — no stored secrets or service principal passwords. CI runs on every PR and push to `main`; CD triggers automatically when CI succeeds on `main`.
 
 ```mermaid
 flowchart LR
     A[PR / Push to main] --> B[Frontend Build & Test]
     A --> C[Backend Build & Test]
     A --> D[Terraform Plan dev]
-    B --> E[Container Build, Scan & Push]
+    B --> E[Containers]
     C --> E
     E --> F[Trivy SARIF → GitHub Security]
     E -->|main only| G[Push to GHCR]
-    G --> H[Container Metadata Artifact]
+
+    G --> CD[CD Workflow]
+    CD --> I1[Deploy Infra dev]
+    CD --> I2[Promote Containers dev]
+    I1 --> I3[Deploy Apps dev]
+    I2 --> I3
+    I3 --> I4[Deploy Infra prod]
+    I3 --> I5[Promote Containers prod]
+    I4 --> I6[Deploy Apps prod]
+    I5 --> I6
 ```
+
+### CI — `.github/workflows/ci.yml`
 
 | Job | Trigger | Description |
 |---|---|---|
 | **Frontend Build & Test** | Every PR and push | `npm ci`, ESLint, Next.js build, Jest tests with JUnit reporting |
 | **Backend Build & Test** | Every PR and push | UV dependency sync, Ruff lint, pytest with JUnit reporting |
 | **Terraform Plan (dev)** | Every PR and push | OIDC Azure login, `terraform plan`, uploads plan artifact (7-day retention) |
-| **Containers** | After tests pass | Docker Buildx build, Trivy scan (CRITICAL/HIGH → SARIF), push to GHCR on `main`, container metadata JSON artifact (90-day retention) |
+| **Containers** | After tests pass, **skipped on PRs** | Docker Buildx build, Trivy scan (CRITICAL/HIGH → SARIF), push to GHCR on `main`, container metadata JSON artifact (90-day retention) |
 
 Container images are published to GHCR at `ghcr.io/<owner>/<repo>/frontend` and `ghcr.io/<owner>/<repo>/backend`, tagged with the 7-character commit SHA and `latest` on pushes to `main`.
+
+### CD — `.github/workflows/cd.yml`
+
+The CD workflow triggers via `workflow_run` when CI completes successfully on `main`. It deploys **dev → prod** sequentially — the prod stage is gated on dev success.
+
+| Job | Environment | Description |
+|---|---|---|
+| **deploy-infra-dev** | dev | Downloads Terraform plan artifact from CI, runs `terraform apply`, captures ACR login server + resource group |
+| **promote-containers-dev** | dev | Downloads container metadata artifact, imports frontend/backend images from GHCR → dev ACR via `az acr import` |
+| **deploy-apps-dev** | dev | Updates `ca-frontend` and `ca-backend` Container Apps with new images |
+| **deploy-infra-prod** | prod | Runs inline `terraform plan` + `terraform apply` (no artifact from CI), captures ACR login server + resource group |
+| **promote-containers-prod** | prod | Downloads container metadata, imports images from GHCR → prod ACR |
+| **deploy-apps-prod** | prod | Updates Container Apps in prod with new images |
 
 ---
 

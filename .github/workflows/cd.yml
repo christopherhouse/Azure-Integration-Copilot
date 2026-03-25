@@ -1,0 +1,341 @@
+# =============================================================================
+# CD Workflow — Azure Integration Copilot
+# =============================================================================
+# Triggered on successful completion of the CI workflow on the main branch.
+# Deploys infrastructure and container apps to dev, then prod.
+#
+# Jobs per environment:
+#   1. Deploy Infrastructure — download TF plan artifact, terraform apply
+#   2. Promote Containers    — import images from GHCR → ACR
+#   3. Deploy Container Apps — update frontend & backend on ACA
+# =============================================================================
+
+name: CD
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write          # OIDC auth to Azure
+  packages: read           # Pull from GHCR
+  actions: read            # Download artifacts from triggering workflow
+
+# =============================================================================
+# DEV ENVIRONMENT
+# =============================================================================
+jobs:
+  # ---------------------------------------------------------------------------
+  # Dev — Deploy Infrastructure
+  # ---------------------------------------------------------------------------
+  deploy-infra-dev:
+    name: "Dev — Deploy Infrastructure"
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: dev
+    outputs:
+      acr_login_server: ${{ steps.tf-outputs.outputs.acr_login_server }}
+      resource_group: ${{ steps.tf-outputs.outputs.resource_group }}
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_USE_OIDC: 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.6
+          terraform_wrapper: false
+
+      - name: Download Terraform plan artifact
+        uses: actions/download-artifact@v4.1.3
+        with:
+          name: tfplan-dev
+          path: infra/terraform/environments/dev
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Terraform Init
+        working-directory: infra/terraform/environments/dev
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: infra/terraform/environments/dev
+        run: terraform apply -auto-approve tfplan-dev
+
+      - name: Capture Terraform outputs
+        id: tf-outputs
+        working-directory: infra/terraform/environments/dev
+        run: |
+          echo "acr_login_server=$(terraform output -raw container_registry_login_server)" >> "$GITHUB_OUTPUT"
+          echo "resource_group=$(terraform output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Dev — Promote Containers (GHCR → ACR)
+  # ---------------------------------------------------------------------------
+  promote-containers-dev:
+    name: "Dev — Promote Containers"
+    needs: [deploy-infra-dev]
+    runs-on: ubuntu-latest
+    environment: dev
+    outputs:
+      image_tag: ${{ steps.metadata.outputs.tag }}
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download container metadata
+        uses: actions/download-artifact@v4.1.3
+        with:
+          name: container-metadata
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse container metadata
+        id: metadata
+        run: |
+          cat container-metadata.json
+          FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="frontend") | .full_image' container-metadata.json)
+          BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="backend") | .full_image' container-metadata.json)
+          TAG=$(jq -r '.containers[] | select(.name=="frontend") | .tag' container-metadata.json)
+          echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Import frontend image to ACR
+        env:
+          ACR_LOGIN_SERVER: ${{ needs.deploy-infra-dev.outputs.acr_login_server }}
+        run: |
+          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.frontend_image }}" \
+            --image "frontend:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import backend image to ACR
+        env:
+          ACR_LOGIN_SERVER: ${{ needs.deploy-infra-dev.outputs.acr_login_server }}
+        run: |
+          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.backend_image }}" \
+            --image "backend:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+  # ---------------------------------------------------------------------------
+  # Dev — Deploy Container Apps
+  # ---------------------------------------------------------------------------
+  deploy-apps-dev:
+    name: "Dev — Deploy Container Apps"
+    needs: [deploy-infra-dev, promote-containers-dev]
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy frontend container app
+        run: |
+          az containerapp update \
+            --name ca-frontend \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-dev.outputs.image_tag }}"
+
+      - name: Deploy backend container app
+        run: |
+          az containerapp update \
+            --name ca-backend \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/backend:${{ needs.promote-containers-dev.outputs.image_tag }}"
+
+# =============================================================================
+# PROD ENVIRONMENT
+# =============================================================================
+
+  # ---------------------------------------------------------------------------
+  # Prod — Deploy Infrastructure
+  # ---------------------------------------------------------------------------
+  deploy-infra-prod:
+    name: "Prod — Deploy Infrastructure"
+    needs: [deploy-apps-dev]
+    runs-on: ubuntu-latest
+    environment: prod
+    outputs:
+      acr_login_server: ${{ steps.tf-outputs.outputs.acr_login_server }}
+      resource_group: ${{ steps.tf-outputs.outputs.resource_group }}
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_USE_OIDC: 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.6
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        working-directory: infra/terraform/environments/prod
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infra/terraform/environments/prod
+        run: |
+          terraform plan \
+            -var-file="prod.tfvars" \
+            -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+            -out=tfplan-prod
+
+      - name: Terraform Apply
+        working-directory: infra/terraform/environments/prod
+        run: terraform apply -auto-approve tfplan-prod
+
+      - name: Capture Terraform outputs
+        id: tf-outputs
+        working-directory: infra/terraform/environments/prod
+        run: |
+          echo "acr_login_server=$(terraform output -raw container_registry_login_server)" >> "$GITHUB_OUTPUT"
+          echo "resource_group=$(terraform output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Prod — Promote Containers (GHCR → ACR)
+  # ---------------------------------------------------------------------------
+  promote-containers-prod:
+    name: "Prod — Promote Containers"
+    needs: [deploy-infra-prod]
+    runs-on: ubuntu-latest
+    environment: prod
+    outputs:
+      image_tag: ${{ steps.metadata.outputs.tag }}
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Download container metadata
+        uses: actions/download-artifact@v4.1.3
+        with:
+          name: container-metadata
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Parse container metadata
+        id: metadata
+        run: |
+          cat container-metadata.json
+          FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="frontend") | .full_image' container-metadata.json)
+          BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="backend") | .full_image' container-metadata.json)
+          TAG=$(jq -r '.containers[] | select(.name=="frontend") | .tag' container-metadata.json)
+          echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Import frontend image to ACR
+        env:
+          ACR_LOGIN_SERVER: ${{ needs.deploy-infra-prod.outputs.acr_login_server }}
+        run: |
+          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.frontend_image }}" \
+            --image "frontend:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import backend image to ACR
+        env:
+          ACR_LOGIN_SERVER: ${{ needs.deploy-infra-prod.outputs.acr_login_server }}
+        run: |
+          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.backend_image }}" \
+            --image "backend:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+  # ---------------------------------------------------------------------------
+  # Prod — Deploy Container Apps
+  # ---------------------------------------------------------------------------
+  deploy-apps-prod:
+    name: "Prod — Deploy Container Apps"
+    needs: [deploy-infra-prod, promote-containers-prod]
+    runs-on: ubuntu-latest
+    environment: prod
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy frontend container app
+        run: |
+          az containerapp update \
+            --name ca-frontend \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-prod.outputs.image_tag }}"
+
+      - name: Deploy backend container app
+        run: |
+          az containerapp update \
+            --name ca-backend \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/backend:${{ needs.promote-containers-prod.outputs.image_tag }}"

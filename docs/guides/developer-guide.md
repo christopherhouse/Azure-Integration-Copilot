@@ -358,20 +358,35 @@ The root `Makefile` provides convenient shortcuts:
 
 ## CI/CD
 
-The CI workflow (`.github/workflows/ci.yml`) triggers on every PR targeting `main` and on pushes to `main`.
+### CI — `.github/workflows/ci.yml`
+
+The CI workflow triggers on every PR targeting `main` and on pushes to `main`.
 
 | Job | What it does |
 |-----|------|
 | **Frontend Build & Test** | Installs deps (`npm ci`), lints (ESLint), builds (Next.js), runs tests (Jest), publishes JUnit results |
 | **Backend Build & Test** | Installs deps (`uv sync --frozen`), lints (Ruff), runs tests (pytest), publishes JUnit results |
 | **Terraform Plan** | Authenticates to Azure via OIDC, runs `terraform plan` for the dev environment, uploads the plan artifact |
-| **Containers** | Builds Docker images with Buildx, scans with [Trivy](https://github.com/aquasecurity/trivy) (SARIF → GitHub Security), pushes to GHCR on `main`, uploads container metadata JSON |
+| **Containers** | **Skipped on PRs.** Builds Docker images with Buildx, scans with [Trivy](https://github.com/aquasecurity/trivy) (SARIF → GitHub Security), pushes to GHCR on `main`, uploads container metadata JSON |
 
 Container images are published to:
 - `ghcr.io/<owner>/<repo>/frontend:<sha>`
 - `ghcr.io/<owner>/<repo>/backend:<sha>`
 
 On pushes to `main`, images are also tagged as `latest`.
+
+### CD — `.github/workflows/cd.yml`
+
+The CD workflow triggers via `workflow_run` when CI completes successfully on `main`. It deploys **dev → prod** sequentially — the prod stage is gated on dev success.
+
+| Job | Environment | What it does |
+|-----|-------------|------|
+| **deploy-infra-dev** | dev | Downloads Terraform plan artifact from CI, runs `terraform apply` |
+| **promote-containers-dev** | dev | Imports frontend/backend images from GHCR → dev ACR via `az acr import` |
+| **deploy-apps-dev** | dev | Updates `ca-frontend` and `ca-backend` Container Apps with new images |
+| **deploy-infra-prod** | prod | Runs inline `terraform plan` + `terraform apply` (no artifact from CI) |
+| **promote-containers-prod** | prod | Imports frontend/backend images from GHCR → prod ACR |
+| **deploy-apps-prod** | prod | Updates Container Apps in prod with new images |
 
 ### Running CI Locally
 
