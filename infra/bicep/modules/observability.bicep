@@ -2,9 +2,6 @@
 // Observability — Log Analytics Workspace + Application Insights
 // ---------------------------------------------------------------------------
 
-@description('Name of the resource group')
-param resourceGroupName string = resourceGroup().name
-
 @description('Azure region')
 param location string
 

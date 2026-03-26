@@ -20,9 +20,6 @@ param environment string
 @description('Workload name abbreviation')
 param workload string = 'aic'
 
-@description('Azure AD tenant ID')
-param tenantId string
-
 @description('Address space for the virtual network')
 param vnetAddressSpace array = ['10.0.0.0/16']
 
@@ -56,7 +53,7 @@ param containerDeleteRetentionDays int = 7
 param serviceBusSku string = 'Standard'
 
 @description('Web PubSub SKU')
-@allowed(['Free_F1', 'Standard_S1', 'Premium_P1'])
+@allowed(['Free_F1', 'Standard_S1'])
 param webPubSubSku string = 'Free_F1'
 
 @description('Whether to deploy Azure Front Door')
@@ -155,7 +152,7 @@ module containerRegistry 'modules/container-registry.bicep' = {
     registryName: resourceNames.containerRegistry
     sku: containerRegistrySku
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
-    privateDnsZoneId: networking.outputs.privateDnsZoneIds['privatelink.azurecr.io']
+    privateDnsZoneId: networking.outputs.privateDnsZoneIdAcr
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     tags: commonTags
   }
@@ -170,9 +167,8 @@ module keyVault 'modules/key-vault.bicep' = {
   params: {
     location: location
     keyVaultName: resourceNames.keyVault
-    tenantId: tenantId
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
-    privateDnsZoneId: networking.outputs.privateDnsZoneIds['privatelink.vaultcore.azure.net']
+    privateDnsZoneId: networking.outputs.privateDnsZoneIdVaultcore
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     softDeleteRetentionDays: kvSoftDeleteRetentionDays
     tags: commonTags
@@ -189,9 +185,9 @@ module storage 'modules/storage.bicep' = {
     location: location
     storageAccountName: resourceNames.storageAccount
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
-    privateDnsZoneBlobId: networking.outputs.privateDnsZoneIds['privatelink.blob.core.windows.net']
-    privateDnsZoneQueueId: networking.outputs.privateDnsZoneIds['privatelink.queue.core.windows.net']
-    privateDnsZoneTableId: networking.outputs.privateDnsZoneIds['privatelink.table.core.windows.net']
+    privateDnsZoneBlobId: networking.outputs.privateDnsZoneIdBlob
+    privateDnsZoneQueueId: networking.outputs.privateDnsZoneIdQueue
+    privateDnsZoneTableId: networking.outputs.privateDnsZoneIdTable
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     blobDeleteRetentionDays: blobDeleteRetentionDays
     containerDeleteRetentionDays: containerDeleteRetentionDays
@@ -209,7 +205,7 @@ module cosmosDb 'modules/cosmos-db.bicep' = {
     location: location
     accountName: resourceNames.cosmosDb
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
-    privateDnsZoneId: networking.outputs.privateDnsZoneIds['privatelink.documents.azure.com']
+    privateDnsZoneId: networking.outputs.privateDnsZoneIdDocuments
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     sqlDatabases: cosmosSqlDatabases
     tags: commonTags
@@ -227,7 +223,7 @@ module serviceBus 'modules/service-bus.bicep' = {
     namespaceName: resourceNames.serviceBus
     sku: serviceBusSku
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
-    privateDnsZoneId: networking.outputs.privateDnsZoneIds['privatelink.servicebus.windows.net']
+    privateDnsZoneId: networking.outputs.privateDnsZoneIdServicebus
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     tags: commonTags
   }
@@ -273,7 +269,7 @@ module identityWorker 'br/public:avm/res/managed-identity/user-assigned-identity
 
 // AcrPull for all identities
 resource frontendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.outputs.registryId, identityFrontend.outputs.principalId, 'AcrPull')
+  name: guid(resourceGroup().id, resourceNames.containerRegistry, resourceNames.idFrontend, 'AcrPull')
   scope: acrResource
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
@@ -283,7 +279,7 @@ resource frontendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
 }
 
 resource backendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.outputs.registryId, identityBackend.outputs.principalId, 'AcrPull')
+  name: guid(resourceGroup().id, resourceNames.containerRegistry, resourceNames.idBackend, 'AcrPull')
   scope: acrResource
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
@@ -293,7 +289,7 @@ resource backendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 }
 
 resource workerAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(containerRegistry.outputs.registryId, identityWorker.outputs.principalId, 'AcrPull')
+  name: guid(resourceGroup().id, resourceNames.containerRegistry, resourceNames.idWorker, 'AcrPull')
   scope: acrResource
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
@@ -304,7 +300,7 @@ resource workerAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 
 // Key Vault Secrets User for all identities
 resource frontendKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.outputs.keyVaultId, identityFrontend.outputs.principalId, 'KVSecretsUser')
+  name: guid(resourceGroup().id, resourceNames.keyVault, resourceNames.idFrontend, 'KVSecretsUser')
   scope: kvResource
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
@@ -314,7 +310,7 @@ resource frontendKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' 
 }
 
 resource backendKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.outputs.keyVaultId, identityBackend.outputs.principalId, 'KVSecretsUser')
+  name: guid(resourceGroup().id, resourceNames.keyVault, resourceNames.idBackend, 'KVSecretsUser')
   scope: kvResource
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
@@ -324,7 +320,7 @@ resource backendKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' =
 }
 
 resource workerKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.outputs.keyVaultId, identityWorker.outputs.principalId, 'KVSecretsUser')
+  name: guid(resourceGroup().id, resourceNames.keyVault, resourceNames.idWorker, 'KVSecretsUser')
   scope: kvResource
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
@@ -336,7 +332,7 @@ resource workerKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = 
 // Cosmos DB Built-in Data Contributor for backend identity
 resource backendCosmosDataContributor 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
   parent: cosmosResource
-  name: guid(cosmosDb.outputs.accountId, identityBackend.outputs.principalId, 'CosmosDataContributor')
+  name: guid(resourceGroup().id, resourceNames.cosmosDb, resourceNames.idBackend, 'CosmosDataContributor')
   properties: {
     roleDefinitionId: '${cosmosDb.outputs.accountId}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002'
     principalId: identityBackend.outputs.principalId
@@ -383,8 +379,7 @@ module webPubSub 'modules/web-pubsub.bicep' = {
     name: resourceNames.webPubSub
     sku: webPubSubSku
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
-    privateDnsZoneId: networking.outputs.privateDnsZoneIds['privatelink.webpubsub.azure.com']
-    logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
+    privateDnsZoneId: networking.outputs.privateDnsZoneIdWebpubsub
     tags: commonTags
   }
 }
@@ -463,13 +458,13 @@ output backendIdentityResourceId string = identityBackend.outputs.resourceId
 output workerIdentityResourceId string = identityWorker.outputs.resourceId
 
 @description('Resource ID of the Front Door profile')
-output frontDoorId string = deployFrontDoor ? frontDoor.outputs.id : ''
+output frontDoorId string = deployFrontDoor ? frontDoor!.outputs.id : ''
 
 @description('Frontend endpoint hostname (*.azurefd.net)')
-output frontDoorFrontendEndpoint string = deployFrontDoor ? frontDoor.outputs.frontendEndpointHostname : ''
+output frontDoorFrontendEndpoint string = deployFrontDoor ? frontDoor!.outputs.frontendEndpointHostname : ''
 
 @description('Backend endpoint hostname (*.azurefd.net)')
-output frontDoorBackendEndpoint string = deployFrontDoor ? frontDoor.outputs.backendEndpointHostname : ''
+output frontDoorBackendEndpoint string = deployFrontDoor ? frontDoor!.outputs.backendEndpointHostname : ''
 
 @description('PubSub endpoint hostname (*.azurefd.net)')
-output frontDoorPubsubEndpoint string = deployFrontDoor ? frontDoor.outputs.pubsubEndpointHostname : ''
+output frontDoorPubsubEndpoint string = deployFrontDoor ? frontDoor!.outputs.pubsubEndpointHostname : ''

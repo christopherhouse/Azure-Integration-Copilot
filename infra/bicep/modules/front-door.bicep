@@ -118,6 +118,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
         loadBalancingSettings: {
           sampleSize: 4
           successfulSamplesRequired: 3
+          additionalLatencyInMilliseconds: 50
         }
         origins: [
           {
@@ -149,6 +150,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
         loadBalancingSettings: {
           sampleSize: 4
           successfulSamplesRequired: 3
+          additionalLatencyInMilliseconds: 50
         }
         origins: [
           {
@@ -180,6 +182,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
         loadBalancingSettings: {
           sampleSize: 4
           successfulSamplesRequired: 3
+          additionalLatencyInMilliseconds: 50
         }
         origins: [
           {
@@ -246,24 +249,6 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
       }
     ]
 
-    // -- Security Policy (WAF) --
-    securityPolicies: [
-      {
-        name: 'sp-waf'
-        associations: [
-          {
-            domains: [
-              { id: '${frontDoor.outputs.resourceId}/customDomains/cd-frontend' }
-              { id: '${frontDoor.outputs.resourceId}/customDomains/cd-backend' }
-              { id: '${frontDoor.outputs.resourceId}/customDomains/cd-pubsub' }
-            ]
-            patternsToMatch: ['/*']
-          }
-        ]
-        wafPolicyResourceId: wafPolicy.id
-      }
-    ]
-
     // -- Diagnostics --
     diagnosticSettings: [
       {
@@ -283,6 +268,32 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
         ]
       }
     ]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Security Policy (WAF) — deployed separately to avoid self-reference
+// ---------------------------------------------------------------------------
+
+resource securityPolicy 'Microsoft.Cdn/profiles/securityPolicies@2024-02-01' = {
+  name: '${name}/sp-waf'
+  properties: {
+    parameters: {
+      type: 'WebApplicationFirewall'
+      wafPolicy: {
+        id: wafPolicy.id
+      }
+      associations: [
+        {
+          domains: [
+            { id: '${frontDoor.outputs.resourceId}/customDomains/cd-frontend' }
+            { id: '${frontDoor.outputs.resourceId}/customDomains/cd-backend' }
+            { id: '${frontDoor.outputs.resourceId}/customDomains/cd-pubsub' }
+          ]
+          patternsToMatch: ['/*']
+        }
+      ]
+    }
   }
 }
 
