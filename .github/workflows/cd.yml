@@ -203,6 +203,92 @@ jobs:
             --max-replicas 10 \
             --env-vars "PORT=8000"
 
+  # ---------------------------------------------------------------------------
+  # Dev — Deploy Azure Front Door (after Container Apps exist)
+  # ---------------------------------------------------------------------------
+  deploy-afd-dev:
+    name: "Dev — Deploy Azure Front Door"
+    needs: [deploy-infra-dev, deploy-apps-dev]
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Azure Front Door
+        id: deploy-afd
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
+        run: |
+          DEPLOYMENT_OUTPUT=$(az deployment group create \
+            --name "aic-dev-afd-${{ github.run_number }}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --parameters infra/bicep/environments/dev-afd.bicepparam \
+            --query 'properties.outputs' \
+            --output json)
+
+          echo "profile_name=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorProfileName.value')" >> "$GITHUB_OUTPUT"
+          echo "frontend_endpoint=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorFrontendEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "backend_endpoint=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorBackendEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "pubsub_endpoint=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorPubsubEndpoint.value')" >> "$GITHUB_OUTPUT"
+
+      - name: Display AFD endpoints and DNS validation info
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
+          PROFILE_NAME: ${{ steps.deploy-afd.outputs.profile_name }}
+          FRONTEND_ENDPOINT: ${{ steps.deploy-afd.outputs.frontend_endpoint }}
+          BACKEND_ENDPOINT: ${{ steps.deploy-afd.outputs.backend_endpoint }}
+          PUBSUB_ENDPOINT: ${{ steps.deploy-afd.outputs.pubsub_endpoint }}
+        run: |
+          echo "========================================"
+          echo " Azure Front Door Deployment Complete"
+          echo "========================================"
+          echo ""
+          echo "AFD Endpoints:"
+          echo "  Frontend : ${FRONTEND_ENDPOINT}"
+          echo "  Backend  : ${BACKEND_ENDPOINT}"
+          echo "  PubSub   : ${PUBSUB_ENDPOINT}"
+          echo ""
+          echo "DNS Validation Information:"
+          echo "----------------------------------------"
+
+          DOMAINS=("cd-frontend" "cd-backend" "cd-pubsub")
+          ENDPOINTS=("${FRONTEND_ENDPOINT}" "${BACKEND_ENDPOINT}" "${PUBSUB_ENDPOINT}")
+
+          for i in "${!DOMAINS[@]}"; do
+            DOMAIN_NAME="${DOMAINS[$i]}"
+            CNAME_TARGET="${ENDPOINTS[$i]}"
+
+            DOMAIN_INFO=$(az afd custom-domain show \
+              --profile-name "${PROFILE_NAME}" \
+              --resource-group "${RESOURCE_GROUP}" \
+              --custom-domain-name "${DOMAIN_NAME}" \
+              --query '{hostname: hostName, validationToken: validationProperties.validationToken}' \
+              --output json)
+
+            HOSTNAME=$(echo "$DOMAIN_INFO" | jq -r '.hostname')
+            TOKEN=$(echo "$DOMAIN_INFO" | jq -r '.validationToken // "N/A"')
+
+            echo ""
+            echo "  Domain       : ${HOSTNAME}"
+            echo "  TXT Record   : _dnsauth.${HOSTNAME}"
+            echo "  TXT Token    : ${TOKEN}"
+            echo "  CNAME Record : ${HOSTNAME} → ${CNAME_TARGET}"
+          done
+
+          echo ""
+          echo "========================================"
+
 # =============================================================================
 # PROD ENVIRONMENT
 # =============================================================================
@@ -212,7 +298,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-infra-prod:
     name: "Prod — Deploy Infrastructure"
-    needs: [deploy-apps-dev]
+    needs: [deploy-afd-dev]
     runs-on: ubuntu-latest
     environment: prod
     outputs:
@@ -381,3 +467,89 @@ jobs:
             --min-replicas 1 \
             --max-replicas 10 \
             --env-vars "PORT=8000"
+
+  # ---------------------------------------------------------------------------
+  # Prod — Deploy Azure Front Door (after Container Apps exist)
+  # ---------------------------------------------------------------------------
+  deploy-afd-prod:
+    name: "Prod — Deploy Azure Front Door"
+    needs: [deploy-infra-prod, deploy-apps-prod]
+    runs-on: ubuntu-latest
+    environment: prod
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy Azure Front Door
+        id: deploy-afd
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
+        run: |
+          DEPLOYMENT_OUTPUT=$(az deployment group create \
+            --name "aic-prod-afd-${{ github.run_number }}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --parameters infra/bicep/environments/prod-afd.bicepparam \
+            --query 'properties.outputs' \
+            --output json)
+
+          echo "profile_name=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorProfileName.value')" >> "$GITHUB_OUTPUT"
+          echo "frontend_endpoint=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorFrontendEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "backend_endpoint=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorBackendEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "pubsub_endpoint=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorPubsubEndpoint.value')" >> "$GITHUB_OUTPUT"
+
+      - name: Display AFD endpoints and DNS validation info
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
+          PROFILE_NAME: ${{ steps.deploy-afd.outputs.profile_name }}
+          FRONTEND_ENDPOINT: ${{ steps.deploy-afd.outputs.frontend_endpoint }}
+          BACKEND_ENDPOINT: ${{ steps.deploy-afd.outputs.backend_endpoint }}
+          PUBSUB_ENDPOINT: ${{ steps.deploy-afd.outputs.pubsub_endpoint }}
+        run: |
+          echo "========================================"
+          echo " Azure Front Door Deployment Complete"
+          echo "========================================"
+          echo ""
+          echo "AFD Endpoints:"
+          echo "  Frontend : ${FRONTEND_ENDPOINT}"
+          echo "  Backend  : ${BACKEND_ENDPOINT}"
+          echo "  PubSub   : ${PUBSUB_ENDPOINT}"
+          echo ""
+          echo "DNS Validation Information:"
+          echo "----------------------------------------"
+
+          DOMAINS=("cd-frontend" "cd-backend" "cd-pubsub")
+          ENDPOINTS=("${FRONTEND_ENDPOINT}" "${BACKEND_ENDPOINT}" "${PUBSUB_ENDPOINT}")
+
+          for i in "${!DOMAINS[@]}"; do
+            DOMAIN_NAME="${DOMAINS[$i]}"
+            CNAME_TARGET="${ENDPOINTS[$i]}"
+
+            DOMAIN_INFO=$(az afd custom-domain show \
+              --profile-name "${PROFILE_NAME}" \
+              --resource-group "${RESOURCE_GROUP}" \
+              --custom-domain-name "${DOMAIN_NAME}" \
+              --query '{hostname: hostName, validationToken: validationProperties.validationToken}' \
+              --output json)
+
+            HOSTNAME=$(echo "$DOMAIN_INFO" | jq -r '.hostname')
+            TOKEN=$(echo "$DOMAIN_INFO" | jq -r '.validationToken // "N/A"')
+
+            echo ""
+            echo "  Domain       : ${HOSTNAME}"
+            echo "  TXT Record   : _dnsauth.${HOSTNAME}"
+            echo "  TXT Token    : ${TOKEN}"
+            echo "  CNAME Record : ${HOSTNAME} → ${CNAME_TARGET}"
+          done
+
+          echo ""
+          echo "========================================"
