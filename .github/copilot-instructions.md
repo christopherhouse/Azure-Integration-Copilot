@@ -46,9 +46,9 @@ Never bypass the orchestrator. Never execute implementation work without a plan 
 
 ### Agent Workers
 
-- One or more **agent worker** Container Apps handle asynchronous processing (e.g. long-running agent tasks, background jobs triggered via Azure Service Bus).
+- One or more **agent worker** Container Apps handle asynchronous processing (e.g. long-running agent tasks, background jobs triggered via Azure Event Grid Namespace pull delivery).
 - Workers run as separate Container Apps (not the same app as the API/frontend) so they can scale independently.
-- Use KEDA Service Bus scalers to scale workers based on queue/topic message counts.
+- Use KEDA Event Grid scalers to scale workers based on pending message counts.
 - Place worker source code under `src/backend/workers/`.
 - Workers must be stateless; all state is persisted in Cosmos DB or Azure Storage.
 
@@ -68,7 +68,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 | Azure Container Apps | Hosting frontend, backend services, and async agent workers |
 | Azure Container Registry | Container image storage and management |
 | Azure Cosmos DB | Multi-tenant data storage |
-| Azure Service Bus | Asynchronous messaging |
+| Azure Event Grid Namespace | Event routing with pull delivery |
 | Microsoft Foundry | Agent framework and orchestration |
 | Azure Key Vault | Secrets and certificate management |
 | Azure Storage | Blob/queue/table storage |
@@ -110,7 +110,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 6. **Test coverage.** Write tests for new functionality. Place frontend tests in `tests/frontend/`, backend tests in `tests/backend/`, and integration tests in `tests/integration/`.
 7. **Use Azure Verified Modules.** When provisioning Azure resources with Bicep, always prefer Azure Verified Modules over custom resource definitions.
 8. **Use UV for Python.** All Python dependency management must go through UV. Do not use pip directly.
-9. **Cost optimization by default.** This solution is biased towards minimizing Azure spend. Prefer serverless and consumption-based services (e.g. Azure Container Apps consumption workload profiles, Azure Functions Consumption plan, Cosmos DB serverless, Service Bus Basic/Standard tiers) over provisioned or premium alternatives unless a specific workload requirement justifies the extra cost. Always evaluate the cost impact of architectural decisions and choose the lowest-cost option that meets the requirements.
+9. **Cost optimization by default.** This solution is biased towards minimizing Azure spend. Prefer serverless and consumption-based services (e.g. Azure Container Apps consumption workload profiles, Azure Functions Consumption plan, Cosmos DB serverless, Event Grid Namespace Standard tier) over provisioned or premium alternatives unless a specific workload requirement justifies the extra cost. Always evaluate the cost impact of architectural decisions and choose the lowest-cost option that meets the requirements.
 
 ## Agent Tools
 

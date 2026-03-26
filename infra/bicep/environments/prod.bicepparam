@@ -19,7 +19,6 @@ param logRetentionDays = 90
 param kvSoftDeleteRetentionDays = 90
 param blobDeleteRetentionDays = 30
 param containerDeleteRetentionDays = 30
-param serviceBusSku = 'Premium'
 param webPubSubSku = 'Standard_S1'
 
 // Azure Front Door — set to true after first deployment
