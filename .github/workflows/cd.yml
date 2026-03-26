@@ -62,7 +62,7 @@ jobs:
         id: deploy
         uses: azure/arm-deploy@v2
         with:
-          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
           template: infra/bicep/main.bicep
           parameters: >-
             infra/bicep/environments/dev.bicepparam
@@ -251,7 +251,7 @@ jobs:
         id: deploy
         uses: azure/arm-deploy@v2
         with:
-          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
           template: infra/bicep/main.bicep
           parameters: >-
             infra/bicep/environments/prod.bicepparam

@@ -297,7 +297,8 @@ The CD workflow triggers via `workflow_run` when CI completes successfully on `m
 | Azure CLI | Latest version with Bicep extension (`az bicep install`) |
 | Azure Subscription | With permissions to create resources and assign RBAC roles (Contributor + User Access Administrator) |
 | Azure AD Tenant | For managed identity provisioning and RBAC assignments |
-| GitHub OIDC Secrets | `AZURE_CLIENT_ID`, `AZURE_SUBSCRIPTION_ID` (per environment), `AZURE_TENANT_ID`, `AZURE_RESOURCE_GROUP` (per environment) |
+| GitHub OIDC Secrets | `AZURE_CLIENT_ID`, `AZURE_SUBSCRIPTION_ID` (per environment), `AZURE_TENANT_ID` |
+| GitHub Environment Variables | `AZURE_RESOURCE_GROUP` (per environment) |
 
 ### CI/CD Authentication Setup
 
@@ -402,10 +403,8 @@ In your GitHub repository, go to **Settings → Environments** and create `dev` 
 |---|---|---|
 | `AZURE_CLIENT_ID` | `dev` | Application (client) ID of the dev App Registration |
 | `AZURE_SUBSCRIPTION_ID` | `dev` | Azure subscription ID for the dev environment |
-| `AZURE_RESOURCE_GROUP` | `dev` | Pre-existing resource group name for the dev environment |
 | `AZURE_CLIENT_ID` | `prod` | Application (client) ID of the prod App Registration |
 | `AZURE_SUBSCRIPTION_ID` | `prod` | Azure subscription ID for the prod environment |
-| `AZURE_RESOURCE_GROUP` | `prod` | Pre-existing resource group name for the prod environment |
 
 **Repository secret** (shared across all environments):
 
@@ -413,7 +412,14 @@ In your GitHub repository, go to **Settings → Environments** and create `dev` 
 |---|---|
 | `AZURE_TENANT_ID` | Directory (tenant) ID of your Entra ID tenant |
 
-> **Tip:** `AZURE_CLIENT_ID` and `AZURE_SUBSCRIPTION_ID` use the same secret name in both environments — GitHub scopes them to the environment declared on each workflow job. `AZURE_TENANT_ID` is a repository-level secret since it's shared across all environments.
+**Environment variables** (scoped to their respective environment):
+
+| Variable | Environment | Value |
+|---|---|---|
+| `AZURE_RESOURCE_GROUP` | `dev` | Pre-existing resource group name for the dev environment |
+| `AZURE_RESOURCE_GROUP` | `prod` | Pre-existing resource group name for the prod environment |
+
+> **Tip:** `AZURE_CLIENT_ID` and `AZURE_SUBSCRIPTION_ID` use the same secret name in both environments — GitHub scopes them to the environment declared on each workflow job. `AZURE_TENANT_ID` is a repository-level secret since it's shared across all environments. `AZURE_RESOURCE_GROUP` is an environment variable (not a secret) since resource group names are not sensitive.
 
 Once complete, the CI workflow (`.github/workflows/ci.yml`) will authenticate to Azure using OIDC without any stored passwords or access keys.
 
