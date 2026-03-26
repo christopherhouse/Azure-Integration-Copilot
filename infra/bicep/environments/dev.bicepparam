@@ -23,7 +23,7 @@ param serviceBusSku = 'Standard'
 param webPubSubSku = 'Free_F1'
 
 // Azure Front Door — set to true after first deployment
-param deployFrontDoor = true
+param deployFrontDoor = false
 param frontendHostname = 'dev.aic.christopher-house.com'
 param backendHostname = 'dev.api-aic.christopher-house.com'
 param webpubsubHostname = 'dev.pubsub.christopher-house.com'
