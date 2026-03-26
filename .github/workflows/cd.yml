@@ -111,9 +111,11 @@ jobs:
           cat container-metadata.json
           FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="frontend") | .full_image' container-metadata.json)
           BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="backend") | .full_image' container-metadata.json)
+          WORKER_IMAGE=$(jq -r '.containers[] | select(.name=="worker") | .full_image' container-metadata.json)
           TAG=$(jq -r '.containers[] | select(.name=="frontend") | .tag' container-metadata.json)
           echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "worker_image=${WORKER_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Import frontend image to ACR
@@ -136,6 +138,18 @@ jobs:
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.backend_image }}" \
             --image "backend:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import worker image to ACR
+        env:
+          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
+        run: |
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.worker_image }}" \
+            --image "worker:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -310,9 +324,11 @@ jobs:
           cat container-metadata.json
           FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="frontend") | .full_image' container-metadata.json)
           BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="backend") | .full_image' container-metadata.json)
+          WORKER_IMAGE=$(jq -r '.containers[] | select(.name=="worker") | .full_image' container-metadata.json)
           TAG=$(jq -r '.containers[] | select(.name=="frontend") | .tag' container-metadata.json)
           echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "worker_image=${WORKER_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Import frontend image to ACR
@@ -335,6 +351,18 @@ jobs:
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.backend_image }}" \
             --image "backend:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import worker image to ACR
+        env:
+          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
+        run: |
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.worker_image }}" \
+            --image "worker:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
