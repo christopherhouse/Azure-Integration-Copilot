@@ -1,15 +1,5 @@
-# Terraform
-**/.terraform/
-**/.terraform.lock.hcl
-*.tfstate
-*.tfstate.backup
-*.tfplan
-override.tf
-override.tf.json
-*_override.tf
-*_override.tf.json
-.terraformrc
-terraform.rc
+# Bicep
+bicep-compiled/
 
 # Python
 __pycache__/

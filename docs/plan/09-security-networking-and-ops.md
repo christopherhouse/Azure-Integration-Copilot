@@ -123,7 +123,7 @@ VNet: 10.0.0.0/16
 ### Managed Identities
 
 - Each Container App has a user-assigned managed identity (UAMI).
-- UAMIs are created in Terraform and assigned RBAC roles.
+- UAMIs are created in Bicep and assigned RBAC roles.
 - Application code uses `DefaultAzureCredential` (Python SDK) which picks up the UAMI.
 
 ### Key Vault Usage
@@ -139,12 +139,12 @@ Key Vault does **not** store:
 
 | Variable | Source | Description |
 |----------|--------|-------------|
-| `COSMOS_DB_ENDPOINT` | Terraform output → Container App env | Cosmos DB account endpoint |
-| `BLOB_STORAGE_ENDPOINT` | Terraform output → Container App env | Blob Storage account endpoint |
-| `EVENT_GRID_NAMESPACE_ENDPOINT` | Terraform output → Container App env | Event Grid Namespace endpoint |
-| `WEB_PUBSUB_ENDPOINT` | Terraform output → Container App env | Web PubSub endpoint |
+| `COSMOS_DB_ENDPOINT` | Bicep output → Container App env | Cosmos DB account endpoint |
+| `BLOB_STORAGE_ENDPOINT` | Bicep output → Container App env | Blob Storage account endpoint |
+| `EVENT_GRID_NAMESPACE_ENDPOINT` | Bicep output → Container App env | Event Grid Namespace endpoint |
+| `WEB_PUBSUB_ENDPOINT` | Bicep output → Container App env | Web PubSub endpoint |
 | `AZURE_CLIENT_ID` | UAMI client ID | For `DefaultAzureCredential` |
-| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Terraform output | Application Insights connection |
+| `APPLICATIONINSIGHTS_CONNECTION_STRING` | Bicep output | Application Insights connection |
 
 No secrets in environment variables. All auth is via managed identity.
 

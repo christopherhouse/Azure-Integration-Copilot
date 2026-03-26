@@ -366,7 +366,7 @@ The CI workflow triggers on every PR targeting `main` and on pushes to `main`.
 |-----|------|
 | **Frontend Build & Test** | Installs deps (`npm ci`), lints (ESLint), builds (Next.js), runs tests (Jest), publishes JUnit results |
 | **Backend Build & Test** | Installs deps (`uv sync --frozen`), lints (Ruff), runs tests (pytest), publishes JUnit results |
-| **Terraform Plan** | Authenticates to Azure via OIDC, runs `terraform plan` for the dev environment, uploads the plan artifact |
+| **Bicep Lint & Build** | Lints all Bicep templates, builds to ARM JSON, uploads compiled artifact |
 | **Containers** | **Skipped on PRs.** Builds Docker images with Buildx, scans with [Trivy](https://github.com/aquasecurity/trivy) (SARIF → GitHub Security), pushes to GHCR on `main`, uploads container metadata JSON |
 
 Container images are published to:
@@ -381,12 +381,12 @@ The CD workflow triggers via `workflow_run` when CI completes successfully on `m
 
 | Job | Environment | What it does |
 |-----|-------------|------|
-| **deploy-infra-dev** | dev | Downloads Terraform plan artifact from CI, runs `terraform apply` |
+| **deploy-infra-dev** | dev | Deploys Bicep infrastructure via `az deployment group create` |
 | **promote-containers-dev** | dev | Imports frontend/backend images from GHCR → dev ACR via `az acr import` |
-| **deploy-apps-dev** | dev | Updates `ca-frontend` and `ca-backend` Container Apps with new images |
-| **deploy-infra-prod** | prod | Runs inline `terraform plan` + `terraform apply` (no artifact from CI) |
+| **deploy-apps-dev** | dev | Deploys `ca-frontend`, `ca-backend`, and `ca-worker` using `deploy-container-app.sh` |
+| **deploy-infra-prod** | prod | Deploys Bicep infrastructure to prod |
 | **promote-containers-prod** | prod | Imports frontend/backend images from GHCR → prod ACR |
-| **deploy-apps-prod** | prod | Updates Container Apps in prod with new images |
+| **deploy-apps-prod** | prod | Deploys Container Apps to prod using the deployment script |
 
 ### Running CI Locally
 
@@ -409,10 +409,8 @@ uv run pytest -v
 # Docker
 docker compose build
 
-# Terraform
-cd infra/terraform/environments/dev
-terraform init
-terraform plan -var-file="dev.tfvars"
+# Bicep
+az bicep build --file infra/bicep/main.bicep
 ```
 
 ## Technology Stack

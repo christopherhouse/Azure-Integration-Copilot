@@ -258,7 +258,7 @@ The MVP architecture is designed to evolve without a full redesign:
 | AI | Foundry Agent Service | Managed agent hosting; real tool calling |
 | Ingress | Azure Front Door Premium | WAF, Microsoft managed TLS, Private Link origins |
 | Networking | VNet + private endpoints | Secure by default for data services |
-| IaC | Terraform + AVM | Required by project constraints |
+| IaC | Bicep + AVM | Required by project constraints |
 
 ## Assumptions
 
@@ -270,5 +270,5 @@ The MVP architecture is designed to evolve without a full redesign:
 ## Constraints
 
 - All Azure resources must be in a single region for MVP.
-- All infrastructure defined in Terraform using Azure Verified Modules.
+- All infrastructure defined in Bicep using Azure Verified Modules.
 - No shared access keys in application code; use managed identities.

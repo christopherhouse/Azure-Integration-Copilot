@@ -107,7 +107,7 @@ MVP enforces free-tier limits only. Tier definitions live in a central policy co
 
 ## Constraints
 
-- All infrastructure is defined in Terraform using Azure Verified Modules.
+- All infrastructure is defined in Bicep using Azure Verified Modules.
 - Python 3.13 for all backend and worker code.
 - Next.js (latest stable) for frontend.
 - Monorepo structure.
