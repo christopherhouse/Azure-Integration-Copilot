@@ -76,7 +76,7 @@ The application consists of a **Next.js frontend** and a **Python backend**, bot
 │   │   │   ├── key-vault.bicep           # Azure Key Vault
 │   │   │   ├── networking.bicep          # VNet, subnets, NSGs, Private DNS
 │   │   │   ├── observability.bicep       # Log Analytics + Application Insights
-│   │   │   ├── service-bus.bicep         # Azure Service Bus
+│   │   │   ├── event-grid.bicep           # Azure Event Grid Namespace
 │   │   │   ├── storage.bicep             # Azure Storage Account
 │   │   │   └── web-pubsub.bicep          # Azure Web PubSub
 │   │   ├── main.bicep           # Main infrastructure template
@@ -136,7 +136,7 @@ For the full developer guide — including setup, testing, and tooling details �
 | **Azure Container Apps** | Hosts the frontend and backend |
 | **Azure Container Registry** | Private container image storage |
 | **Azure Cosmos DB** | Multi-tenant data storage (serverless mode) |
-| **Azure Service Bus** | Asynchronous messaging between services |
+| **Azure Event Grid Namespace** | Event routing with pull delivery for async processing |
 | **Microsoft Foundry** | Agent framework and orchestration |
 | **Azure Key Vault** | Secrets management |
 | **Azure Storage** | Blob, queue, and table storage |
@@ -175,7 +175,7 @@ graph TB
     AFD -- "Private Link" --> BE
     AFD --> WPS[Web PubSub]
     PE --> CosmosDB[(Cosmos DB)]
-    PE --> SB[Service Bus]
+    PE --> EG[Event Grid NS]
     PE --> KV[Key Vault]
     PE --> SA[Storage]
     PE --> WPS
@@ -200,7 +200,7 @@ All services follow a **zero-trust, private-by-default** posture:
 
 - **Private Endpoints** on all PaaS services — no public internet exposure.
 - **Key Vault** — Public access disabled, network ACLs default deny, bypass for Azure services only.
-- **Cosmos DB & Service Bus** — Local authentication disabled; Entra ID auth required.
+- **Cosmos DB & Event Grid** — Local authentication disabled; Entra ID auth required.
 - **Storage** — Shared access keys disabled; defaults to OAuth/Entra ID.
 - **Deployment state** — Managed by Azure Resource Manager (ARM) deployments.
 - **All service-to-service auth** — Via User Assigned Managed Identities and Azure RBAC.
@@ -228,7 +228,7 @@ Deployment 2 ──► deploy_front_door = true  ──► Front Door created wi
 | Log Retention | 30 days | 90 days |
 | Key Vault Soft Delete | 7 days | 90 days |
 | Container Registry SKU | Basic | Standard |
-| Service Bus SKU | Standard (no PE) | Premium (with PE) |
+| Event Grid NS | Standard (with PE) | Standard (with PE) |
 | Web PubSub SKU | Free F1 (no PE) | Standard S1 (with PE) |
 | Front Door | Premium (global) | Premium (global) |
 | Container App Replicas | min 0 (scale to zero) | min 1 (always warm) |

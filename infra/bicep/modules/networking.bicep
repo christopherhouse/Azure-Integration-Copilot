@@ -88,7 +88,7 @@ var privateDnsZoneNames = [
   'privatelink.queue.${environment().suffixes.storage}'
   'privatelink.table.${environment().suffixes.storage}'
   'privatelink.documents.azure.com'
-  'privatelink.servicebus.windows.net'
+  'privatelink.eventgrid.azure.net'
   'privatelink.azurecr.io'
   'privatelink.webpubsub.azure.com'
 ]
@@ -140,8 +140,8 @@ output privateDnsZoneIdTable string = privateDnsZones[3].outputs.resourceId
 @description('Private DNS zone ID for Cosmos DB')
 output privateDnsZoneIdDocuments string = privateDnsZones[4].outputs.resourceId
 
-@description('Private DNS zone ID for Service Bus')
-output privateDnsZoneIdServicebus string = privateDnsZones[5].outputs.resourceId
+@description('Private DNS zone ID for Event Grid Namespace')
+output privateDnsZoneIdEventgrid string = privateDnsZones[5].outputs.resourceId
 
 @description('Private DNS zone ID for Container Registry')
 output privateDnsZoneIdAcr string = privateDnsZones[6].outputs.resourceId

@@ -48,9 +48,8 @@ param blobDeleteRetentionDays int = 7
 @description('Storage container delete retention in days')
 param containerDeleteRetentionDays int = 7
 
-@description('Service Bus SKU')
-@allowed(['Basic', 'Standard', 'Premium'])
-param serviceBusSku string = 'Standard'
+@description('Event Grid Namespace topic name')
+param eventGridTopicName string = 'integration-events'
 
 @description('Web PubSub SKU')
 @allowed(['Free_F1', 'Standard_S1'])
@@ -95,7 +94,7 @@ var resourceNames = {
   keyVault: 'kv-${namePrefix}'
   storageAccount: replace('st${workload}${environment}${location}', '-', '')
   cosmosDb: 'cosmos-${namePrefix}'
-  serviceBus: 'sb-${namePrefix}'
+  eventGrid: 'egns-${namePrefix}'
   containerAppsEnv: 'cae-${namePrefix}'
   webPubSub: 'wps-${namePrefix}'
   idFrontend: 'id-frontend-${namePrefix}'
@@ -212,17 +211,16 @@ module cosmosDb 'modules/cosmos-db.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
-// Service Bus
+// Event Grid Namespace
 // ---------------------------------------------------------------------------
 
-module serviceBus 'modules/service-bus.bicep' = {
-  name: 'service-bus'
+module eventGrid 'modules/event-grid.bicep' = {
+  name: 'event-grid'
   params: {
     location: location
-    namespaceName: resourceNames.serviceBus
-    sku: serviceBusSku
+    namespaceName: resourceNames.eventGrid
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
-    privateDnsZoneId: networking.outputs.privateDnsZoneIdServicebus
+    privateDnsZoneId: networking.outputs.privateDnsZoneIdEventgrid
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     tags: commonTags
   }
@@ -402,8 +400,11 @@ output keyVaultUri string = keyVault.outputs.keyVaultUri
 @description('Endpoint of the Cosmos DB account')
 output cosmosDbEndpoint string = cosmosDb.outputs.endpoint
 
-@description('Endpoint of the Service Bus namespace')
-output serviceBusEndpoint string = serviceBus.outputs.endpoint
+@description('Endpoint of the Event Grid namespace')
+output eventGridEndpoint string = eventGrid.outputs.endpoint
+
+@description('Name of the Event Grid namespace topic')
+output eventGridTopicName string = eventGridTopicName
 
 @description('Resource ID of the Container Apps environment')
 output containerAppsEnvironmentId string = containerAppsEnv.outputs.environmentId

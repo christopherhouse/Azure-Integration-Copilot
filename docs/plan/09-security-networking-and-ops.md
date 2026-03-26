@@ -280,5 +280,5 @@ These are explicitly **not** MVP but are designed for in the architecture:
 ## Constraints
 
 - No shared access keys (`shared_access_key_enabled = false` on storage accounts).
-- All Cosmos DB and Service Bus connections use Entra auth (`local_auth_enabled = false`).
+- All Cosmos DB and Event Grid connections use Entra auth (`local_auth_enabled = false`).
 - No secrets in environment variables or code.
