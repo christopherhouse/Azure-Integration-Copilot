@@ -121,9 +121,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Bicep CLI
-        uses: azure/setup-bicep@v0.3.0
-
       - name: Lint Bicep templates
         working-directory: infra/bicep
         run: |
