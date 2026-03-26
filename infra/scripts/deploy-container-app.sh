@@ -177,6 +177,11 @@ if [[ "${APP_EXISTS}" == "true" ]]; then
 else
   log_step "Creating Container App '${APP_NAME}'..."
 
+  INGRESS_TYPE="external"
+  if [[ "${INGRESS_EXTERNAL}" == "false" ]]; then
+    INGRESS_TYPE="internal"
+  fi
+
   CREATE_CMD=(
     az containerapp create
     --name "${APP_NAME}"
@@ -184,7 +189,7 @@ else
     --environment "${ENVIRONMENT}"
     --image "${IMAGE}"
     --target-port "${TARGET_PORT}"
-    --ingress external
+    --ingress "${INGRESS_TYPE}"
     --transport http
     --cpu "${CPU}"
     --memory "${MEMORY}"
@@ -195,11 +200,6 @@ else
     --user-assigned "${IDENTITY}"
     --revisions-mode single
   )
-
-  if [[ "${INGRESS_EXTERNAL}" == "false" ]]; then
-    # Replace external with internal
-    CREATE_CMD=("${CREATE_CMD[@]/--ingress external/--ingress internal}")
-  fi
 
   if [[ -n "${ENV_VARS}" ]]; then
     CREATE_CMD+=(--env-vars ${ENV_VARS})

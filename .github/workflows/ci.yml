@@ -189,10 +189,12 @@ jobs:
 
           FRONTEND_IMAGE="ghcr.io/${REPO_LOWER}/frontend"
           BACKEND_IMAGE="ghcr.io/${REPO_LOWER}/backend"
+          WORKER_IMAGE="ghcr.io/${REPO_LOWER}/worker"
 
           # Build tag list — always include the short-SHA tag
           FRONTEND_TAGS="${FRONTEND_IMAGE}:${SHORT_SHA}"
           BACKEND_TAGS="${BACKEND_IMAGE}:${SHORT_SHA}"
+          WORKER_TAGS="${WORKER_IMAGE}:${SHORT_SHA}"
 
           # On pushes to main, also tag as latest
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
@@ -200,17 +202,23 @@ jobs:
           ${FRONTEND_IMAGE}:latest"
             BACKEND_TAGS="${BACKEND_TAGS}
           ${BACKEND_IMAGE}:latest"
+            WORKER_TAGS="${WORKER_TAGS}
+          ${WORKER_IMAGE}:latest"
           fi
 
           # Persist outputs
           {
             echo "frontend_image=${FRONTEND_IMAGE}"
             echo "backend_image=${BACKEND_IMAGE}"
+            echo "worker_image=${WORKER_IMAGE}"
             echo "frontend_tags<<EOF"
             echo "${FRONTEND_TAGS}"
             echo "EOF"
             echo "backend_tags<<EOF"
             echo "${BACKEND_TAGS}"
+            echo "EOF"
+            echo "worker_tags<<EOF"
+            echo "${WORKER_TAGS}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -235,6 +243,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build worker image
+        id: build-worker
+        uses: docker/build-push-action@v6
+        with:
+          context: src/backend
+          load: true
+          tags: ${{ steps.meta.outputs.worker_tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       # -- Scan images with Trivy ---------------------------------------------
       - name: Scan frontend image (Trivy)
         uses: aquasecurity/trivy-action@v0.35.0
@@ -254,6 +272,15 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "0"
 
+      - name: Scan worker image (Trivy)
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: "${{ steps.meta.outputs.worker_image }}:${{ env.SHORT_SHA }}"
+          format: sarif
+          output: worker-trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+
       # -- Upload SARIF to GitHub Security ------------------------------------
       - name: Upload frontend SARIF
         if: always()
@@ -268,6 +295,13 @@ jobs:
         with:
           sarif_file: backend-trivy-results.sarif
           category: trivy-backend
+
+      - name: Upload worker SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: worker-trivy-results.sarif
+          category: trivy-worker
 
       # -- Push images to GHCR (only on push to main) -------------------------
       - name: Push frontend image
@@ -290,12 +324,23 @@ jobs:
           DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
+      - name: Push worker image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        id: push-worker
+        run: |
+          WORKER_IMAGE="${{ steps.meta.outputs.worker_image }}"
+          RESULT=$(docker push --all-tags "${WORKER_IMAGE}" 2>&1)
+          echo "${RESULT}"
+          DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
       # -- Container metadata (only on push to main) -------------------------
       - name: Generate container metadata
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         env:
           FRONTEND_DIGEST: ${{ steps.push-frontend.outputs.digest }}
           BACKEND_DIGEST: ${{ steps.push-backend.outputs.digest }}
+          WORKER_DIGEST: ${{ steps.push-worker.outputs.digest }}
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           cat > container-metadata.json <<EOF
@@ -324,6 +369,14 @@ jobs:
                 "tag": "${SHORT_SHA}",
                 "full_image": "ghcr.io/${REPO_LOWER}/backend:${SHORT_SHA}",
                 "digest": "${BACKEND_DIGEST}"
+              },
+              {
+                "name": "worker",
+                "registry": "ghcr.io",
+                "repository": "${REPO_LOWER}/worker",
+                "tag": "${SHORT_SHA}",
+                "full_image": "ghcr.io/${REPO_LOWER}/worker:${SHORT_SHA}",
+                "digest": "${WORKER_DIGEST}"
               }
             ]
           }
