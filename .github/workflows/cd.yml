@@ -64,9 +64,7 @@ jobs:
         with:
           resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
           template: infra/bicep/main.bicep
-          parameters: >-
-            infra/bicep/environments/dev.bicepparam
-            tenantId=${{ secrets.AZURE_TENANT_ID }}
+          parameters: infra/bicep/environments/dev.bicepparam
           deploymentName: "aic-dev-${{ github.run_number }}"
           failOnStdErr: false
 
@@ -253,9 +251,7 @@ jobs:
         with:
           resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
           template: infra/bicep/main.bicep
-          parameters: >-
-            infra/bicep/environments/prod.bicepparam
-            tenantId=${{ secrets.AZURE_TENANT_ID }}
+          parameters: infra/bicep/environments/prod.bicepparam
           deploymentName: "aic-prod-${{ github.run_number }}"
           failOnStdErr: false
 
