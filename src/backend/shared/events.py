@@ -1,8 +1,8 @@
 import structlog
 from azure.eventgrid.aio import EventGridPublisherClient
-from azure.identity.aio import DefaultAzureCredential
 
 from config import settings
+from shared.credential import create_credential
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -12,11 +12,11 @@ class EventGridPublisher:
 
     def __init__(self) -> None:
         self._client: EventGridPublisherClient | None = None
-        self._credential: DefaultAzureCredential | None = None
+        self._credential = None
 
     async def _get_client(self) -> EventGridPublisherClient:
         if self._client is None:
-            self._credential = DefaultAzureCredential()
+            self._credential = create_credential()
             self._client = EventGridPublisherClient(
                 endpoint=settings.event_grid_namespace_endpoint,
                 credential=self._credential,
