@@ -503,7 +503,7 @@ The repository includes **10 custom GitHub Copilot agent definitions** in `.gith
 | `qa-engineer` | Test strategy, implementation, and review |
 | `saas-architect` | Multi-tenant SaaS architecture on Azure |
 | `tech-writer` | Documentation creation and maintenance |
-| `terraform-engineer` | Infrastructure-as-code with Bicep and AVM |
+| `bicep-engineer` | Infrastructure-as-code with Bicep and AVM |
 | `ux-designer` | User experience and information architecture guidance |
 
 ---
