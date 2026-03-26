@@ -295,7 +295,7 @@ The CD workflow triggers via `workflow_run` when CI completes successfully on `m
 | Requirement | Details |
 |---|---|
 | Azure CLI | Latest version with Bicep extension (`az bicep install`) |
-| Azure Subscription | With permissions to create the resources listed in [Azure Services](#azure-services) |
+| Azure Subscription | With permissions to create resources and assign RBAC roles (Contributor + User Access Administrator) |
 | Azure AD Tenant | For managed identity provisioning and RBAC assignments |
 | GitHub OIDC Secrets | `AZURE_CLIENT_ID`, `AZURE_SUBSCRIPTION_ID` (per environment), `AZURE_TENANT_ID`, `AZURE_RESOURCE_GROUP` (per environment) |
 
@@ -351,11 +351,12 @@ az ad app federated-credential create --id $PROD_APP_ID --parameters '{
 
 #### 3. Assign RBAC Roles
 
-Each service principal needs:
+Each service principal needs two roles:
 
 | Role | Scope | Purpose |
 |---|---|---|
 | **Contributor** | Target Azure subscription | Create and manage Azure resources |
+| **User Access Administrator** | Target Azure subscription | Create RBAC role assignments for managed identities (AcrPull, Key Vault Secrets User, Cosmos DB Data Contributor) |
 
 ```bash
 # Dev
@@ -368,6 +369,12 @@ az role assignment create \
   --role "Contributor" \
   --scope "/subscriptions/$DEV_SUB_ID"
 
+az role assignment create \
+  --assignee-object-id $DEV_SP_OBJECT_ID \
+  --assignee-principal-type ServicePrincipal \
+  --role "User Access Administrator" \
+  --scope "/subscriptions/$DEV_SUB_ID"
+
 # Prod
 PROD_SP_OBJECT_ID=$(az ad sp show --id $PROD_APP_ID --query id -o tsv)
 PROD_SUB_ID="<PROD_SUBSCRIPTION_ID>"   # your prod Azure subscription ID
@@ -376,6 +383,12 @@ az role assignment create \
   --assignee-object-id $PROD_SP_OBJECT_ID \
   --assignee-principal-type ServicePrincipal \
   --role "Contributor" \
+  --scope "/subscriptions/$PROD_SUB_ID"
+
+az role assignment create \
+  --assignee-object-id $PROD_SP_OBJECT_ID \
+  --assignee-principal-type ServicePrincipal \
+  --role "User Access Administrator" \
   --scope "/subscriptions/$PROD_SUB_ID"
 ```
 
