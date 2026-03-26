@@ -36,11 +36,13 @@ Never bypass the orchestrator. Never execute implementation work without a plan 
 
 ### Infrastructure as Code
 
-- **Tool:** Terraform
+- **Tool:** Bicep
 - **Module source:** Azure Verified Modules (AVM) wherever available
-- Place reusable modules under `infra/terraform/modules/`
-- Place environment-specific configurations under `infra/terraform/environments/`
-- Always pin provider and module versions
+- Place Bicep modules under `infra/bicep/modules/`
+- Place the main template at `infra/bicep/main.bicep`
+- Place environment-specific parameter files under `infra/bicep/environments/`
+- Place deployment scripts under `infra/scripts/`
+- Always pin AVM module versions
 
 ### Agent Workers
 
@@ -58,7 +60,7 @@ Never bypass the orchestrator. Never execute implementation work without a plan 
 
 ## Solution Components
 
-The solution uses the following Azure services. All infrastructure must be defined in Terraform using Azure Verified Modules where available:
+The solution uses the following Azure services. All infrastructure must be defined in Bicep using Azure Verified Modules where available:
 
 | Component | Purpose |
 |---|---|
@@ -86,9 +88,11 @@ The solution uses the following Azure services. All infrastructure must be defin
 │   ├── backend/         # Python 3.13 backend services
 │   └── agents/          # Microsoft Foundry agent definitions
 ├── infra/
-│   └── terraform/
-│       ├── modules/     # Reusable Terraform modules
-│       └── environments/ # Per-environment Terraform configs
+│   ├── bicep/
+│   │   ├── modules/     # Reusable Bicep modules (AVM-based)
+│   │   ├── main.bicep   # Main infrastructure template
+│   │   └── environments/ # Per-environment parameter files
+│   └── scripts/         # Deployment scripts
 ├── docs/                # Project documentation
 └── tests/
     ├── frontend/        # Frontend tests
@@ -104,7 +108,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 4. **Document as you go.** The Tech Writer agent should be invoked after each meaningful change to keep documentation current.
 5. **Security by default.** The Cloud Security Engineer should review any infrastructure or authentication changes against Microsoft Cloud Security Benchmarks.
 6. **Test coverage.** Write tests for new functionality. Place frontend tests in `tests/frontend/`, backend tests in `tests/backend/`, and integration tests in `tests/integration/`.
-7. **Use Azure Verified Modules.** When provisioning Azure resources with Terraform, always prefer Azure Verified Modules over custom resource definitions.
+7. **Use Azure Verified Modules.** When provisioning Azure resources with Bicep, always prefer Azure Verified Modules over custom resource definitions.
 8. **Use UV for Python.** All Python dependency management must go through UV. Do not use pip directly.
 9. **Cost optimization by default.** This solution is biased towards minimizing Azure spend. Prefer serverless and consumption-based services (e.g. Azure Container Apps consumption workload profiles, Azure Functions Consumption plan, Cosmos DB serverless, Service Bus Basic/Standard tiers) over provisioned or premium alternatives unless a specific workload requirement justifies the extra cost. Always evaluate the cost impact of architectural decisions and choose the lowest-cost option that meets the requirements.
 

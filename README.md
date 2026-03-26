@@ -49,7 +49,7 @@ The application consists of a **Next.js frontend**, a **Python backend**, and **
 | **Backend** | Python 3.13, FastAPI, UV package manager, Azure Container Apps |
 | **Agent Workers** | Azure Container Apps with KEDA scalers, Azure Service Bus triggers |
 | **Agent Framework** | Microsoft Foundry |
-| **Infrastructure** | Terraform with [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) |
+| **Infrastructure** | Bicep with [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) |
 | **CI/CD** | GitHub Actions with OIDC authentication to Azure |
 
 ---
@@ -68,22 +68,24 @@ The application consists of a **Next.js frontend**, a **Python backend**, and **
 │   ├── backend/                 # Python 3.13 backend services (UV)
 │   └── agents/                  # Microsoft Foundry agent definitions
 ├── infra/
-│   └── terraform/
-│       ├── modules/             # 11 reusable Terraform modules (AVM-based + azurerm)
-│       │   ├── container_apps/      # Container Apps Environment + apps
-│       │   ├── container_registry/  # Azure Container Registry
-│       │   ├── cosmos_db/           # Cosmos DB (serverless)
-│       │   ├── front_door/          # Azure Front Door Premium (azurerm)
-│       │   ├── key_vault/           # Azure Key Vault
-│       │   ├── managed_identity/    # User Assigned Managed Identities
-│       │   ├── networking/          # VNet, subnets, NSGs, Private DNS
-│       │   ├── observability/       # Log Analytics + Application Insights
-│       │   ├── service_bus/         # Azure Service Bus
-│       │   ├── storage/             # Azure Storage Account
-│       │   └── web_pubsub/          # Azure Web PubSub
-│       └── environments/
-│           ├── dev/                 # Development environment config
-│           └── prod/                # Production environment config
+│   ├── bicep/
+│   │   ├── modules/             # 9 reusable Bicep modules (AVM-based)
+│   │   │   ├── container-apps-env.bicep  # Container Apps Environment
+│   │   │   ├── container-registry.bicep  # Azure Container Registry
+│   │   │   ├── cosmos-db.bicep           # Cosmos DB (serverless)
+│   │   │   ├── front-door.bicep          # Azure Front Door Premium (AVM)
+│   │   │   ├── key-vault.bicep           # Azure Key Vault
+│   │   │   ├── networking.bicep          # VNet, subnets, NSGs, Private DNS
+│   │   │   ├── observability.bicep       # Log Analytics + Application Insights
+│   │   │   ├── service-bus.bicep         # Azure Service Bus
+│   │   │   ├── storage.bicep             # Azure Storage Account
+│   │   │   └── web-pubsub.bicep          # Azure Web PubSub
+│   │   ├── main.bicep           # Main infrastructure template
+│   │   └── environments/
+│   │       ├── dev.bicepparam   # Development environment parameters
+│   │       └── prod.bicepparam  # Production environment parameters
+│   └── scripts/
+│       └── deploy-container-app.sh  # Reusable Container App deployment script
 ├── docs/                        # Project documentation
 ├── tests/
 │   ├── frontend/                # Frontend tests
@@ -148,7 +150,7 @@ For the full developer guide — including setup, testing, and tooling details �
 
 ## Infrastructure Architecture
 
-All infrastructure is defined as Terraform using [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) where available. Azure Front Door uses native `azurerm` resources. Each environment (`dev`, `prod`) has its own state file and configuration.
+All infrastructure is defined as Bicep using [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) where available. Each environment (`dev`, `prod`) has its own parameter file. Container Apps are deployed separately via a reusable deployment script after container images have been pushed to ACR.
 
 ### Network Layout
 
@@ -202,7 +204,7 @@ All services follow a **zero-trust, private-by-default** posture:
 - **Key Vault** — Public access disabled, network ACLs default deny, bypass for Azure services only.
 - **Cosmos DB & Service Bus** — Local authentication disabled; Entra ID auth required.
 - **Storage** — Shared access keys disabled; defaults to OAuth/Entra ID.
-- **Terraform state** — Stored in Azure Storage with Entra ID authentication.
+- **Deployment state** — Managed by Azure Resource Manager (ARM) deployments.
 - **All service-to-service auth** — Via User Assigned Managed Identities and Azure RBAC.
 
 ### Conditional Front Door Deployment
@@ -243,7 +245,7 @@ The CI and CD workflows use **OIDC federated credentials** for Azure authenticat
 flowchart LR
     A[PR / Push to main] --> B[Frontend Build & Test]
     A --> C[Backend Build & Test]
-    A --> D[Terraform Plan dev]
+    A --> D[Bicep Lint & Build]
     B --> E[Containers]
     C --> E
     E --> F[Trivy SARIF → GitHub Security]
@@ -266,7 +268,7 @@ flowchart LR
 |---|---|---|
 | **Frontend Build & Test** | Every PR and push | `npm ci`, ESLint, Next.js build, Jest tests with JUnit reporting |
 | **Backend Build & Test** | Every PR and push | UV dependency sync, Ruff lint, pytest with JUnit reporting |
-| **Terraform Plan (dev)** | Every PR and push | OIDC Azure login, `terraform plan`, uploads plan artifact (7-day retention) |
+| **Bicep Lint & Build** | Every PR and push | Lints all Bicep templates, builds to ARM JSON, uploads compiled artifact (7-day retention) |
 | **Containers** | After tests pass, **skipped on PRs** | Docker Buildx build, Trivy scan (CRITICAL/HIGH → SARIF), push to GHCR on `main`, container metadata JSON artifact (90-day retention) |
 
 Container images are published to GHCR at `ghcr.io/<owner>/<repo>/frontend` and `ghcr.io/<owner>/<repo>/backend`, tagged with the 7-character commit SHA and `latest` on pushes to `main`.
@@ -277,12 +279,12 @@ The CD workflow triggers via `workflow_run` when CI completes successfully on `m
 
 | Job | Environment | Description |
 |---|---|---|
-| **deploy-infra-dev** | dev | Downloads Terraform plan artifact from CI, runs `terraform apply`, captures ACR login server + resource group |
+| **deploy-infra-dev** | dev | Deploys Bicep infrastructure via `az deployment group create`, captures outputs (ACR, CAE, identities) |
 | **promote-containers-dev** | dev | Downloads container metadata artifact, imports frontend/backend images from GHCR → dev ACR via `az acr import` |
-| **deploy-apps-dev** | dev | Updates `ca-frontend` and `ca-backend` Container Apps with new images |
-| **deploy-infra-prod** | prod | Runs inline `terraform plan` + `terraform apply` (no artifact from CI), captures ACR login server + resource group |
+| **deploy-apps-dev** | dev | Deploys `ca-frontend`, `ca-backend`, and `ca-worker` Container Apps using the reusable `deploy-container-app.sh` script |
+| **deploy-infra-prod** | prod | Deploys Bicep infrastructure to prod, captures outputs |
 | **promote-containers-prod** | prod | Downloads container metadata, imports images from GHCR → prod ACR |
-| **deploy-apps-prod** | prod | Updates Container Apps in prod with new images |
+| **deploy-apps-prod** | prod | Deploys Container Apps to prod using the reusable deployment script |
 
 ---
 
@@ -292,14 +294,14 @@ The CD workflow triggers via `workflow_run` when CI completes successfully on `m
 
 | Requirement | Details |
 |---|---|
-| Terraform | `>= 1.11` recommended (local modules declare `>= 1.9.0` but AVM dependencies require `~> 1.11`) |
+| Azure CLI | Latest version with Bicep extension (`az bicep install`) |
 | Azure Subscription | With permissions to create the resources listed in [Azure Services](#azure-services) |
 | Azure AD Tenant | For managed identity provisioning and RBAC assignments |
-| GitHub OIDC Secrets | `AZURE_CLIENT_ID_DEV`, `AZURE_CLIENT_ID_PROD`, `AZURE_SUBSCRIPTION_ID_DEV`, `AZURE_SUBSCRIPTION_ID_PROD`, `AZURE_TENANT_ID` |
+| GitHub OIDC Secrets | `AZURE_CLIENT_ID`, `AZURE_SUBSCRIPTION_ID` (per environment), `AZURE_TENANT_ID`, `AZURE_RESOURCE_GROUP` (per environment) |
 
 ### CI/CD Authentication Setup
 
-The CI/CD pipeline authenticates to Azure using **OpenID Connect (OIDC) federated credentials** — no secrets or passwords are stored in GitHub. Terraform state is stored in Azure Storage with **Entra ID authentication only** (shared access keys are disabled).
+The CI/CD pipeline authenticates to Azure using **OpenID Connect (OIDC) federated credentials** — no secrets or passwords are stored in GitHub. Bicep deployments use Azure Resource Manager directly, so no separate state storage is required.
 
 Complete the steps below once per environment (`dev` and `prod`). Replace `<LOCATION>` with your preferred Azure region (e.g. `eastus2`).
 
@@ -347,66 +349,18 @@ az ad app federated-credential create --id $PROD_APP_ID --parameters '{
 
 > **Why `environment:` subjects?** The workflow declares `environment: dev` and `environment: prod` on its plan/apply jobs. The federated credential subject must match the environment name exactly, otherwise the token exchange will fail.
 
-#### 3. Create Terraform State Storage Accounts
+#### 3. Assign RBAC Roles
 
-Each environment stores its state in a dedicated storage account with **shared access keys disabled** so that all access goes through Entra ID RBAC.
-
-```bash
-# Shared resource group for state storage
-az group create --name rg-tfstate-aic --location <LOCATION>
-
-# Dev state storage
-az storage account create \
-  --name sttfstateaicdev \
-  --resource-group rg-tfstate-aic \
-  --location <LOCATION> \
-  --sku Standard_LRS \
-  --allow-blob-public-access false \
-  --allow-shared-key-access false
-
-az storage container create \
-  --name tfstate \
-  --account-name sttfstateaicdev \
-  --auth-mode login
-
-# Prod state storage
-az storage account create \
-  --name sttfstateaicprod \
-  --resource-group rg-tfstate-aic \
-  --location <LOCATION> \
-  --sku Standard_LRS \
-  --allow-blob-public-access false \
-  --allow-shared-key-access false
-
-az storage container create \
-  --name tfstate \
-  --account-name sttfstateaicprod \
-  --auth-mode login
-```
-
-> The backend configuration in `infra/terraform/environments/*/backend.tf` already sets `use_azuread_auth = true`, which tells the AzureRM provider to authenticate to the storage account using Entra ID instead of storage account keys.
-
-#### 4. Assign RBAC Roles
-
-Each service principal needs two roles:
+Each service principal needs:
 
 | Role | Scope | Purpose |
 |---|---|---|
-| **Storage Blob Data Contributor** | State storage account | Read/write Terraform state blobs |
 | **Contributor** | Target Azure subscription | Create and manage Azure resources |
 
 ```bash
 # Dev
 DEV_SP_OBJECT_ID=$(az ad sp show --id $DEV_APP_ID --query id -o tsv)
-DEV_STORAGE_ID=$(az storage account show --name sttfstateaicdev \
-  --resource-group rg-tfstate-aic --query id -o tsv)
 DEV_SUB_ID="<DEV_SUBSCRIPTION_ID>"   # your dev Azure subscription ID
-
-az role assignment create \
-  --assignee-object-id $DEV_SP_OBJECT_ID \
-  --assignee-principal-type ServicePrincipal \
-  --role "Storage Blob Data Contributor" \
-  --scope $DEV_STORAGE_ID
 
 az role assignment create \
   --assignee-object-id $DEV_SP_OBJECT_ID \
@@ -416,15 +370,7 @@ az role assignment create \
 
 # Prod
 PROD_SP_OBJECT_ID=$(az ad sp show --id $PROD_APP_ID --query id -o tsv)
-PROD_STORAGE_ID=$(az storage account show --name sttfstateaicprod \
-  --resource-group rg-tfstate-aic --query id -o tsv)
 PROD_SUB_ID="<PROD_SUBSCRIPTION_ID>"   # your prod Azure subscription ID
-
-az role assignment create \
-  --assignee-object-id $PROD_SP_OBJECT_ID \
-  --assignee-principal-type ServicePrincipal \
-  --role "Storage Blob Data Contributor" \
-  --scope $PROD_STORAGE_ID
 
 az role assignment create \
   --assignee-object-id $PROD_SP_OBJECT_ID \
@@ -433,7 +379,7 @@ az role assignment create \
   --scope "/subscriptions/$PROD_SUB_ID"
 ```
 
-#### 5. Configure GitHub Secrets
+#### 4. Configure GitHub Secrets
 
 In your GitHub repository, go to **Settings → Environments** and create `dev` and `prod` environments. Then add the following secrets:
 
@@ -443,8 +389,10 @@ In your GitHub repository, go to **Settings → Environments** and create `dev` 
 |---|---|---|
 | `AZURE_CLIENT_ID` | `dev` | Application (client) ID of the dev App Registration |
 | `AZURE_SUBSCRIPTION_ID` | `dev` | Azure subscription ID for the dev environment |
+| `AZURE_RESOURCE_GROUP` | `dev` | Pre-existing resource group name for the dev environment |
 | `AZURE_CLIENT_ID` | `prod` | Application (client) ID of the prod App Registration |
 | `AZURE_SUBSCRIPTION_ID` | `prod` | Azure subscription ID for the prod environment |
+| `AZURE_RESOURCE_GROUP` | `prod` | Pre-existing resource group name for the prod environment |
 
 **Repository secret** (shared across all environments):
 
@@ -458,28 +406,52 @@ Once complete, the CI workflow (`.github/workflows/ci.yml`) will authenticate to
 
 ### First Deployment
 
-1. **Configure environment variables** — Edit the tfvars file (`dev.tfvars` or `prod.tfvars`) and set your `tenant_id`, listener hostnames, and any other environment-specific values.
+1. **Configure environment parameters** — Edit the parameter file (`infra/bicep/environments/dev.bicepparam` or `prod.bicepparam`) and set your `tenantId`, custom domain hostnames, and any other environment-specific values.
 
-2. **Deploy infrastructure (without Front Door)**
-
-   ```bash
-   cd infra/terraform/environments/dev
-   terraform init
-   terraform plan -var-file="dev.tfvars"
-   terraform apply -var-file="dev.tfvars"
-   ```
-
-   > `deploy_front_door` defaults to `false`, so Azure Front Door is skipped.
-   >
-   > In CI, `tenant_id` is injected from GitHub secrets via `-var="tenant_id=..."` to avoid committing real values.
-
-3. **Deploy Front Door** — Update `deploy_front_door = true` in your tfvars, then apply again:
+2. **Create the resource group** — Bicep deploys into a pre-existing resource group:
 
    ```bash
-   terraform apply -var-file="dev.tfvars"
+   az group create --name rg-aic-dev-centralus --location centralus
    ```
 
-4. **Complete DNS and Private Link setup**:
+3. **Deploy infrastructure (without Front Door)**
+
+   ```bash
+   az deployment group create \
+     --resource-group rg-aic-dev-centralus \
+     --template-file infra/bicep/main.bicep \
+     --parameters infra/bicep/environments/dev.bicepparam \
+     --parameters deployFrontDoor=false
+   ```
+
+   > `deployFrontDoor` defaults to `false` in the parameter file on the first deployment, so Azure Front Door is skipped.
+
+4. **Deploy Container Apps** — Use the reusable deployment script:
+
+   ```bash
+   ./infra/scripts/deploy-container-app.sh \
+     --name ca-frontend \
+     --resource-group rg-aic-dev-centralus \
+     --environment cae-aic-dev-centralus \
+     --image <acr-login-server>/frontend:<tag> \
+     --target-port 3000 \
+     --identity <frontend-identity-resource-id> \
+     --registry-server <acr-login-server>
+   ```
+
+5. **Deploy Front Door** — Update `deployFrontDoor = true` in your parameter file and provide the Container App FQDNs, then deploy again:
+
+   ```bash
+   az deployment group create \
+     --resource-group rg-aic-dev-centralus \
+     --template-file infra/bicep/main.bicep \
+     --parameters infra/bicep/environments/dev.bicepparam \
+     --parameters deployFrontDoor=true \
+       frontendOriginHostname=<frontend-fqdn> \
+       backendOriginHostname=<backend-fqdn>
+   ```
+
+6. **Complete DNS and Private Link setup**:
    - Create `_dnsauth.<hostname>` CNAME records for domain validation (values available in the Azure portal).
    - Approve the Private Link connections on the Container Apps environment.
    - Create CNAME records for your custom domains pointing to the Front Door endpoints.
@@ -490,7 +462,7 @@ Once complete, the CI workflow (`.github/workflows/ci.yml`) will authenticate to
 
 | Area | Convention |
 |---|---|
-| **Terraform** | Use [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) for all resources |
+| **Bicep** | Use [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) for all resources |
 | **Python** | UV for dependency management (not pip); PEP 8 with type hints on all function signatures |
 | **TypeScript** | Next.js App Router conventions; server components by default; strict mode enabled |
 | **Authentication** | User Assigned Managed Identities everywhere — no connection strings or shared keys |
@@ -512,7 +484,7 @@ The repository includes **10 custom GitHub Copilot agent definitions** in `.gith
 | `qa-engineer` | Test strategy, implementation, and review |
 | `saas-architect` | Multi-tenant SaaS architecture on Azure |
 | `tech-writer` | Documentation creation and maintenance |
-| `terraform-engineer` | Infrastructure-as-code with Terraform and AVM |
+| `terraform-engineer` | Infrastructure-as-code with Bicep and AVM |
 | `ux-designer` | User experience and information architecture guidance |
 
 ---

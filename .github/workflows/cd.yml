@@ -2,12 +2,12 @@
 # CD Workflow — Azure Integration Copilot
 # =============================================================================
 # Triggered on successful completion of the CI workflow on the main branch.
-# Deploys infrastructure and container apps to dev, then prod.
+# Deploys infrastructure (Bicep) and container apps (script) to dev, then prod.
 #
 # Jobs per environment:
-#   1. Deploy Infrastructure — download TF plan artifact, terraform apply
+#   1. Deploy Infrastructure — az deployment group create with Bicep
 #   2. Promote Containers    — import images from GHCR → ACR
-#   3. Deploy Container Apps — update frontend & backend on ACA
+#   3. Deploy Container Apps — run deploy-container-app.sh for each service
 # =============================================================================
 
 name: CD
@@ -29,7 +29,7 @@ permissions:
 # =============================================================================
 jobs:
   # ---------------------------------------------------------------------------
-  # Dev — Deploy Infrastructure
+  # Dev — Deploy Infrastructure (Bicep)
   # ---------------------------------------------------------------------------
   deploy-infra-dev:
     name: "Dev — Deploy Infrastructure"
@@ -37,14 +37,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     outputs:
-      acr_login_server: ${{ steps.tf-outputs.outputs.acr_login_server }}
-      resource_group: ${{ steps.tf-outputs.outputs.resource_group }}
-
-    env:
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_USE_OIDC: 'true'
+      acr_login_server: ${{ steps.bicep-outputs.outputs.acr_login_server }}
+      acr_name: ${{ steps.bicep-outputs.outputs.acr_name }}
+      resource_group: ${{ steps.bicep-outputs.outputs.resource_group }}
+      cae_name: ${{ steps.bicep-outputs.outputs.cae_name }}
+      frontend_identity_id: ${{ steps.bicep-outputs.outputs.frontend_identity_id }}
+      backend_identity_id: ${{ steps.bicep-outputs.outputs.backend_identity_id }}
+      worker_identity_id: ${{ steps.bicep-outputs.outputs.worker_identity_id }}
 
     steps:
       - name: Checkout code
@@ -59,34 +58,28 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - name: Deploy Bicep infrastructure
+        id: deploy
+        uses: azure/arm-deploy@v2
         with:
-          terraform_version: 1.14.6
-          terraform_wrapper: false
+          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          template: infra/bicep/main.bicep
+          parameters: >-
+            infra/bicep/environments/dev.bicepparam
+            tenantId=${{ secrets.AZURE_TENANT_ID }}
+          deploymentName: "aic-dev-${{ github.run_number }}"
+          failOnStdErr: false
 
-      - name: Download Terraform plan artifact
-        uses: actions/download-artifact@v4.1.3
-        with:
-          name: tfplan-dev
-          path: infra/terraform/environments/dev
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Terraform Init
-        working-directory: infra/terraform/environments/dev
-        run: terraform init
-
-      - name: Terraform Apply
-        working-directory: infra/terraform/environments/dev
-        run: terraform apply -auto-approve tfplan-dev
-
-      - name: Capture Terraform outputs
-        id: tf-outputs
-        working-directory: infra/terraform/environments/dev
+      - name: Capture deployment outputs
+        id: bicep-outputs
         run: |
-          echo "acr_login_server=$(terraform output -raw container_registry_login_server)" >> "$GITHUB_OUTPUT"
-          echo "resource_group=$(terraform output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=${{ steps.deploy.outputs.containerRegistryLoginServer }}" >> "$GITHUB_OUTPUT"
+          echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
+          echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
+          echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
+          echo "frontend_identity_id=${{ steps.deploy.outputs.frontendIdentityResourceId }}" >> "$GITHUB_OUTPUT"
+          echo "backend_identity_id=${{ steps.deploy.outputs.backendIdentityResourceId }}" >> "$GITHUB_OUTPUT"
+          echo "worker_identity_id=${{ steps.deploy.outputs.workerIdentityResourceId }}" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Dev — Promote Containers (GHCR → ACR)
@@ -127,9 +120,8 @@ jobs:
 
       - name: Import frontend image to ACR
         env:
-          ACR_LOGIN_SERVER: ${{ needs.deploy-infra-dev.outputs.acr_login_server }}
+          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
         run: |
-          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
           az acr import \
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.frontend_image }}" \
@@ -140,9 +132,8 @@ jobs:
 
       - name: Import backend image to ACR
         env:
-          ACR_LOGIN_SERVER: ${{ needs.deploy-infra-dev.outputs.acr_login_server }}
+          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
         run: |
-          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
           az acr import \
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.backend_image }}" \
@@ -152,7 +143,7 @@ jobs:
             --force
 
   # ---------------------------------------------------------------------------
-  # Dev — Deploy Container Apps (via Terraform)
+  # Dev — Deploy Container Apps (via script)
   # ---------------------------------------------------------------------------
   deploy-apps-dev:
     name: "Dev — Deploy Container Apps"
@@ -160,12 +151,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
 
-    env:
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_USE_OIDC: 'true'
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -179,29 +164,61 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.14.6
-          terraform_wrapper: false
-
-      - name: Terraform Init
-        working-directory: infra/terraform/environments/dev-containers
-        run: terraform init
-
-      - name: Terraform Apply
-        working-directory: infra/terraform/environments/dev-containers
+      - name: Deploy frontend Container App
         run: |
-          terraform apply -auto-approve \
-            -var-file="dev-containers.tfvars" \
-            -var="image_tag=${{ needs.promote-containers-dev.outputs.image_tag }}"
+          chmod +x infra/scripts/deploy-container-app.sh
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-frontend" \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --target-port 3000 \
+            --identity "${{ needs.deploy-infra-dev.outputs.frontend_identity_id }}" \
+            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 0 \
+            --max-replicas 10 \
+            --env-vars "PORT=3000"
+
+      - name: Deploy backend Container App
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-backend" \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/backend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --target-port 8000 \
+            --identity "${{ needs.deploy-infra-dev.outputs.backend_identity_id }}" \
+            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 0 \
+            --max-replicas 10 \
+            --env-vars "PORT=8000"
+
+      - name: Deploy worker Container App
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-worker" \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/worker:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --target-port 80 \
+            --identity "${{ needs.deploy-infra-dev.outputs.worker_identity_id }}" \
+            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 0 \
+            --max-replicas 10 \
+            --ingress-external false
 
 # =============================================================================
 # PROD ENVIRONMENT
 # =============================================================================
 
   # ---------------------------------------------------------------------------
-  # Prod — Deploy Infrastructure
+  # Prod — Deploy Infrastructure (Bicep)
   # ---------------------------------------------------------------------------
   deploy-infra-prod:
     name: "Prod — Deploy Infrastructure"
@@ -209,14 +226,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: prod
     outputs:
-      acr_login_server: ${{ steps.tf-outputs.outputs.acr_login_server }}
-      resource_group: ${{ steps.tf-outputs.outputs.resource_group }}
-
-    env:
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_USE_OIDC: 'true'
+      acr_login_server: ${{ steps.bicep-outputs.outputs.acr_login_server }}
+      acr_name: ${{ steps.bicep-outputs.outputs.acr_name }}
+      resource_group: ${{ steps.bicep-outputs.outputs.resource_group }}
+      cae_name: ${{ steps.bicep-outputs.outputs.cae_name }}
+      frontend_identity_id: ${{ steps.bicep-outputs.outputs.frontend_identity_id }}
+      backend_identity_id: ${{ steps.bicep-outputs.outputs.backend_identity_id }}
+      worker_identity_id: ${{ steps.bicep-outputs.outputs.worker_identity_id }}
 
     steps:
       - name: Checkout code
@@ -231,34 +247,28 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - name: Deploy Bicep infrastructure
+        id: deploy
+        uses: azure/arm-deploy@v2
         with:
-          terraform_version: 1.14.6
-          terraform_wrapper: false
+          resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          template: infra/bicep/main.bicep
+          parameters: >-
+            infra/bicep/environments/prod.bicepparam
+            tenantId=${{ secrets.AZURE_TENANT_ID }}
+          deploymentName: "aic-prod-${{ github.run_number }}"
+          failOnStdErr: false
 
-      - name: Terraform Init
-        working-directory: infra/terraform/environments/prod
-        run: terraform init
-
-      - name: Terraform Plan
-        working-directory: infra/terraform/environments/prod
+      - name: Capture deployment outputs
+        id: bicep-outputs
         run: |
-          terraform plan \
-            -var-file="prod.tfvars" \
-            -var="tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
-            -out=tfplan-prod
-
-      - name: Terraform Apply
-        working-directory: infra/terraform/environments/prod
-        run: terraform apply -auto-approve tfplan-prod
-
-      - name: Capture Terraform outputs
-        id: tf-outputs
-        working-directory: infra/terraform/environments/prod
-        run: |
-          echo "acr_login_server=$(terraform output -raw container_registry_login_server)" >> "$GITHUB_OUTPUT"
-          echo "resource_group=$(terraform output -raw resource_group_name)" >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=${{ steps.deploy.outputs.containerRegistryLoginServer }}" >> "$GITHUB_OUTPUT"
+          echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
+          echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
+          echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
+          echo "frontend_identity_id=${{ steps.deploy.outputs.frontendIdentityResourceId }}" >> "$GITHUB_OUTPUT"
+          echo "backend_identity_id=${{ steps.deploy.outputs.backendIdentityResourceId }}" >> "$GITHUB_OUTPUT"
+          echo "worker_identity_id=${{ steps.deploy.outputs.workerIdentityResourceId }}" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Prod — Promote Containers (GHCR → ACR)
@@ -299,9 +309,8 @@ jobs:
 
       - name: Import frontend image to ACR
         env:
-          ACR_LOGIN_SERVER: ${{ needs.deploy-infra-prod.outputs.acr_login_server }}
+          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
         run: |
-          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
           az acr import \
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.frontend_image }}" \
@@ -312,9 +321,8 @@ jobs:
 
       - name: Import backend image to ACR
         env:
-          ACR_LOGIN_SERVER: ${{ needs.deploy-infra-prod.outputs.acr_login_server }}
+          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
         run: |
-          ACR_NAME="${ACR_LOGIN_SERVER%%.*}"
           az acr import \
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.backend_image }}" \
@@ -324,19 +332,13 @@ jobs:
             --force
 
   # ---------------------------------------------------------------------------
-  # Prod — Deploy Container Apps (via Terraform)
+  # Prod — Deploy Container Apps (via script)
   # ---------------------------------------------------------------------------
   deploy-apps-prod:
     name: "Prod — Deploy Container Apps"
     needs: [deploy-infra-prod, promote-containers-prod]
     runs-on: ubuntu-latest
     environment: prod
-
-    env:
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_USE_OIDC: 'true'
 
     steps:
       - name: Checkout code
@@ -351,19 +353,51 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.14.6
-          terraform_wrapper: false
-
-      - name: Terraform Init
-        working-directory: infra/terraform/environments/prod-containers
-        run: terraform init
-
-      - name: Terraform Apply
-        working-directory: infra/terraform/environments/prod-containers
+      - name: Deploy frontend Container App
         run: |
-          terraform apply -auto-approve \
-            -var-file="prod-containers.tfvars" \
-            -var="image_tag=${{ needs.promote-containers-prod.outputs.image_tag }}"
+          chmod +x infra/scripts/deploy-container-app.sh
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-frontend" \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --target-port 3000 \
+            --identity "${{ needs.deploy-infra-prod.outputs.frontend_identity_id }}" \
+            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 10 \
+            --env-vars "PORT=3000"
+
+      - name: Deploy backend Container App
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-backend" \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/backend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --target-port 8000 \
+            --identity "${{ needs.deploy-infra-prod.outputs.backend_identity_id }}" \
+            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 10 \
+            --env-vars "PORT=8000"
+
+      - name: Deploy worker Container App
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-worker" \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/worker:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --target-port 80 \
+            --identity "${{ needs.deploy-infra-prod.outputs.worker_identity_id }}" \
+            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 10 \
+            --ingress-external false
