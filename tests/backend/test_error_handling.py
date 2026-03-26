@@ -5,7 +5,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "backend"))
 
-from shared.exceptions import (  # noqa: E402
+from shared.exceptions import (  # noqa: E402, I001
     AppError,
     ForbiddenError,
     NotFoundError,

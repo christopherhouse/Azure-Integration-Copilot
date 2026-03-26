@@ -1,6 +1,6 @@
 import structlog
-from azure.eventgrid import EventGridPublisherClient
-from azure.identity import DefaultAzureCredential
+from azure.eventgrid.aio import EventGridPublisherClient
+from azure.identity.aio import DefaultAzureCredential
 
 from config import settings
 
@@ -14,7 +14,7 @@ class EventGridPublisher:
         self._client: EventGridPublisherClient | None = None
         self._credential: DefaultAzureCredential | None = None
 
-    def _get_client(self) -> EventGridPublisherClient:
+    async def _get_client(self) -> EventGridPublisherClient:
         if self._client is None:
             self._credential = DefaultAzureCredential()
             self._client = EventGridPublisherClient(
@@ -26,10 +26,10 @@ class EventGridPublisher:
     async def close(self) -> None:
         """Close the Event Grid publisher client and credential."""
         if self._client is not None:
-            self._client.close()
+            await self._client.close()
             self._client = None
         if self._credential is not None:
-            self._credential.close()
+            await self._credential.close()
             self._credential = None
 
 

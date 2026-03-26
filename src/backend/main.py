@@ -11,7 +11,9 @@ from config import settings
 from middleware.auth import AuthMiddleware
 from middleware.quota import QuotaMiddleware
 from middleware.tenant_context import TenantContextMiddleware
+from shared.blob import blob_service
 from shared.cosmos import cosmos_service
+from shared.events import event_grid_publisher
 from shared.exceptions import AppError
 from shared.logging import setup_logging, setup_telemetry
 from shared.models import ErrorDetail, ErrorResponse, Meta, ResponseEnvelope
@@ -27,6 +29,8 @@ async def lifespan(_app: FastAPI):
     logger.info("app_started", environment=settings.environment)
     yield
     await cosmos_service.close()
+    await blob_service.close()
+    await event_grid_publisher.close()
     logger.info("app_stopped")
 
 
