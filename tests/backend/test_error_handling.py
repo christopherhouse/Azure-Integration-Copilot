@@ -98,3 +98,35 @@ async def test_error_response_includes_request_id_header(client):
     assert response.status_code == 404
     body = response.json()
     assert body["error"]["request_id"] == custom_id
+
+
+# ---------------------------------------------------------------------------
+# HTTP integration tests — AppError subclasses raised in handlers
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_not_found_error_returns_404_via_handler(client):
+    """Raising NotFoundError in a handler returns 404 with the standard error format."""
+    response = await client.get("/api/v1/test/not-found")
+    assert response.status_code == 404
+    body = response.json()
+    assert "error" in body
+    error = body["error"]
+    assert error["code"] == "RESOURCE_NOT_FOUND"
+    assert error["message"] == "Test resource not found"
+    assert error["detail"] == {"id": "test-123"}
+    assert "request_id" in error
+
+
+@pytest.mark.asyncio
+async def test_quota_exceeded_error_returns_429_via_handler(client):
+    """Raising QuotaExceededError in a handler returns 429 with the standard error format."""
+    response = await client.get("/api/v1/test/quota-exceeded")
+    assert response.status_code == 429
+    body = response.json()
+    assert "error" in body
+    error = body["error"]
+    assert error["code"] == "QUOTA_EXCEEDED"
+    assert error["message"] == "Test quota exceeded"
+    assert error["detail"] == {"limit": "maxProjects", "current": 5, "max": 5}
+    assert "request_id" in error

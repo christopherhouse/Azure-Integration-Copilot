@@ -22,6 +22,20 @@ _test_env = {
 }
 with patch.dict(os.environ, _test_env):
     from main import app  # noqa: E402
+    from shared.exceptions import NotFoundError, QuotaExceededError  # noqa: E402
+
+# Register test-only routes that raise specific exceptions so HTTP integration
+# tests can verify the exception-handler pipeline produces the correct response.
+
+
+@app.get("/api/v1/test/not-found")
+async def _raise_not_found():
+    raise NotFoundError(message="Test resource not found", detail={"id": "test-123"})
+
+
+@app.get("/api/v1/test/quota-exceeded")
+async def _raise_quota_exceeded():
+    raise QuotaExceededError(message="Test quota exceeded", detail={"limit": "maxProjects", "current": 5, "max": 5})
 
 
 @pytest_asyncio.fixture
