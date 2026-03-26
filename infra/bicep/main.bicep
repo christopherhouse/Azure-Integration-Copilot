@@ -100,7 +100,6 @@ var resourceNames = {
   webPubSub: 'wps-${namePrefix}'
   idFrontend: 'id-frontend-${namePrefix}'
   idBackend: 'id-backend-${namePrefix}'
-  idWorker: 'id-worker-${namePrefix}'
 }
 
 var commonTags = union(tags, {
@@ -253,16 +252,6 @@ module identityBackend 'br/public:avm/res/managed-identity/user-assigned-identit
   }
 }
 
-module identityWorker 'br/public:avm/res/managed-identity/user-assigned-identity:0.4.1' = {
-  name: 'identity-worker'
-  params: {
-    name: resourceNames.idWorker
-    location: location
-    tags: commonTags
-    enableTelemetry: false
-  }
-}
-
 // ---------------------------------------------------------------------------
 // RBAC Role Assignments
 // ---------------------------------------------------------------------------
@@ -288,16 +277,6 @@ resource backendAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
-resource workerAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(resourceGroup().id, resourceNames.containerRegistry, resourceNames.idWorker, 'AcrPull')
-  scope: acrResource
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-    principalId: identityWorker.outputs.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 // Key Vault Secrets User for all identities
 resource frontendKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(resourceGroup().id, resourceNames.keyVault, resourceNames.idFrontend, 'KVSecretsUser')
@@ -315,16 +294,6 @@ resource backendKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' =
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
     principalId: identityBackend.outputs.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource workerKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(resourceGroup().id, resourceNames.keyVault, resourceNames.idWorker, 'KVSecretsUser')
-  scope: kvResource
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-    principalId: identityWorker.outputs.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -454,17 +423,11 @@ output frontendIdentityResourceId string = identityFrontend.outputs.resourceId
 @description('Resource ID of the backend managed identity')
 output backendIdentityResourceId string = identityBackend.outputs.resourceId
 
-@description('Resource ID of the worker managed identity')
-output workerIdentityResourceId string = identityWorker.outputs.resourceId
-
 @description('Name of the frontend managed identity')
 output frontendIdentityName string = identityFrontend.outputs.name
 
 @description('Name of the backend managed identity')
 output backendIdentityName string = identityBackend.outputs.name
-
-@description('Name of the worker managed identity')
-output workerIdentityName string = identityWorker.outputs.name
 
 @description('Resource ID of the Front Door profile')
 output frontDoorId string = deployFrontDoor ? frontDoor!.outputs.id : ''

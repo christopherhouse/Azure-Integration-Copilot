@@ -43,7 +43,6 @@ jobs:
       cae_name: ${{ steps.bicep-outputs.outputs.cae_name }}
       frontend_identity_name: ${{ steps.bicep-outputs.outputs.frontend_identity_name }}
       backend_identity_name: ${{ steps.bicep-outputs.outputs.backend_identity_name }}
-      worker_identity_name: ${{ steps.bicep-outputs.outputs.worker_identity_name }}
 
     steps:
       - name: Checkout code
@@ -77,7 +76,6 @@ jobs:
           echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
           echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
           echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "worker_identity_name=${{ steps.deploy.outputs.workerIdentityName }}" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Dev — Promote Containers (GHCR → ACR)
@@ -109,13 +107,11 @@ jobs:
         id: metadata
         run: |
           cat container-metadata.json
-          FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="frontend") | .full_image' container-metadata.json)
-          BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="backend") | .full_image' container-metadata.json)
-          WORKER_IMAGE=$(jq -r '.containers[] | select(.name=="worker") | .full_image' container-metadata.json)
-          TAG=$(jq -r '.containers[] | select(.name=="frontend") | .tag' container-metadata.json)
+          FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-frontend") | .full_image' container-metadata.json)
+          BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-backend") | .full_image' container-metadata.json)
+          TAG=$(jq -r '.containers[] | select(.name=="azintcp-frontend") | .tag' container-metadata.json)
           echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_image=${WORKER_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Import frontend image to ACR
@@ -125,7 +121,7 @@ jobs:
           az acr import \
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.frontend_image }}" \
-            --image "frontend:${{ steps.metadata.outputs.tag }}" \
+            --image "azintcp-frontend:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -137,19 +133,7 @@ jobs:
           az acr import \
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.backend_image }}" \
-            --image "backend:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_image }}" \
-            --image "worker:${{ steps.metadata.outputs.tag }}" \
+            --image "azintcp-backend:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -183,10 +167,8 @@ jobs:
         run: |
           FRONTEND_ID=$(az identity show --name "${{ needs.deploy-infra-dev.outputs.frontend_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
           BACKEND_ID=$(az identity show --name "${{ needs.deploy-infra-dev.outputs.backend_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
-          WORKER_ID=$(az identity show --name "${{ needs.deploy-infra-dev.outputs.worker_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
           echo "frontend_id=${FRONTEND_ID}" >> "$GITHUB_OUTPUT"
           echo "backend_id=${BACKEND_ID}" >> "$GITHUB_OUTPUT"
-          echo "worker_id=${WORKER_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy frontend Container App
         run: |
@@ -195,7 +177,7 @@ jobs:
             --name "ca-frontend" \
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/azintcp-frontend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
             --target-port 3000 \
             --identity "${{ steps.identities.outputs.frontend_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
@@ -211,7 +193,7 @@ jobs:
             --name "ca-backend" \
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/backend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/azintcp-backend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
             --target-port 8000 \
             --identity "${{ steps.identities.outputs.backend_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
@@ -220,22 +202,6 @@ jobs:
             --min-replicas 0 \
             --max-replicas 10 \
             --env-vars "PORT=8000"
-
-      - name: Deploy worker Container App
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker" \
-            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/worker:${{ needs.promote-containers-dev.outputs.image_tag }}" \
-            --target-port 80 \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 0 \
-            --max-replicas 10 \
-            --ingress-external false
 
 # =============================================================================
 # PROD ENVIRONMENT
@@ -256,7 +222,6 @@ jobs:
       cae_name: ${{ steps.bicep-outputs.outputs.cae_name }}
       frontend_identity_name: ${{ steps.bicep-outputs.outputs.frontend_identity_name }}
       backend_identity_name: ${{ steps.bicep-outputs.outputs.backend_identity_name }}
-      worker_identity_name: ${{ steps.bicep-outputs.outputs.worker_identity_name }}
 
     steps:
       - name: Checkout code
@@ -290,7 +255,6 @@ jobs:
           echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
           echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
           echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "worker_identity_name=${{ steps.deploy.outputs.workerIdentityName }}" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Prod — Promote Containers (GHCR → ACR)
@@ -322,13 +286,11 @@ jobs:
         id: metadata
         run: |
           cat container-metadata.json
-          FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="frontend") | .full_image' container-metadata.json)
-          BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="backend") | .full_image' container-metadata.json)
-          WORKER_IMAGE=$(jq -r '.containers[] | select(.name=="worker") | .full_image' container-metadata.json)
-          TAG=$(jq -r '.containers[] | select(.name=="frontend") | .tag' container-metadata.json)
+          FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-frontend") | .full_image' container-metadata.json)
+          BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-backend") | .full_image' container-metadata.json)
+          TAG=$(jq -r '.containers[] | select(.name=="azintcp-frontend") | .tag' container-metadata.json)
           echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_image=${WORKER_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Import frontend image to ACR
@@ -338,7 +300,7 @@ jobs:
           az acr import \
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.frontend_image }}" \
-            --image "frontend:${{ steps.metadata.outputs.tag }}" \
+            --image "azintcp-frontend:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -350,19 +312,7 @@ jobs:
           az acr import \
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.backend_image }}" \
-            --image "backend:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_image }}" \
-            --image "worker:${{ steps.metadata.outputs.tag }}" \
+            --image "azintcp-backend:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -396,10 +346,8 @@ jobs:
         run: |
           FRONTEND_ID=$(az identity show --name "${{ needs.deploy-infra-prod.outputs.frontend_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
           BACKEND_ID=$(az identity show --name "${{ needs.deploy-infra-prod.outputs.backend_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
-          WORKER_ID=$(az identity show --name "${{ needs.deploy-infra-prod.outputs.worker_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
           echo "frontend_id=${FRONTEND_ID}" >> "$GITHUB_OUTPUT"
           echo "backend_id=${BACKEND_ID}" >> "$GITHUB_OUTPUT"
-          echo "worker_id=${WORKER_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy frontend Container App
         run: |
@@ -408,7 +356,7 @@ jobs:
             --name "ca-frontend" \
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/azintcp-frontend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
             --target-port 3000 \
             --identity "${{ steps.identities.outputs.frontend_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
@@ -424,7 +372,7 @@ jobs:
             --name "ca-backend" \
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/backend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/azintcp-backend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
             --target-port 8000 \
             --identity "${{ steps.identities.outputs.backend_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
@@ -433,19 +381,3 @@ jobs:
             --min-replicas 1 \
             --max-replicas 10 \
             --env-vars "PORT=8000"
-
-      - name: Deploy worker Container App
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker" \
-            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/worker:${{ needs.promote-containers-prod.outputs.image_tag }}" \
-            --target-port 80 \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 10 \
-            --ingress-external false

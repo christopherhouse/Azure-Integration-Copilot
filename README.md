@@ -37,7 +37,7 @@
 
 Azure Integration Copilot is a **multi-tenant SaaS application** running on Azure. Built as a multi-agent solution using the [Microsoft Foundry](https://learn.microsoft.com/en-us/azure/ai-services/) agent framework, it assists Azure Integration Services developers throughout the full lifecycle of their solutions — from planning and understanding system dependencies to day-to-day operations and future evolution.
 
-The application consists of a **Next.js frontend**, a **Python backend**, and **asynchronous agent workers**, all hosted on Azure Container Apps with real-time updates delivered via Azure Web PubSub.
+The application consists of a **Next.js frontend** and a **Python backend**, both hosted on Azure Container Apps with real-time updates delivered via Azure Web PubSub.
 
 ---
 
@@ -47,7 +47,6 @@ The application consists of a **Next.js frontend**, a **Python backend**, and **
 |---|---|
 | **Frontend** | Next.js (App Router), TypeScript (strict mode), Azure Container Apps |
 | **Backend** | Python 3.13, FastAPI, UV package manager, Azure Container Apps |
-| **Agent Workers** | Azure Container Apps with KEDA scalers, Azure Service Bus triggers |
 | **Agent Framework** | Microsoft Foundry |
 | **Infrastructure** | Bicep with [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) |
 | **CI/CD** | GitHub Actions with OIDC authentication to Azure |
@@ -134,10 +133,10 @@ For the full developer guide — including setup, testing, and tooling details �
 | Service | Purpose |
 |---|---|
 | **Azure Front Door Premium** | Internet-facing ingress with WAF, Microsoft managed TLS certificates, Private Link origin support |
-| **Azure Container Apps** | Hosts the frontend, backend, and async agent workers |
+| **Azure Container Apps** | Hosts the frontend and backend |
 | **Azure Container Registry** | Private container image storage |
 | **Azure Cosmos DB** | Multi-tenant data storage (serverless mode) |
-| **Azure Service Bus** | Asynchronous messaging between services and agent workers |
+| **Azure Service Bus** | Asynchronous messaging between services |
 | **Microsoft Foundry** | Agent framework and orchestration |
 | **Azure Key Vault** | Secrets management |
 | **Azure Storage** | Blob, queue, and table storage |
@@ -161,7 +160,6 @@ graph TB
         subgraph CAE ["Container Apps Subnet<br/><i>dev: 10.0.0.0/23 · prod: 10.1.0.0/23</i>"]
             FE[Frontend App]
             BE[Backend App]
-            AW[Agent Workers]
         end
         subgraph PES ["Private Endpoints Subnet"]
             PE[Private Endpoints]
@@ -271,7 +269,7 @@ flowchart LR
 | **Bicep Lint & Build** | Every PR and push | Lints all Bicep templates, builds to ARM JSON, uploads compiled artifact (7-day retention) |
 | **Containers** | After tests pass, **skipped on PRs** | Docker Buildx build, Trivy scan (CRITICAL/HIGH → SARIF), push to GHCR on `main`, container metadata JSON artifact (90-day retention) |
 
-Container images are published to GHCR at `ghcr.io/<owner>/<repo>/frontend` and `ghcr.io/<owner>/<repo>/backend`, tagged with the 7-character commit SHA and `latest` on pushes to `main`.
+Container images are published to GHCR at `ghcr.io/<owner>/<repo>/azintcp-frontend` and `ghcr.io/<owner>/<repo>/azintcp-backend`, tagged with the 7-character commit SHA and `latest` on pushes to `main`.
 
 ### CD — `.github/workflows/cd.yml`
 
@@ -281,7 +279,7 @@ The CD workflow triggers via `workflow_run` when CI completes successfully on `m
 |---|---|---|
 | **deploy-infra-dev** | dev | Deploys Bicep infrastructure via `az deployment group create`, captures outputs (ACR, CAE, identities) |
 | **promote-containers-dev** | dev | Downloads container metadata artifact, imports frontend/backend images from GHCR → dev ACR via `az acr import` |
-| **deploy-apps-dev** | dev | Deploys `ca-frontend`, `ca-backend`, and `ca-worker` Container Apps using the reusable `deploy-container-app.sh` script |
+| **deploy-apps-dev** | dev | Deploys `ca-frontend` and `ca-backend` Container Apps using the reusable `deploy-container-app.sh` script |
 | **deploy-infra-prod** | prod | Deploys Bicep infrastructure to prod, captures outputs |
 | **promote-containers-prod** | prod | Downloads container metadata, imports images from GHCR → prod ACR |
 | **deploy-apps-prod** | prod | Deploys Container Apps to prod using the reusable deployment script |
@@ -452,7 +450,7 @@ Once complete, the CI workflow (`.github/workflows/ci.yml`) will authenticate to
      --name ca-frontend \
      --resource-group rg-aic-dev-centralus \
      --environment cae-aic-dev-centralus \
-     --image <acr-login-server>/frontend:<tag> \
+     --image <acr-login-server>/azintcp-frontend:<tag> \
      --target-port 3000 \
      --identity <frontend-identity-resource-id> \
      --registry-server <acr-login-server>
