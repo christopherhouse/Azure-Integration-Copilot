@@ -18,6 +18,9 @@ param privateDnsZoneId string
 @description('Log Analytics workspace resource ID')
 param logAnalyticsWorkspaceId string
 
+@description('Name of the topic to create')
+param topicName string = 'integration-events'
+
 @description('Tags to apply')
 param tags object = {}
 
@@ -48,7 +51,7 @@ module eventGridNamespace 'br/public:avm/res/event-grid/namespace:0.7.0' = {
     ]
     topics: [
       {
-        name: 'integration-events'
+        name: topicName
         eventRetentionInDays: 7
         eventSubscriptions: [
           {
@@ -118,5 +121,7 @@ output namespaceId string = eventGridNamespace.outputs.resourceId
 @description('Name of the Event Grid namespace')
 output namespaceName string = eventGridNamespace.outputs.name
 
-@description('Endpoint of the Event Grid namespace')
+// Event Grid Namespace endpoints follow the Azure standard format:
+// https://learn.microsoft.com/azure/event-grid/publish-events-using-namespace-topics
+@description('Endpoint hostname of the Event Grid namespace')
 output endpoint string = '${namespaceName}.${location}-1.eventgrid.azure.net'

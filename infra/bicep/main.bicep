@@ -219,6 +219,7 @@ module eventGrid 'modules/event-grid.bicep' = {
   params: {
     location: location
     namespaceName: resourceNames.eventGrid
+    topicName: eventGridTopicName
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
     privateDnsZoneId: networking.outputs.privateDnsZoneIdEventgrid
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
