@@ -3,6 +3,7 @@ from azure.identity.aio import DefaultAzureCredential
 from azure.storage.blob.aio import BlobServiceClient
 
 from config import settings
+from shared.credential import create_credential
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -16,7 +17,7 @@ class BlobService:
 
     async def _get_client(self) -> BlobServiceClient:
         if self._client is None:
-            self._credential = DefaultAzureCredential()
+            self._credential = create_credential()
             self._client = BlobServiceClient(
                 account_url=settings.blob_storage_endpoint, credential=self._credential
             )

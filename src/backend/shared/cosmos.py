@@ -5,6 +5,7 @@ from azure.cosmos.aio import CosmosClient
 from azure.identity.aio import DefaultAzureCredential
 
 from config import settings
+from shared.credential import create_credential
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -18,7 +19,7 @@ class CosmosService:
 
     async def _get_client(self) -> CosmosClient:
         if self._client is None:
-            self._credential = DefaultAzureCredential()
+            self._credential = create_credential()
             self._client = CosmosClient(url=settings.cosmos_db_endpoint, credential=self._credential)
         return self._client
 
