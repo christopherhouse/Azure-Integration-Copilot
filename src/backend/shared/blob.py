@@ -1,4 +1,5 @@
 import structlog
+from azure.identity.aio import DefaultAzureCredential
 from azure.storage.blob.aio import BlobServiceClient
 
 from config import settings
@@ -12,7 +13,7 @@ class BlobService:
 
     def __init__(self) -> None:
         self._client: BlobServiceClient | None = None
-        self._credential = None
+        self._credential: DefaultAzureCredential | None = None
 
     async def _get_client(self) -> BlobServiceClient:
         if self._client is None:

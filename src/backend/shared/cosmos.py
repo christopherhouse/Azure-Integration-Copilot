@@ -2,6 +2,7 @@ import logging
 
 import structlog
 from azure.cosmos.aio import CosmosClient
+from azure.identity.aio import DefaultAzureCredential
 
 from config import settings
 from shared.credential import create_credential
@@ -14,7 +15,7 @@ class CosmosService:
 
     def __init__(self) -> None:
         self._client: CosmosClient | None = None
-        self._credential = None
+        self._credential: DefaultAzureCredential | None = None
 
     async def _get_client(self) -> CosmosClient:
         if self._client is None:
