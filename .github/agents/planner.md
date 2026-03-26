@@ -43,7 +43,7 @@ Structure every plan as follows:
 | Agent | Domain |
 |---|---|
 | SaaS Architect | Multi-tenant architecture, SaaS patterns, system design |
-| Azure Verified Modules Terraform Engineer | Terraform IaC using Azure Verified Modules |
+| Azure Verified Modules Bicep Engineer | Bicep IaC using Azure Verified Modules |
 | Cloud Security Engineer | Security assessments against Microsoft Cloud Security Benchmarks |
 | Tech Writer | Documentation structure and content |
 | Foundry Engineer | Microsoft Agent Framework and Foundry agent service |
