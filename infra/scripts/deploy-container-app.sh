@@ -44,28 +44,29 @@ log_detail()  { echo -e "   ${MAGENTA}→${NC} $*"; }
 
 print_banner() {
   echo -e ""
-  echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
-  echo -e "${CYAN}║${NC}  ${BOLD}Azure Container App Deployment${NC}                              ${CYAN}║${NC}"
-  echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
+  echo -e "  ${CYAN}${BOLD}🚀 Azure Container App Deployment${NC}"
+  echo -e "  ${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   echo -e ""
 }
 
 print_summary() {
+  local INGRESS_LABEL="External"
+  [[ "${INGRESS_EXTERNAL}" == "false" ]] && INGRESS_LABEL="Internal"
+
+  echo -e "  ${BLUE}${BOLD}📦 Application${NC}"
+  echo -e "  ${CYAN}├─${NC} ${BOLD}Name${NC}            ${GREEN}${APP_NAME}${NC}"
+  echo -e "  ${CYAN}├─${NC} ${BOLD}Image${NC}           ${GREEN}${IMAGE}${NC}"
+  echo -e "  ${CYAN}└─${NC} ${BOLD}Port${NC}            ${GREEN}${TARGET_PORT}${NC}"
   echo -e ""
-  echo -e "${CYAN}┌──────────────────────────────────────────────────────────────┐${NC}"
-  echo -e "${CYAN}│${NC}  ${BOLD}Deployment Configuration${NC}                                    ${CYAN}│${NC}"
-  echo -e "${CYAN}├──────────────────────────────────────────────────────────────┤${NC}"
-  echo -e "${CYAN}│${NC}  App Name:        ${GREEN}${APP_NAME}${NC}"
-  echo -e "${CYAN}│${NC}  Resource Group:   ${GREEN}${RESOURCE_GROUP}${NC}"
-  echo -e "${CYAN}│${NC}  Environment:      ${GREEN}${ENVIRONMENT}${NC}"
-  echo -e "${CYAN}│${NC}  Image:            ${GREEN}${IMAGE}${NC}"
-  echo -e "${CYAN}│${NC}  Target Port:      ${GREEN}${TARGET_PORT}${NC}"
-  echo -e "${CYAN}│${NC}  CPU:              ${GREEN}${CPU}${NC}"
-  echo -e "${CYAN}│${NC}  Memory:           ${GREEN}${MEMORY}${NC}"
-  echo -e "${CYAN}│${NC}  Replicas:         ${GREEN}${MIN_REPLICAS}-${MAX_REPLICAS}${NC}"
-  echo -e "${CYAN}│${NC}  Registry:         ${GREEN}${REGISTRY_SERVER}${NC}"
-  echo -e "${CYAN}│${NC}  Ingress External: ${GREEN}${INGRESS_EXTERNAL}${NC}"
-  echo -e "${CYAN}└──────────────────────────────────────────────────────────────┘${NC}"
+  echo -e "  ${BLUE}${BOLD}☁️  Infrastructure${NC}"
+  echo -e "  ${CYAN}├─${NC} ${BOLD}Resource Group${NC}  ${GREEN}${RESOURCE_GROUP}${NC}"
+  echo -e "  ${CYAN}├─${NC} ${BOLD}Environment${NC}     ${GREEN}${ENVIRONMENT}${NC}"
+  echo -e "  ${CYAN}└─${NC} ${BOLD}Registry${NC}        ${GREEN}${REGISTRY_SERVER}${NC}"
+  echo -e ""
+  echo -e "  ${BLUE}${BOLD}⚙️  Resources${NC}"
+  echo -e "  ${CYAN}├─${NC} ${BOLD}CPU / Memory${NC}    ${GREEN}${CPU} cores · ${MEMORY}${NC}"
+  echo -e "  ${CYAN}├─${NC} ${BOLD}Replicas${NC}        ${GREEN}${MIN_REPLICAS} → ${MAX_REPLICAS}${NC}"
+  echo -e "  ${CYAN}└─${NC} ${BOLD}Ingress${NC}         ${GREEN}${INGRESS_LABEL}${NC}"
   echo -e ""
 }
 
@@ -192,7 +193,7 @@ else
     --registry-server "${REGISTRY_SERVER}"
     --registry-identity "${IDENTITY}"
     --user-assigned "${IDENTITY}"
-    --revision-mode Single
+    --revisions-mode single
   )
 
   if [[ "${INGRESS_EXTERNAL}" == "false" ]]; then
@@ -234,13 +235,12 @@ RUNNING_STATUS=$(az containerapp show \
   --output tsv 2>/dev/null || echo "Unknown")
 
 echo -e ""
-echo -e "${GREEN}╔══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║${NC}  ${BOLD}Deployment Complete${NC}                                         ${GREEN}║${NC}"
-echo -e "${GREEN}╠══════════════════════════════════════════════════════════════╣${NC}"
-echo -e "${GREEN}║${NC}  App:          ${CYAN}${APP_NAME}${NC}"
-echo -e "${GREEN}║${NC}  State:        ${CYAN}${PROVISIONING_STATE}${NC}"
-echo -e "${GREEN}║${NC}  Status:       ${CYAN}${RUNNING_STATUS}${NC}"
-echo -e "${GREEN}║${NC}  FQDN:         ${CYAN}${FQDN}${NC}"
-echo -e "${GREEN}║${NC}  Image:        ${CYAN}${IMAGE}${NC}"
-echo -e "${GREEN}╚══════════════════════════════════════════════════════════════╝${NC}"
+echo -e "  ${GREEN}${BOLD}✅ Deployment Complete${NC}"
+echo -e "  ${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e ""
+echo -e "  ${CYAN}├─${NC} ${BOLD}App${NC}       ${GREEN}${APP_NAME}${NC}"
+echo -e "  ${CYAN}├─${NC} ${BOLD}State${NC}     ${GREEN}${PROVISIONING_STATE}${NC}"
+echo -e "  ${CYAN}├─${NC} ${BOLD}Status${NC}    ${GREEN}${RUNNING_STATUS}${NC}"
+echo -e "  ${CYAN}├─${NC} ${BOLD}FQDN${NC}      ${GREEN}${FQDN}${NC}"
+echo -e "  ${CYAN}└─${NC} ${BOLD}Image${NC}     ${GREEN}${IMAGE}${NC}"
 echo -e ""
