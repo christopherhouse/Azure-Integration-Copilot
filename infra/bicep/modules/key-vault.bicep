@@ -8,9 +8,6 @@ param location string
 @description('Name of the Key Vault')
 param keyVaultName string
 
-@description('Azure AD tenant ID')
-param tenantId string
-
 @description('Subnet ID for private endpoint')
 param subnetPrivateEndpointsId string
 

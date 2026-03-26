@@ -62,14 +62,7 @@ module vnet 'br/public:avm/res/network/virtual-network:0.5.2' = {
         name: 'snet-container-apps'
         addressPrefix: subnetContainerAppsPrefix
         networkSecurityGroupResourceId: nsgContainerApps.id
-        delegations: [
-          {
-            name: 'Microsoft.App.environments'
-            properties: {
-              serviceName: 'Microsoft.App/environments'
-            }
-          }
-        ]
+        delegation: 'Microsoft.App/environments'
       }
       {
         name: 'snet-private-endpoints'
@@ -91,9 +84,9 @@ module vnet 'br/public:avm/res/network/virtual-network:0.5.2' = {
 
 var privateDnsZoneNames = [
   'privatelink.vaultcore.azure.net'
-  'privatelink.blob.core.windows.net'
-  'privatelink.queue.core.windows.net'
-  'privatelink.table.core.windows.net'
+  'privatelink.blob.${environment().suffixes.storage}'
+  'privatelink.queue.${environment().suffixes.storage}'
+  'privatelink.table.${environment().suffixes.storage}'
   'privatelink.documents.azure.com'
   'privatelink.servicebus.windows.net'
   'privatelink.azurecr.io'
@@ -133,10 +126,25 @@ output subnetPrivateEndpointsId string = vnet.outputs.subnetResourceIds[1]
 output subnetIntegrationId string = vnet.outputs.subnetResourceIds[2]
 
 @description('Map of private DNS zone names to resource IDs')
-output privateDnsZoneIds object = reduce(
-  map(range(0, length(privateDnsZoneNames)), i => {
-    '${privateDnsZoneNames[i]}': privateDnsZones[i].outputs.resourceId
-  }),
-  {},
-  (cur, next) => union(cur, next)
-)
+output privateDnsZoneIdVaultcore string = privateDnsZones[0].outputs.resourceId
+
+@description('Private DNS zone ID for blob storage')
+output privateDnsZoneIdBlob string = privateDnsZones[1].outputs.resourceId
+
+@description('Private DNS zone ID for queue storage')
+output privateDnsZoneIdQueue string = privateDnsZones[2].outputs.resourceId
+
+@description('Private DNS zone ID for table storage')
+output privateDnsZoneIdTable string = privateDnsZones[3].outputs.resourceId
+
+@description('Private DNS zone ID for Cosmos DB')
+output privateDnsZoneIdDocuments string = privateDnsZones[4].outputs.resourceId
+
+@description('Private DNS zone ID for Service Bus')
+output privateDnsZoneIdServicebus string = privateDnsZones[5].outputs.resourceId
+
+@description('Private DNS zone ID for Container Registry')
+output privateDnsZoneIdAcr string = privateDnsZones[6].outputs.resourceId
+
+@description('Private DNS zone ID for Web PubSub')
+output privateDnsZoneIdWebpubsub string = privateDnsZones[7].outputs.resourceId

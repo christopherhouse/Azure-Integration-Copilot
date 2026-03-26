@@ -6,7 +6,6 @@ using '../main.bicep'
 param location = 'centralus'
 param environment = 'prod'
 param workload = 'aic'
-param tenantId = '76de2d2d-77f8-438d-9a87-01806f2345da'
 
 // Networking
 param vnetAddressSpace = ['10.1.0.0/16']

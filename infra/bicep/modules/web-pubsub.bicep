@@ -9,7 +9,7 @@ param location string
 param name string
 
 @description('SKU for the Web PubSub service')
-@allowed(['Free_F1', 'Standard_S1', 'Premium_P1'])
+@allowed(['Free_F1', 'Standard_S1'])
 param sku string = 'Free_F1'
 
 @description('Subnet ID for private endpoint')
@@ -17,9 +17,6 @@ param subnetPrivateEndpointsId string
 
 @description('Private DNS zone resource ID for Web PubSub')
 param privateDnsZoneId string
-
-@description('Log Analytics workspace resource ID')
-param logAnalyticsWorkspaceId string
 
 @description('Tags to apply')
 param tags object = {}
@@ -46,12 +43,6 @@ module webPubSub 'br/public:avm/res/signal-r-service/web-pub-sub:0.5.0' = {
           }
         ]
       : []
-    diagnosticSettings: [
-      {
-        name: 'diag-${name}'
-        workspaceResourceId: logAnalyticsWorkspaceId
-      }
-    ]
   }
 }
 

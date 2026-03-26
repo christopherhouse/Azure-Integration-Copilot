@@ -44,6 +44,7 @@ module cosmosDb 'br/public:avm/res/document-db/database-account:0.11.2' = {
     sqlDatabases: sqlDatabases
     privateEndpoints: [
       {
+        service: 'Sql'
         subnetResourceId: subnetPrivateEndpointsId
         privateDnsZoneGroup: {
           privateDnsZoneGroupConfigs: [
