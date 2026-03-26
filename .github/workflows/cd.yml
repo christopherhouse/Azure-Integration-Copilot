@@ -41,9 +41,9 @@ jobs:
       acr_name: ${{ steps.bicep-outputs.outputs.acr_name }}
       resource_group: ${{ steps.bicep-outputs.outputs.resource_group }}
       cae_name: ${{ steps.bicep-outputs.outputs.cae_name }}
-      frontend_identity_id: ${{ steps.bicep-outputs.outputs.frontend_identity_id }}
-      backend_identity_id: ${{ steps.bicep-outputs.outputs.backend_identity_id }}
-      worker_identity_id: ${{ steps.bicep-outputs.outputs.worker_identity_id }}
+      frontend_identity_name: ${{ steps.bicep-outputs.outputs.frontend_identity_name }}
+      backend_identity_name: ${{ steps.bicep-outputs.outputs.backend_identity_name }}
+      worker_identity_name: ${{ steps.bicep-outputs.outputs.worker_identity_name }}
 
     steps:
       - name: Checkout code
@@ -75,9 +75,9 @@ jobs:
           echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
           echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
           echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
-          echo "frontend_identity_id=${{ steps.deploy.outputs.frontendIdentityResourceId }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_id=${{ steps.deploy.outputs.backendIdentityResourceId }}" >> "$GITHUB_OUTPUT"
-          echo "worker_identity_id=${{ steps.deploy.outputs.workerIdentityResourceId }}" >> "$GITHUB_OUTPUT"
+          echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
+          echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
+          echo "worker_identity_name=${{ steps.deploy.outputs.workerIdentityName }}" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Dev — Promote Containers (GHCR → ACR)
@@ -162,6 +162,18 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Resolve identity resource IDs
+        id: identities
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
+        run: |
+          FRONTEND_ID=$(az identity show --name "${{ needs.deploy-infra-dev.outputs.frontend_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          BACKEND_ID=$(az identity show --name "${{ needs.deploy-infra-dev.outputs.backend_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          WORKER_ID=$(az identity show --name "${{ needs.deploy-infra-dev.outputs.worker_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          echo "frontend_id=${FRONTEND_ID}" >> "$GITHUB_OUTPUT"
+          echo "backend_id=${BACKEND_ID}" >> "$GITHUB_OUTPUT"
+          echo "worker_id=${WORKER_ID}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy frontend Container App
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
@@ -171,7 +183,7 @@ jobs:
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
             --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
             --target-port 3000 \
-            --identity "${{ needs.deploy-infra-dev.outputs.frontend_identity_id }}" \
+            --identity "${{ steps.identities.outputs.frontend_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
@@ -187,7 +199,7 @@ jobs:
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
             --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/backend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
             --target-port 8000 \
-            --identity "${{ needs.deploy-infra-dev.outputs.backend_identity_id }}" \
+            --identity "${{ steps.identities.outputs.backend_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
@@ -203,7 +215,7 @@ jobs:
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
             --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/worker:${{ needs.promote-containers-dev.outputs.image_tag }}" \
             --target-port 80 \
-            --identity "${{ needs.deploy-infra-dev.outputs.worker_identity_id }}" \
+            --identity "${{ steps.identities.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
@@ -228,9 +240,9 @@ jobs:
       acr_name: ${{ steps.bicep-outputs.outputs.acr_name }}
       resource_group: ${{ steps.bicep-outputs.outputs.resource_group }}
       cae_name: ${{ steps.bicep-outputs.outputs.cae_name }}
-      frontend_identity_id: ${{ steps.bicep-outputs.outputs.frontend_identity_id }}
-      backend_identity_id: ${{ steps.bicep-outputs.outputs.backend_identity_id }}
-      worker_identity_id: ${{ steps.bicep-outputs.outputs.worker_identity_id }}
+      frontend_identity_name: ${{ steps.bicep-outputs.outputs.frontend_identity_name }}
+      backend_identity_name: ${{ steps.bicep-outputs.outputs.backend_identity_name }}
+      worker_identity_name: ${{ steps.bicep-outputs.outputs.worker_identity_name }}
 
     steps:
       - name: Checkout code
@@ -262,9 +274,9 @@ jobs:
           echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
           echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
           echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
-          echo "frontend_identity_id=${{ steps.deploy.outputs.frontendIdentityResourceId }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_id=${{ steps.deploy.outputs.backendIdentityResourceId }}" >> "$GITHUB_OUTPUT"
-          echo "worker_identity_id=${{ steps.deploy.outputs.workerIdentityResourceId }}" >> "$GITHUB_OUTPUT"
+          echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
+          echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
+          echo "worker_identity_name=${{ steps.deploy.outputs.workerIdentityName }}" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Prod — Promote Containers (GHCR → ACR)
@@ -349,6 +361,18 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Resolve identity resource IDs
+        id: identities
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
+        run: |
+          FRONTEND_ID=$(az identity show --name "${{ needs.deploy-infra-prod.outputs.frontend_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          BACKEND_ID=$(az identity show --name "${{ needs.deploy-infra-prod.outputs.backend_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          WORKER_ID=$(az identity show --name "${{ needs.deploy-infra-prod.outputs.worker_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          echo "frontend_id=${FRONTEND_ID}" >> "$GITHUB_OUTPUT"
+          echo "backend_id=${BACKEND_ID}" >> "$GITHUB_OUTPUT"
+          echo "worker_id=${WORKER_ID}" >> "$GITHUB_OUTPUT"
+
       - name: Deploy frontend Container App
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
@@ -358,7 +382,7 @@ jobs:
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
             --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/frontend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
             --target-port 3000 \
-            --identity "${{ needs.deploy-infra-prod.outputs.frontend_identity_id }}" \
+            --identity "${{ steps.identities.outputs.frontend_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
@@ -374,7 +398,7 @@ jobs:
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
             --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/backend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
             --target-port 8000 \
-            --identity "${{ needs.deploy-infra-prod.outputs.backend_identity_id }}" \
+            --identity "${{ steps.identities.outputs.backend_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
@@ -390,7 +414,7 @@ jobs:
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
             --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/worker:${{ needs.promote-containers-prod.outputs.image_tag }}" \
             --target-port 80 \
-            --identity "${{ needs.deploy-infra-prod.outputs.worker_identity_id }}" \
+            --identity "${{ steps.identities.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \

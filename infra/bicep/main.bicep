@@ -457,6 +457,15 @@ output backendIdentityResourceId string = identityBackend.outputs.resourceId
 @description('Resource ID of the worker managed identity')
 output workerIdentityResourceId string = identityWorker.outputs.resourceId
 
+@description('Name of the frontend managed identity')
+output frontendIdentityName string = identityFrontend.outputs.name
+
+@description('Name of the backend managed identity')
+output backendIdentityName string = identityBackend.outputs.name
+
+@description('Name of the worker managed identity')
+output workerIdentityName string = identityWorker.outputs.name
+
 @description('Resource ID of the Front Door profile')
 output frontDoorId string = deployFrontDoor ? frontDoor!.outputs.id : ''
 
