@@ -44,8 +44,9 @@ The backend uses tenant context middleware (`src/backend/middleware/tenant_conte
 1. **Design for multi-tenancy from the start.** Every decision should consider tenant isolation, data segregation, and per-tenant scaling.
 2. **Favor Azure-native services.** Use managed Azure services over self-hosted alternatives.
 3. **Optimize for cost.** This project is biased towards minimizing Azure spend. Prefer consumption-based services.
-4. **Document decisions.** Produce Architecture Decision Records (ADRs) in `docs/` for significant design choices.
-5. **Reference Azure Well-Architected Framework** principles in recommendations.
+4. **Design for observability.** Include logging, metrics, and tracing in all architecture recommendations.
+5. **Document decisions.** Produce Architecture Decision Records (ADRs) in `docs/` for significant design choices.
+6. **Reference Azure Well-Architected Framework** principles in recommendations.
 
 ## Tools
 

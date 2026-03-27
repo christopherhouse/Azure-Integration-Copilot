@@ -44,6 +44,7 @@ Infrastructure is defined in Bicep under `infra/bicep/`. Backend code is Python 
 4. **Prioritize findings** as Critical, High, Medium, or Low based on risk impact.
 5. **Prefer managed identities over secrets.** The project uses user-assigned managed identities for frontend and backend Container Apps.
 6. **Enforce least privilege.** All RBAC assignments should follow the principle of least privilege.
+7. **Document security decisions.** Produce security assessment summaries in `docs/` for audit and compliance purposes.
 
 ## Assessment Format
 
