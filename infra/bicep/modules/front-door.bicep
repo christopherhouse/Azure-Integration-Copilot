@@ -111,7 +111,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
         sessionAffinityState: 'Disabled'
         healthProbeSettings: {
           probeIntervalInSeconds: 30
-          probePath: '/health'
+          probePath: '/v1/health'
           probeProtocol: 'Https'
           probeRequestType: 'HEAD'
         }
