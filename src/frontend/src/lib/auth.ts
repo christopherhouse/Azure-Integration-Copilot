@@ -42,8 +42,8 @@ export const authOptions: AuthOptions = {
               },
             },
             async authorize(credentials) {
-              // Accept any non-empty credentials in dev mode.
-              if (credentials?.email) {
+              // Accept any non-empty email + password combination in dev mode.
+              if (credentials?.email && credentials?.password) {
                 return {
                   id: "dev-user-1",
                   name: "Dev User",
@@ -71,7 +71,7 @@ export const authOptions: AuthOptions = {
       }
       // For the dev credentials provider, mint a placeholder token.
       if (account?.provider === "dev-credentials" && !token.accessToken) {
-        token.accessToken = "dev-token";
+        token.accessToken = "dev-only-placeholder-token";
       }
       return token;
     },

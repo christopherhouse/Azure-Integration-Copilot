@@ -280,7 +280,7 @@ The dev server starts at `http://localhost:3000`.
 | `NEXTAUTH_URL` | `http://localhost:3000` | Frontend URL for NextAuth.js callbacks |
 | `NEXTAUTH_SECRET` | *(required)* | Secret used to encrypt session tokens |
 
-> **Note**: `NEXTAUTH_SECRET` and `NEXTAUTH_URL` are required to run the frontend. All defaults are pre-configured in `.env.local.example`.
+> **Note**: Copy `.env.local.example` to `.env.local` for local development. The example file provides a placeholder `NEXTAUTH_SECRET` suitable for local use — generate a unique secret for any shared or deployed environment.
 
 ### Available Scripts
 

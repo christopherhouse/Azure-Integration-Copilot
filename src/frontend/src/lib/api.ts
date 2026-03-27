@@ -32,11 +32,13 @@ export async function apiClient<T>(
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
+    const body = await res.json().catch((parseError: unknown) => ({
+      _parseError: String(parseError),
+    }));
     const error: ApiError = {
       status: res.status,
       message: body?.message ?? res.statusText,
-      detail: body?.detail,
+      detail: body?.detail ?? body?._parseError,
     };
     throw error;
   }
