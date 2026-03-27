@@ -289,6 +289,25 @@ jobs:
           echo ""
           echo "========================================"
 
+      - name: Configure Cloudflare DNS records
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
+          PROFILE_NAME: ${{ steps.deploy-afd.outputs.profile_name }}
+          FRONTEND_ENDPOINT: ${{ steps.deploy-afd.outputs.frontend_endpoint }}
+          BACKEND_ENDPOINT: ${{ steps.deploy-afd.outputs.backend_endpoint }}
+          PUBSUB_ENDPOINT: ${{ steps.deploy-afd.outputs.pubsub_endpoint }}
+          CLOUDFLARE_DNS_ZONE: ${{ secrets.CLOUDFLARE_DNS_ZONE }}
+          CLOUDFLARE_DNS_API_KEY: ${{ secrets.CLOUDFLARE_DNS_API_KEY }}
+        run: |
+          chmod +x infra/scripts/configure-cloudflare-dns.sh
+          ./infra/scripts/configure-cloudflare-dns.sh \
+            --profile-name "${PROFILE_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --cloudflare-zone "${CLOUDFLARE_DNS_ZONE}" \
+            --cloudflare-api-key "${CLOUDFLARE_DNS_API_KEY}" \
+            --domains "cd-frontend,cd-backend,cd-pubsub" \
+            --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}"
+
 # =============================================================================
 # PROD ENVIRONMENT
 # =============================================================================
@@ -553,3 +572,22 @@ jobs:
 
           echo ""
           echo "========================================"
+
+      - name: Configure Cloudflare DNS records
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
+          PROFILE_NAME: ${{ steps.deploy-afd.outputs.profile_name }}
+          FRONTEND_ENDPOINT: ${{ steps.deploy-afd.outputs.frontend_endpoint }}
+          BACKEND_ENDPOINT: ${{ steps.deploy-afd.outputs.backend_endpoint }}
+          PUBSUB_ENDPOINT: ${{ steps.deploy-afd.outputs.pubsub_endpoint }}
+          CLOUDFLARE_DNS_ZONE: ${{ secrets.CLOUDFLARE_DNS_ZONE }}
+          CLOUDFLARE_DNS_API_KEY: ${{ secrets.CLOUDFLARE_DNS_API_KEY }}
+        run: |
+          chmod +x infra/scripts/configure-cloudflare-dns.sh
+          ./infra/scripts/configure-cloudflare-dns.sh \
+            --profile-name "${PROFILE_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --cloudflare-zone "${CLOUDFLARE_DNS_ZONE}" \
+            --cloudflare-api-key "${CLOUDFLARE_DNS_API_KEY}" \
+            --domains "cd-frontend,cd-backend,cd-pubsub" \
+            --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}"
