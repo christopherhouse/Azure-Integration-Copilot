@@ -12,6 +12,9 @@ const config = {
       },
     ],
   },
+  transformIgnorePatterns: [
+    "/node_modules/(?!(jose|openid-client)/)",
+  ],
   moduleDirectories: ["node_modules", "<rootDir>/node_modules"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
