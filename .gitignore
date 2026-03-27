@@ -1,5 +1,6 @@
 # Bicep
 bicep-compiled/
+infra/bicep/**/*.json
 
 # Python
 __pycache__/
