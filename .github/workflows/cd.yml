@@ -296,21 +296,17 @@ jobs:
           FRONTEND_ENDPOINT: ${{ steps.deploy-afd.outputs.frontend_endpoint }}
           BACKEND_ENDPOINT: ${{ steps.deploy-afd.outputs.backend_endpoint }}
           PUBSUB_ENDPOINT: ${{ steps.deploy-afd.outputs.pubsub_endpoint }}
-          CLOUDFLARE_DNS_ZONE: ${{ secrets.CLOUDFLARE_DNS_ZONE }}
+          CLOUDFLARE_DNS_ZONE_ID: ${{ vars.CLOUDFLARE_DNS_ZONE_ID }}
           CLOUDFLARE_DNS_API_KEY: ${{ secrets.CLOUDFLARE_DNS_API_KEY }}
         run: |
           chmod +x infra/scripts/configure-cloudflare-dns.sh
           ./infra/scripts/configure-cloudflare-dns.sh \
             --profile-name "${PROFILE_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
-            --cloudflare-zone "${CLOUDFLARE_DNS_ZONE}" \
+            --cloudflare-zone-id "${CLOUDFLARE_DNS_ZONE_ID}" \
             --cloudflare-api-key "${CLOUDFLARE_DNS_API_KEY}" \
             --domains "cd-frontend,cd-backend,cd-pubsub" \
             --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}"
-
-# =============================================================================
-# PROD ENVIRONMENT
-# =============================================================================
 
   # ---------------------------------------------------------------------------
   # Prod — Deploy Infrastructure (Bicep)
@@ -580,14 +576,14 @@ jobs:
           FRONTEND_ENDPOINT: ${{ steps.deploy-afd.outputs.frontend_endpoint }}
           BACKEND_ENDPOINT: ${{ steps.deploy-afd.outputs.backend_endpoint }}
           PUBSUB_ENDPOINT: ${{ steps.deploy-afd.outputs.pubsub_endpoint }}
-          CLOUDFLARE_DNS_ZONE: ${{ secrets.CLOUDFLARE_DNS_ZONE }}
+          CLOUDFLARE_DNS_ZONE_ID: ${{ vars.CLOUDFLARE_DNS_ZONE_ID }}
           CLOUDFLARE_DNS_API_KEY: ${{ secrets.CLOUDFLARE_DNS_API_KEY }}
         run: |
           chmod +x infra/scripts/configure-cloudflare-dns.sh
           ./infra/scripts/configure-cloudflare-dns.sh \
             --profile-name "${PROFILE_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
-            --cloudflare-zone "${CLOUDFLARE_DNS_ZONE}" \
+            --cloudflare-zone-id "${CLOUDFLARE_DNS_ZONE_ID}" \
             --cloudflare-api-key "${CLOUDFLARE_DNS_API_KEY}" \
             --domains "cd-frontend,cd-backend,cd-pubsub" \
             --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}"

@@ -9,7 +9,7 @@
 #   ./configure-cloudflare-dns.sh \
 #     --profile-name <afd-profile-name> \
 #     --resource-group <azure-resource-group> \
-#     --cloudflare-zone <cloudflare-dns-zone-id> \
+#     --cloudflare-zone-id <cloudflare-dns-zone-id> \
 #     --cloudflare-api-key <cloudflare-api-token> \
 #     --domains "cd-frontend,cd-backend,cd-pubsub" \
 #     --endpoints "frontend.azurefd.net,backend.azurefd.net,pubsub.azurefd.net"
@@ -60,7 +60,7 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --profile-name)       PROFILE_NAME="$2";    shift 2 ;;
     --resource-group)     RESOURCE_GROUP="$2";   shift 2 ;;
-    --cloudflare-zone)    CF_ZONE_ID="$2";       shift 2 ;;
+    --cloudflare-zone-id) CF_ZONE_ID="$2";       shift 2 ;;
     --cloudflare-api-key) CF_API_KEY="$2";       shift 2 ;;
     --domains)            DOMAINS_CSV="$2";      shift 2 ;;
     --endpoints)          ENDPOINTS_CSV="$2";    shift 2 ;;
@@ -79,13 +79,21 @@ print_banner
 MISSING=()
 [[ -z "${PROFILE_NAME}" ]]   && MISSING+=("--profile-name")
 [[ -z "${RESOURCE_GROUP}" ]] && MISSING+=("--resource-group")
-[[ -z "${CF_ZONE_ID}" ]]     && MISSING+=("--cloudflare-zone")
+[[ -z "${CF_ZONE_ID}" ]]     && MISSING+=("--cloudflare-zone-id")
 [[ -z "${CF_API_KEY}" ]]     && MISSING+=("--cloudflare-api-key")
 [[ -z "${DOMAINS_CSV}" ]]    && MISSING+=("--domains")
 [[ -z "${ENDPOINTS_CSV}" ]]  && MISSING+=("--endpoints")
 
 if [[ ${#MISSING[@]} -gt 0 ]]; then
   log_error "Missing required parameters: ${MISSING[*]}"
+  exit 1
+fi
+
+# Validate zone ID format (must be a 32-character lowercase hex string)
+if [[ ! "${CF_ZONE_ID}" =~ ^[0-9a-f]{32}$ ]]; then
+  log_error "Invalid Cloudflare zone ID: expected a 32-character hex string."
+  log_error "You may have passed a zone name instead of a zone ID."
+  log_error "Find your zone ID in the Cloudflare dashboard under the zone's Overview page."
   exit 1
 fi
 
