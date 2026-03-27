@@ -1,19 +1,39 @@
-import { render, screen } from "@testing-library/react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const mockRedirect = jest.fn();
+jest.mock("next/navigation", () => ({
+  redirect: (url: string) => {
+    mockRedirect(url);
+    throw new Error("NEXT_REDIRECT");
+  },
+}));
+
+const mockGetServerSession = jest.fn();
+jest.mock("next-auth", () => ({
+  getServerSession: (...args: any[]) => mockGetServerSession(...args),
+}));
+
+jest.mock("@/lib/auth", () => ({
+  authOptions: {},
+}));
+
 import Home from "@/app/page";
 
 describe("Home page", () => {
-  it("renders the application title", () => {
-    render(<Home />);
-    const heading = screen.getByRole("heading", { level: 1 });
-    expect(heading).toHaveTextContent("Integration Copilot");
+  beforeEach(() => {
+    jest.clearAllMocks();
   });
 
-  it("renders the description text", () => {
-    render(<Home />);
-    expect(
-      screen.getByText(
-        "Azure Integration Services management and analysis platform"
-      )
-    ).toBeInTheDocument();
+  it("redirects to /login when there is no session", async () => {
+    mockGetServerSession.mockResolvedValue(null);
+
+    await expect(Home()).rejects.toThrow("NEXT_REDIRECT");
+    expect(mockRedirect).toHaveBeenCalledWith("/login");
+  });
+
+  it("redirects to /dashboard when there is an active session", async () => {
+    mockGetServerSession.mockResolvedValue({ user: { name: "Test" } });
+
+    await expect(Home()).rejects.toThrow("NEXT_REDIRECT");
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
   });
 });
