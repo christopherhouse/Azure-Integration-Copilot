@@ -11,7 +11,7 @@ import { RealtimeContext } from "@/components/providers/realtime-provider";
  */
 export function useRealtimeEvent(
   eventType: string,
-  _callback: (payload: unknown) => void,
+  callback: (payload: unknown) => void,
 ) {
   const { connected } = useContext(RealtimeContext);
 
@@ -22,12 +22,12 @@ export function useRealtimeEvent(
       );
     }
 
-    // In the future, register _callback with the Web PubSub client here.
+    // In the future, register callback with the Web PubSub client here.
 
     return () => {
       if (process.env.NODE_ENV === "development") {
         console.log(`[realtime] unsubscribed from "${eventType}"`);
       }
     };
-  }, [eventType, connected]);
+  }, [eventType, connected, callback]);
 }

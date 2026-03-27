@@ -23,7 +23,7 @@ interface RealtimeProviderProps {
  * later task.  For now it simply provides a context so downstream hooks
  * and components can be written against the interface.
  */
-export function RealtimeProvider({ children }: RealtimeProviderProps) {
+export function RealtimeProvider({ children, tenantId: _tenantId }: RealtimeProviderProps) {
   return (
     <RealtimeContext.Provider value={{ connected: false }}>
       {children}
