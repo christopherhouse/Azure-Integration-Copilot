@@ -128,6 +128,10 @@ jobs:
           az bicep lint --file main.bicep
           echo "::endgroup::"
 
+          echo "::group::Linting front-door-deploy.bicep"
+          az bicep lint --file front-door-deploy.bicep
+          echo "::endgroup::"
+
           for module in modules/*.bicep; do
             echo "::group::Linting ${module}"
             az bicep lint --file "${module}"
@@ -139,6 +143,7 @@ jobs:
         run: |
           mkdir -p ../../bicep-compiled
           az bicep build --file main.bicep --outfile ../../bicep-compiled/main.json
+          az bicep build --file front-door-deploy.bicep --outfile ../../bicep-compiled/front-door-deploy.json
 
       - name: Upload compiled Bicep artifacts
         uses: actions/upload-artifact@v4
@@ -146,6 +151,7 @@ jobs:
           name: bicep-compiled
           path: |
             bicep-compiled/main.json
+            bicep-compiled/front-door-deploy.json
             infra/bicep/
           retention-days: 7
 
