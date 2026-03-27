@@ -34,9 +34,9 @@ src/
 │   ├── main.py               # FastAPI app, middleware registration, health endpoints
 │   ├── config.py             # pydantic-settings configuration (env vars / .env)
 │   ├── middleware/
-│   │   ├── auth.py           # Authentication middleware (stub — task 004)
-│   │   ├── tenant_context.py # Tenant resolution middleware (stub — task 004)
-│   │   └── quota.py          # Quota enforcement middleware (stub — task 004)
+│   │   ├── auth.py           # JWT validation (Azure Entra ID B2C) — SKIP_AUTH=true for dev
+│   │   ├── tenant_context.py # Tenant resolution from Cosmos DB
+│   │   └── quota.py          # Quota enforcement against tier limits
 │   ├── shared/
 │   │   ├── models.py         # ResponseEnvelope[T], PaginatedResponse[T], ErrorResponse
 │   │   ├── exceptions.py     # AppError hierarchy (404, 401, 403, 422, 429)
@@ -44,7 +44,12 @@ src/
 │   │   ├── blob.py           # Blob Storage async client wrapper
 │   │   ├── events.py         # Event Grid publisher wrapper
 │   │   └── logging.py        # structlog + OpenTelemetry setup
-│   ├── domains/              # Domain modules (placeholder)
+│   ├── domains/
+│   │   └── tenants/          # Multi-tenant domain (task 004)
+│   │       ├── models.py     # Tenant, User, TierDefinition, QuotaResult, FREE_TIER
+│   │       ├── router.py     # POST/GET/PATCH /api/v1/tenants endpoints
+│   │       ├── service.py    # TenantService, UserService, TierService, QuotaService
+│   │       └── repository.py # Cosmos DB CRUD for tenants container
 │   ├── pyproject.toml        # Python project config and dependencies
 │   ├── uv.lock               # Locked dependency versions
 │   └── Dockerfile            # Multi-stage production image
@@ -91,6 +96,9 @@ uv run uvicorn main:app --reload --port 8000
 |--------|------|-------------|
 | `GET` | `/api/v1/health` | Liveness probe — returns `200` when the process is running |
 | `GET` | `/api/v1/health/ready` | Readiness probe — checks Cosmos DB connectivity |
+| `POST` | `/api/v1/tenants` | Register a new tenant and owner user (returns `201`) |
+| `GET` | `/api/v1/tenants/me` | Return the current tenant with usage data |
+| `PATCH` | `/api/v1/tenants/me` | Update the current tenant's display name |
 
 ### Configuration
 
@@ -107,16 +115,25 @@ The backend uses [pydantic-settings](https://docs.pydantic.dev/latest/concepts/p
 | `AZURE_CLIENT_ID` | *(empty)* | Managed identity client ID for Azure SDK authentication |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | *(empty)* | Application Insights connection string for telemetry export |
 | `DEFENDER_SCAN_ENABLED` | `false` | Enable Microsoft Defender content scanning |
+| `SKIP_AUTH` | `false` | Set to `true` to bypass JWT validation for local development |
+| `B2C_TENANT_NAME` | *(empty)* | Azure AD B2C tenant name (e.g., `myb2ctenant`) |
+| `B2C_POLICY_NAME` | `B2C_1_signupsignin` | B2C sign-up/sign-in policy name |
+| `B2C_CLIENT_ID` | *(empty)* | B2C application (client) ID for token audience validation |
 
 For local development, create a `.env` file in `src/backend/`:
 
 ```bash
 # src/backend/.env (not committed to source control)
 ENVIRONMENT=development
+SKIP_AUTH=true
 COSMOS_DB_ENDPOINT=https://your-cosmos-account.documents.azure.com:443/
+# B2C settings are optional when SKIP_AUTH=true
+# B2C_TENANT_NAME=your-b2c-tenant
+# B2C_POLICY_NAME=B2C_1_signupsignin
+# B2C_CLIENT_ID=your-client-id
 ```
 
-> **Note**: All Azure service endpoints are optional for local development. The backend starts without them but the `/api/v1/health/ready` endpoint will return `503` until Cosmos DB is configured.
+> **Note**: All Azure service endpoints are optional for local development. The backend starts without them but the `/api/v1/health/ready` endpoint will return `503` until Cosmos DB is configured. Set `SKIP_AUTH=true` to bypass JWT validation — the middleware will use a hardcoded dev identity (`dev-user-001`).
 
 ### API Response Format
 
@@ -155,7 +172,8 @@ Standard error codes:
 | `UNAUTHORIZED` | 401 | `UnauthorizedError` |
 | `FORBIDDEN` | 403 | `ForbiddenError` |
 | `VALIDATION_ERROR` | 422 | `ValidationError` |
-| `QUOTA_EXCEEDED` | 429 | `QuotaExceededError` |
+| `QUOTA_EXCEEDED` | 429 | `QuotaExceededError` / `QuotaMiddleware` |
+| `CONFLICT` | 409 | Tenant router (duplicate registration) |
 | `INTERNAL_ERROR` | 500 | `AppError` (base) |
 
 All error classes live in `src/backend/shared/exceptions.py` and are automatically converted to `ErrorResponse` JSON by the exception handler in `main.py`.
@@ -168,13 +186,21 @@ Requests pass through three middleware layers before reaching the route handler:
 Request → AuthMiddleware → TenantContextMiddleware → QuotaMiddleware → Route Handler
 ```
 
-| Middleware | Sets on `request.state` | Status |
-|------------|------------------------|--------|
-| `AuthMiddleware` | `user_id` | Stub — hardcodes `dev-user-001`; skips health paths |
-| `TenantContextMiddleware` | `tenant`, `tier` | Stub — hardcodes `dev-tenant-001` / `free` |
-| `QuotaMiddleware` | *(none)* | Stub — passes through all requests |
+| Middleware | Sets on `request.state` | Behavior |
+|------------|------------------------|----------|
+| `AuthMiddleware` | `external_id`, `email` | Validates JWT from Azure Entra ID B2C; uses dev identity when `SKIP_AUTH=true`; skips health paths |
+| `TenantContextMiddleware` | `tenant`, `tier` | Resolves tenant and tier from Cosmos DB via user's `external_id`; returns 401 for unregistered users (except `POST /api/v1/tenants`) |
+| `QuotaMiddleware` | *(none)* | Checks usage against tier limits before resource creation; returns 429 when exceeded |
 
-> These middleware stubs will be replaced with real implementations in task 004.
+**Quota-enforced routes:**
+
+| Route Pattern | Quota Check |
+|---------------|-------------|
+| `POST /api/v1/projects` | `max_projects` |
+| `POST /api/v1/projects/{id}/artifacts` | `max_total_artifacts` |
+| `POST /api/v1/projects/{id}/analyses` | `max_daily_analyses` |
+
+> For full details on the auth, tenancy, and quota architecture, see [docs/architecture/tenancy-and-auth.md](../architecture/tenancy-and-auth.md).
 
 ### Observability
 

@@ -1,5 +1,9 @@
 # Task 004 — Tenancy, Auth, and Subscription Foundation
 
+## Status
+
+✅ **Completed**
+
 ## Title
 
 Implement JWT authentication, tenant resolution, tier definitions, and quota enforcement middleware.
@@ -183,26 +187,44 @@ def check_daily_analysis_quota(tenant: Tenant, tier: TierDefinition) -> QuotaRes
 
 ## Acceptance Criteria
 
-- [ ] Requests without a Bearer token return 401
-- [ ] Requests with an invalid token return 401
-- [ ] `POST /api/v1/tenants` creates a new tenant and user
-- [ ] `GET /api/v1/tenants/me` returns the current tenant with usage data
-- [ ] `PATCH /api/v1/tenants/me` updates the tenant display name
-- [ ] `request.state.tenant` is populated for authenticated requests
-- [ ] `request.state.tier` is populated with the free tier definition
-- [ ] Quota middleware returns 429 when a limit is exceeded
-- [ ] 429 response includes the limit name, current usage, and max
-- [ ] Daily analysis count resets at midnight UTC
-- [ ] Health endpoints remain accessible without auth
-- [ ] Tests pass for auth, tenant resolution, and quota enforcement
+- [x] Requests without a Bearer token return 401
+- [x] Requests with an invalid token return 401
+- [x] `POST /api/v1/tenants` creates a new tenant and user
+- [x] `GET /api/v1/tenants/me` returns the current tenant with usage data
+- [x] `PATCH /api/v1/tenants/me` updates the tenant display name
+- [x] `request.state.tenant` is populated for authenticated requests
+- [x] `request.state.tier` is populated with the free tier definition
+- [x] Quota middleware returns 429 when a limit is exceeded
+- [x] 429 response includes the limit name, current usage, and max
+- [x] Daily analysis count resets at midnight UTC
+- [x] Health endpoints remain accessible without auth
+- [x] Tests pass for auth, tenant resolution, and quota enforcement
 
 ## Definition of Done
 
-- Auth middleware validates JWTs (or skips in dev mode).
-- Tenant context is available in all route handlers.
-- Quota enforcement blocks requests that exceed limits.
-- Tenant CRUD endpoints work end-to-end.
-- Domain tasks can rely on `request.state.tenant` and `request.state.tier` being present.
+- [x] Auth middleware validates JWTs (or skips in dev mode).
+- [x] Tenant context is available in all route handlers.
+- [x] Quota enforcement blocks requests that exceed limits.
+- [x] Tenant CRUD endpoints work end-to-end.
+- [x] Domain tasks can rely on `request.state.tenant` and `request.state.tier` being present.
+
+## Completion Notes
+
+**Completed implementation includes:**
+
+| Component | File(s) | Tests |
+|-----------|---------|-------|
+| JWT auth middleware | `src/backend/middleware/auth.py` | `tests/backend/test_auth_middleware.py` (7 tests) |
+| Tenant context middleware | `src/backend/middleware/tenant_context.py` | `tests/backend/test_tenant_context.py` (5 tests) |
+| Quota enforcement middleware | `src/backend/middleware/quota.py` | `tests/backend/test_quota_enforcement.py` (6 tests) |
+| Tenant domain models | `src/backend/domains/tenants/models.py` | — |
+| Tenant Cosmos DB repository | `src/backend/domains/tenants/repository.py` | — |
+| Tenant services | `src/backend/domains/tenants/service.py` | — |
+| Tenant API routes | `src/backend/domains/tenants/router.py` | `tests/backend/test_tenant_routes.py` (8 tests) |
+
+**Additional changes:** `config.py` (new auth settings), `main.py` (router registration), `pyproject.toml` (python-jose dependency), `shared/cosmos.py` (get_container method).
+
+**Total: 26 tests across 4 test files.**
 
 ## Risks / Gotchas
 

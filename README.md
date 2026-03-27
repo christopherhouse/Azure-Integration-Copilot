@@ -65,6 +65,7 @@ The application consists of a **Next.js frontend** and a **Python backend**, bot
 ├── src/
 │   ├── frontend/                # Next.js application (TypeScript)
 │   ├── backend/                 # Python 3.13 backend services (UV)
+│   │   └── domains/tenants/     # Tenant, auth, and quota domain (task 004)
 │   └── agents/                  # Microsoft Foundry agent definitions
 ├── infra/
 │   ├── bicep/
@@ -85,7 +86,8 @@ The application consists of a **Next.js frontend** and a **Python backend**, bot
 │   │       └── prod.bicepparam  # Production environment parameters
 │   └── scripts/
 │       └── deploy-container-app.sh  # Reusable Container App deployment script
-├── docs/                        # Project documentation
+├── docs/                        # Project documentation (architecture, guides, planning)
+│   └── architecture/            # Architecture docs (tenancy, auth, quota)
 ├── tests/
 │   ├── frontend/                # Frontend tests
 │   ├── backend/                 # Backend tests
@@ -104,7 +106,7 @@ Get up and running quickly with the backend and frontend:
 # Backend (Python 3.13 + FastAPI)
 cd src/backend
 uv sync                                          # Install dependencies
-uv run uvicorn main:app --reload --port 8000     # Start dev server
+SKIP_AUTH=true uv run uvicorn main:app --reload --port 8000     # Start dev server (auth disabled)
 
 # Frontend (Next.js 16 + TypeScript)
 cd src/frontend
@@ -114,6 +116,8 @@ npm run dev                                      # Start dev server
 # Or start both services with Docker Compose
 make up
 ```
+
+> 💡 **Tip:** Set `SKIP_AUTH=true` to bypass JWT validation during local development. See [Tenancy & Auth Architecture](docs/architecture/tenancy-and-auth.md) for details.
 
 | Command | Description |
 |---------|-------------|
