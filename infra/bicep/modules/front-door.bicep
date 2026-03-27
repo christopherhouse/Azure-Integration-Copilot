@@ -290,7 +290,6 @@ resource securityPolicy 'Microsoft.Cdn/profiles/securityPolicies@2024-02-01' = {
           domains: [
             { id: '${frontDoor.outputs.resourceId}/customDomains/cd-frontend' }
             { id: '${frontDoor.outputs.resourceId}/customDomains/cd-backend' }
-            { id: '${frontDoor.outputs.resourceId}/customDomains/cd-pubsub' }
           ]
           patternsToMatch: ['/*']
         }
