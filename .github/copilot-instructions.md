@@ -4,13 +4,22 @@
 
 Azure Integration Copilot is a multi-tenant SaaS application running on Azure. It is a multi-agent solution that helps Azure Integration Services developers understand their systems, manage dependencies, operate effectively, and evolve with confidence.
 
-## Agent Flow
+## Custom Agents
 
-All prompts **must** be routed to the **Orchestrator** agent first. The orchestrator hands off to the **Planner** to produce a phased execution plan. The orchestrator then executes the plan using its own grounding alongside the appropriate **specialist agents**.
+Delegate to the appropriate specialist agent whenever a task falls within their domain. Use them directly — do not add intermediary coordination steps.
 
-**Flow:** User → Orchestrator → Planner → Orchestrator → Specialist(s) → User
+| Agent | When to Use |
+|---|---|
+| **bicep-engineer** | Any Bicep file creation or modification under `infra/`, Azure Verified Module selection, parameter file changes, infrastructure deployment templates |
+| **cloud-security-engineer** | Changes to authentication, authorization, networking, private endpoints, key vault, RBAC, or any security-sensitive infrastructure |
+| **devops-engineer** | Creating or modifying GitHub Actions workflows under `.github/workflows/`, CI/CD pipeline changes, container build configuration |
+| **foundry-engineer** | Agent definitions under `src/agents/`, Microsoft Foundry service integration, Semantic Kernel SDK usage, agent orchestration logic |
+| **qa-engineer** | Writing or updating tests under `tests/`, test coverage analysis, test fixture design, verifying code changes don't break existing tests |
+| **saas-architect** | Multi-tenant design decisions, data partitioning strategies, tenant isolation patterns, API design, architecture decision records |
+| **tech-writer** | Documentation under `docs/`, README updates, architecture diagrams, ADRs, API documentation |
+| **ux-designer** | Frontend layout and component design under `src/frontend/`, user experience patterns, accessibility, conversational UI for agent interactions |
 
-Never bypass the orchestrator. Never execute implementation work without a plan approved by the user.
+**Multiple agents may apply to a single task.** For example, adding a new Azure resource may require the bicep-engineer (infrastructure), cloud-security-engineer (security review), devops-engineer (deployment pipeline), and tech-writer (documentation).
 
 ## Development Environment
 
@@ -102,15 +111,13 @@ The solution uses the following Azure services. All infrastructure must be defin
 
 ## Coding Conventions
 
-1. **Never assume user intent.** When a request is ambiguous, ask clarifying questions before implementing.
-2. **Plan before executing.** Every change should be preceded by a plan that the user reviews.
-3. **Keep changes small and incremental.** Prefer multiple small, well-scoped commits over large monolithic changes.
-4. **Document as you go.** The Tech Writer agent should be invoked after each meaningful change to keep documentation current.
-5. **Security by default.** The Cloud Security Engineer should review any infrastructure or authentication changes against Microsoft Cloud Security Benchmarks.
-6. **Test coverage.** Write tests for new functionality. Place frontend tests in `tests/frontend/`, backend tests in `tests/backend/`, and integration tests in `tests/integration/`.
-7. **Use Azure Verified Modules.** When provisioning Azure resources with Bicep, always prefer Azure Verified Modules over custom resource definitions.
-8. **Use UV for Python.** All Python dependency management must go through UV. Do not use pip directly.
-9. **Cost optimization by default.** This solution is biased towards minimizing Azure spend. Prefer serverless and consumption-based services (e.g. Azure Container Apps consumption workload profiles, Azure Functions Consumption plan, Cosmos DB serverless, Event Grid Namespace Standard tier) over provisioned or premium alternatives unless a specific workload requirement justifies the extra cost. Always evaluate the cost impact of architectural decisions and choose the lowest-cost option that meets the requirements.
+1. **Keep changes small and incremental.** Prefer multiple small, well-scoped commits over large monolithic changes.
+2. **Document as you go.** Delegate to the **tech-writer** agent after meaningful changes to keep documentation current.
+3. **Security by default.** Delegate to the **cloud-security-engineer** agent for any infrastructure or authentication changes.
+4. **Test coverage.** Delegate to the **qa-engineer** agent for writing and updating tests. Place frontend tests in `tests/frontend/`, backend tests in `tests/backend/`, and integration tests in `tests/integration/`.
+5. **Use Azure Verified Modules.** When provisioning Azure resources with Bicep, delegate to the **bicep-engineer** agent. Always prefer Azure Verified Modules over custom resource definitions.
+6. **Use UV for Python.** All Python dependency management must go through UV. Do not use pip directly.
+7. **Cost optimization by default.** This solution is biased towards minimizing Azure spend. Prefer serverless and consumption-based services (e.g. Azure Container Apps consumption workload profiles, Cosmos DB serverless, Event Grid Namespace Standard tier) over provisioned or premium alternatives unless a specific workload requirement justifies the extra cost.
 
 ## Agent Tools
 
