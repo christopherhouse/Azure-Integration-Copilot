@@ -1,20 +1,65 @@
 import uuid
 
+import httpx
 import structlog
+from jose import JWTError, jwt
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
+
+from config import settings
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
+# Dev-mode identity used when SKIP_AUTH=true
+_DEV_EXTERNAL_ID = "dev-user-001"
+_DEV_EMAIL = "dev@localhost"
+
+# JWKS cache
+_jwks_cache: dict | None = None
+
+
+async def _fetch_jwks(tenant_name: str, policy_name: str) -> dict:
+    """Fetch JWKS from Azure AD B2C discovery endpoint."""
+    global _jwks_cache  # noqa: PLW0603
+    if _jwks_cache is not None:
+        return _jwks_cache
+
+    discovery_url = (
+        f"https://{tenant_name}.b2clogin.com/{tenant_name}.onmicrosoft.com/{policy_name}/v2.0/.well-known/openid-configuration"
+    )
+    async with httpx.AsyncClient() as client:
+        discovery = await client.get(discovery_url)
+        discovery.raise_for_status()
+        jwks_uri = discovery.json()["jwks_uri"]
+
+        jwks_response = await client.get(jwks_uri)
+        jwks_response.raise_for_status()
+        _jwks_cache = jwks_response.json()
+
+    return _jwks_cache
+
+
+def _make_401_response(message: str, request_id: str) -> JSONResponse:
+    """Build a standard 401 error response."""
+    return JSONResponse(
+        status_code=401,
+        content={
+            "error": {
+                "code": "UNAUTHORIZED",
+                "message": message,
+                "request_id": request_id,
+            }
+        },
+    )
+
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Authentication middleware stub.
+    """Authentication middleware.
 
-    In development, sets ``request.state.user_id`` to a hardcoded dev value.
+    Validates JWT tokens from Azure Entra ID B2C.
+    Supports ``SKIP_AUTH=true`` environment variable for local development.
     Skips authentication for health-check paths.
-    Binds a request-scoped ``request_id`` to structlog context vars.
-    Real JWT validation will be implemented in task 004.
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -25,14 +70,57 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Skip auth for health endpoints
         if request.url.path.startswith("/api/v1/health"):
-            request.state.user_id = "anonymous"
+            request.state.external_id = "anonymous"
+            request.state.email = ""
             return await call_next(request)
 
-        # Stub: accept any Bearer token and set a dev user ID
+        # Dev mode: skip JWT validation
+        if settings.skip_auth:
+            request.state.external_id = _DEV_EXTERNAL_ID
+            request.state.email = _DEV_EMAIL
+            return await call_next(request)
+
+        # Extract Bearer token
         auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            request.state.user_id = "dev-user-001"
-        else:
-            request.state.user_id = "dev-user-001"
+        if not auth_header.startswith("Bearer "):
+            return _make_401_response("Missing or invalid Authorization header.", request_id)
+
+        token = auth_header[7:]
+
+        try:
+            # Fetch JWKS and validate token
+            jwks = await _fetch_jwks(settings.b2c_tenant_name, settings.b2c_policy_name)
+            unverified_header = jwt.get_unverified_header(token)
+
+            # Find the matching key
+            rsa_key: dict = {}
+            for key in jwks.get("keys", []):
+                if key.get("kid") == unverified_header.get("kid"):
+                    rsa_key = key
+                    break
+
+            if not rsa_key:
+                return _make_401_response("Unable to find appropriate signing key.", request_id)
+
+            payload = jwt.decode(
+                token,
+                rsa_key,
+                algorithms=["RS256"],
+                audience=settings.b2c_client_id,
+            )
+
+            request.state.external_id = payload.get("oid", payload.get("sub", ""))
+            request.state.email = payload.get("emails", [""])[0] if payload.get("emails") else payload.get("email", "")
+
+            if not request.state.external_id:
+                return _make_401_response("Token missing required claims.", request_id)
+
+        except JWTError as exc:
+            logger.warning("jwt_validation_failed", error=str(exc))
+            return _make_401_response("Invalid or expired token.", request_id)
+        except httpx.HTTPError as exc:
+            logger.error("jwks_fetch_failed", error=str(exc))
+            return _make_401_response("Unable to validate token at this time.", request_id)
 
         return await call_next(request)
+

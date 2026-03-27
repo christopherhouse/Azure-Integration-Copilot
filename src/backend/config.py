@@ -14,6 +14,12 @@ class Settings(BaseSettings):
     applicationinsights_connection_string: str = ""
     defender_scan_enabled: bool = False
 
+    # Auth settings
+    skip_auth: bool = False
+    b2c_tenant_name: str = ""
+    b2c_policy_name: str = "B2C_1_signupsignin"
+    b2c_client_id: str = ""
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

@@ -19,6 +19,7 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi",
     "opentelemetry-instrumentation-logging",
     "azure-monitor-opentelemetry-exporter",
+    "python-jose[cryptography]>=3.5.0",
 ]
 
 [dependency-groups]
