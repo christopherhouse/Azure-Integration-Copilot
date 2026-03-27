@@ -20,9 +20,7 @@ class TenantRepository:
     """Cosmos DB operations for the tenants container."""
 
     async def _get_container(self) -> ContainerProxy:
-        client = await cosmos_service._get_client()
-        database = client.get_database_client(DATABASE_NAME)
-        return database.get_container_client(CONTAINER_NAME)
+        return await cosmos_service.get_container(DATABASE_NAME, CONTAINER_NAME)
 
     async def create_tenant(self, tenant: Tenant) -> Tenant:
         """Create a new tenant document."""

@@ -1,7 +1,7 @@
 import logging
 
 import structlog
-from azure.cosmos.aio import CosmosClient
+from azure.cosmos.aio import ContainerProxy, CosmosClient
 from azure.identity.aio import DefaultAzureCredential
 
 from config import settings
@@ -22,6 +22,12 @@ class CosmosService:
             self._credential = create_credential()
             self._client = CosmosClient(url=settings.cosmos_db_endpoint, credential=self._credential)
         return self._client
+
+    async def get_container(self, database_name: str, container_name: str) -> ContainerProxy:
+        """Get a Cosmos DB container client."""
+        client = await self._get_client()
+        database = client.get_database_client(database_name)
+        return database.get_container_client(container_name)
 
     async def ping(self) -> bool:
         """Check connectivity to Cosmos DB. Returns True if reachable."""
