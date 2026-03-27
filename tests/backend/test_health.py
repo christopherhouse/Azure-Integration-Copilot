@@ -65,3 +65,10 @@ async def test_health_sets_request_id(client):
     assert response.status_code == 200
     body = response.json()
     assert body["meta"]["request_id"] == custom_id
+
+
+@pytest.mark.asyncio
+async def test_health_head_returns_200(client):
+    """HEAD /api/v1/health returns 200 (used by AFD health probes)."""
+    response = await client.head("/api/v1/health")
+    assert response.status_code == 200

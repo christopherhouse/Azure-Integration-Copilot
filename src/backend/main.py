@@ -89,7 +89,7 @@ async def not_found_handler(request: Request, _exc: Exception) -> JSONResponse:
 # Health endpoints
 # ---------------------------------------------------------------------------
 
-@app.get("/api/v1/health")
+@app.api_route("/api/v1/health", methods=["GET", "HEAD"])
 async def health(request: Request):
     """Liveness probe – always returns 200 when the process is running."""
     req_id = _request_id(request)
