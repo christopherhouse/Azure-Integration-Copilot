@@ -34,7 +34,7 @@ src/
 │   ├── main.py               # FastAPI app, middleware registration, health endpoints
 │   ├── config.py             # pydantic-settings configuration (env vars / .env)
 │   ├── middleware/
-│   │   ├── auth.py           # JWT validation (Azure Entra ID B2C) — SKIP_AUTH=true for dev
+│   │   ├── auth.py           # JWT validation (Entra External ID / CIAM) — SKIP_AUTH=true for dev
 │   │   ├── tenant_context.py # Tenant resolution from Cosmos DB
 │   │   └── quota.py          # Quota enforcement against tier limits
 │   ├── shared/
@@ -116,9 +116,8 @@ The backend uses [pydantic-settings](https://docs.pydantic.dev/latest/concepts/p
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | *(empty)* | Application Insights connection string for telemetry export |
 | `DEFENDER_SCAN_ENABLED` | `false` | Enable Microsoft Defender content scanning |
 | `SKIP_AUTH` | `false` | Set to `true` to bypass JWT validation for local development |
-| `B2C_TENANT_NAME` | *(empty)* | Azure AD B2C tenant name (e.g., `myb2ctenant`) |
-| `B2C_POLICY_NAME` | `B2C_1_signupsignin` | B2C sign-up/sign-in policy name |
-| `B2C_CLIENT_ID` | *(empty)* | B2C application (client) ID for token audience validation |
+| `ENTRA_CIAM_TENANT_SUBDOMAIN` | *(empty)* | Entra External ID tenant subdomain (e.g., `myciamtenant`) |
+| `ENTRA_CIAM_CLIENT_ID` | *(empty)* | Entra External ID application (client) ID for token audience validation |
 
 For local development, create a `.env` file in `src/backend/`:
 
@@ -127,10 +126,9 @@ For local development, create a `.env` file in `src/backend/`:
 ENVIRONMENT=development
 SKIP_AUTH=true
 COSMOS_DB_ENDPOINT=https://your-cosmos-account.documents.azure.com:443/
-# B2C settings are optional when SKIP_AUTH=true
-# B2C_TENANT_NAME=your-b2c-tenant
-# B2C_POLICY_NAME=B2C_1_signupsignin
-# B2C_CLIENT_ID=your-client-id
+# Entra External ID settings are optional when SKIP_AUTH=true
+# ENTRA_CIAM_TENANT_SUBDOMAIN=your-ciam-tenant
+# ENTRA_CIAM_CLIENT_ID=your-client-id
 ```
 
 > **Note**: All Azure service endpoints are optional for local development. The backend starts without them but the `/api/v1/health/ready` endpoint will return `503` until Cosmos DB is configured. Set `SKIP_AUTH=true` to bypass JWT validation — the middleware will use a hardcoded dev identity (`dev-user-001`).
@@ -188,7 +186,7 @@ Request → AuthMiddleware → TenantContextMiddleware → QuotaMiddleware → R
 
 | Middleware | Sets on `request.state` | Behavior |
 |------------|------------------------|----------|
-| `AuthMiddleware` | `external_id`, `email` | Validates JWT from Azure Entra ID B2C; uses dev identity when `SKIP_AUTH=true`; skips health paths |
+| `AuthMiddleware` | `external_id`, `email` | Validates JWT from Microsoft Entra External ID; uses dev identity when `SKIP_AUTH=true`; skips health paths |
 | `TenantContextMiddleware` | `tenant`, `tier` | Resolves tenant and tier from Cosmos DB via user's `external_id`; returns 401 for unregistered users (except `POST /api/v1/tenants`) |
 | `QuotaMiddleware` | *(none)* | Checks usage against tier limits before resource creation; returns 429 when exceeded |
 
@@ -320,9 +318,9 @@ The dev server starts at `http://localhost:3000`.
 
 ### Authentication
 
-The frontend uses [NextAuth.js](https://next-auth.js.org/) for authentication with Azure AD B2C as the production provider.
+The frontend uses [NextAuth.js](https://next-auth.js.org/) for authentication with Microsoft Entra External ID as the production provider.
 
-**Development login**: In development mode (`NODE_ENV !== "production"`), a credentials provider (`dev-credentials`) allows login without a real B2C tenant. Enter any email address and password on the login page to sign in.
+**Development login**: In development mode (`NODE_ENV !== "production"`), a credentials provider (`dev-credentials`) allows login without a real Entra External ID tenant. Enter any email address and password on the login page to sign in.
 
 **Auth flow**:
 

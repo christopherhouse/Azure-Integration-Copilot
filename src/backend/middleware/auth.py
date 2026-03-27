@@ -19,14 +19,14 @@ _DEV_EMAIL = "dev@localhost"
 _jwks_cache: dict | None = None
 
 
-async def _fetch_jwks(tenant_name: str, policy_name: str) -> dict:
-    """Fetch JWKS from Azure AD B2C discovery endpoint."""
+async def _fetch_jwks(tenant_subdomain: str) -> dict:
+    """Fetch JWKS from Microsoft Entra External ID (CIAM) discovery endpoint."""
     global _jwks_cache  # noqa: PLW0603
     if _jwks_cache is not None:
         return _jwks_cache
 
     discovery_url = (
-        f"https://{tenant_name}.b2clogin.com/{tenant_name}.onmicrosoft.com/{policy_name}/v2.0/.well-known/openid-configuration"
+        f"https://{tenant_subdomain}.ciamlogin.com/{tenant_subdomain}.onmicrosoft.com/v2.0/.well-known/openid-configuration"
     )
     async with httpx.AsyncClient() as client:
         discovery = await client.get(discovery_url)
@@ -57,7 +57,7 @@ def _make_401_response(message: str, request_id: str) -> JSONResponse:
 class AuthMiddleware(BaseHTTPMiddleware):
     """Authentication middleware.
 
-    Validates JWT tokens from Azure Entra ID B2C.
+    Validates JWT tokens from Microsoft Entra External ID (CIAM).
     Supports ``SKIP_AUTH=true`` environment variable for local development.
     Skips authentication for health-check paths.
     """
@@ -89,7 +89,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         try:
             # Fetch JWKS and validate token
-            jwks = await _fetch_jwks(settings.b2c_tenant_name, settings.b2c_policy_name)
+            jwks = await _fetch_jwks(settings.entra_ciam_tenant_subdomain)
             unverified_header = jwt.get_unverified_header(token)
 
             # Find the matching key
@@ -106,11 +106,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 token,
                 rsa_key,
                 algorithms=["RS256"],
-                audience=settings.b2c_client_id,
+                audience=settings.entra_ciam_client_id,
             )
 
             request.state.external_id = payload.get("oid", payload.get("sub", ""))
-            request.state.email = payload.get("emails", [""])[0] if payload.get("emails") else payload.get("email", "")
+            request.state.email = payload.get("email", "")
 
             if not request.state.external_id:
                 return _make_401_response("Token missing required claims.", request_id)

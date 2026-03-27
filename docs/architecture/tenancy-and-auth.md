@@ -36,7 +36,7 @@ This document describes the authentication, multi-tenancy, and quota enforcement
 
 Every API request (except health checks) passes through a three-stage middleware pipeline before reaching a route handler:
 
-1. **🔑 AuthMiddleware** — Validates the JWT bearer token (Azure Entra ID B2C)
+1. **🔑 AuthMiddleware** — Validates the JWT bearer token (Microsoft Entra External ID)
 2. **🏢 TenantContextMiddleware** — Resolves the caller's tenant and subscription tier
 3. **📊 QuotaMiddleware** — Enforces usage limits before resource-creating operations
 
@@ -56,7 +56,7 @@ sequenceDiagram
     participant Cosmos as Cosmos DB
 
     Client->>Auth: Request with Bearer token
-    Auth->>Auth: Validate JWT (B2C JWKS)
+    Auth->>Auth: Validate JWT (Entra External ID JWKS)
     Auth-->>Client: 401 if invalid
 
     Auth->>Tenant: request.state.external_id set
@@ -78,10 +78,10 @@ sequenceDiagram
 
 ### JWT Validation
 
-The `AuthMiddleware` (`src/backend/middleware/auth.py`) validates bearer tokens issued by **Azure Entra ID B2C**:
+The `AuthMiddleware` (`src/backend/middleware/auth.py`) validates bearer tokens issued by **Microsoft Entra External ID** (CIAM):
 
 1. Extracts the `Authorization: Bearer <token>` header
-2. Fetches JWKS from the B2C OpenID Connect discovery endpoint (cached after first fetch)
+2. Fetches JWKS from the Entra External ID OpenID Connect discovery endpoint (cached after first fetch)
 3. Finds the signing key matching the token's `kid` header
 4. Validates the token signature (RS256), audience, and expiration
 5. Extracts identity claims:
@@ -163,7 +163,7 @@ erDiagram
         string partitionKey "= tenantId"
         string type "= 'user'"
         string tenantId "FK → Tenant.id"
-        string externalId "B2C oid"
+        string externalId "Entra oid"
         string email
         string displayName
         string role "owner"
@@ -332,9 +332,8 @@ All tenant and user documents are stored in the **`tenants`** container:
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `SKIP_AUTH` | `false` | No | Bypass JWT validation for local dev |
-| `B2C_TENANT_NAME` | *(empty)* | Prod only | Azure AD B2C tenant name (e.g., `myb2ctenant`) |
-| `B2C_POLICY_NAME` | `B2C_1_signupsignin` | No | B2C sign-up/sign-in user flow name |
-| `B2C_CLIENT_ID` | *(empty)* | Prod only | B2C app registration client ID (token audience) |
+| `ENTRA_CIAM_TENANT_SUBDOMAIN` | *(empty)* | Prod only | Entra External ID tenant subdomain (e.g., `myciamtenant`) |
+| `ENTRA_CIAM_CLIENT_ID` | *(empty)* | Prod only | Entra External ID app registration client ID (token audience) |
 | `COSMOS_DB_ENDPOINT` | *(empty)* | For tenant ops | Cosmos DB endpoint for tenant data |
 
 > 📝 When `SKIP_AUTH=true` **and** `COSMOS_DB_ENDPOINT` is empty, the tenant context middleware sets `tenant=None` and `tier=FREE_TIER`, allowing the API to start without any external dependencies.
@@ -345,14 +344,14 @@ All tenant and user documents are stored in the **`tenants`** container:
 
 | File | Purpose |
 |------|---------|
-| `src/backend/middleware/auth.py` | JWT validation middleware (Azure Entra ID B2C) |
+| `src/backend/middleware/auth.py` | JWT validation middleware (Microsoft Entra External ID) |
 | `src/backend/middleware/tenant_context.py` | Tenant resolution middleware |
 | `src/backend/middleware/quota.py` | Quota enforcement middleware |
 | `src/backend/domains/tenants/models.py` | Pydantic v2 models: Tenant, User, TierDefinition, QuotaResult, FREE_TIER |
 | `src/backend/domains/tenants/repository.py` | Cosmos DB CRUD for the `tenants` container |
 | `src/backend/domains/tenants/service.py` | TenantService, UserService, TierService, QuotaService |
 | `src/backend/domains/tenants/router.py` | FastAPI router for `/api/v1/tenants` endpoints |
-| `src/backend/config.py` | Settings with `skip_auth`, `b2c_*` fields |
+| `src/backend/config.py` | Settings with `skip_auth`, `entra_ciam_*` fields |
 | `tests/backend/test_auth_middleware.py` | Auth middleware tests (7 tests) |
 | `tests/backend/test_tenant_context.py` | Tenant context middleware tests (5 tests) |
 | `tests/backend/test_quota_enforcement.py` | Quota enforcement tests (6 tests) |
