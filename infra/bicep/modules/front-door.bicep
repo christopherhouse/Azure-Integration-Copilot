@@ -132,6 +132,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
               privateLink: {
                 id: containerAppsEnvironmentId
               }
+              groupId: 'managedEnvironments'
               privateLinkLocation: location
               requestMessage: 'AFD Private Link to Container Apps frontend'
             }
@@ -164,6 +165,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
               privateLink: {
                 id: containerAppsEnvironmentId
               }
+              groupId: 'managedEnvironments'
               privateLinkLocation: location
               requestMessage: 'AFD Private Link to Container Apps backend'
             }
