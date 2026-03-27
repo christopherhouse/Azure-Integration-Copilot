@@ -51,8 +51,17 @@ src/
 └── frontend/                 # Next.js 16 TypeScript frontend
     ├── src/
     │   ├── app/              # Next.js App Router pages
-    │   ├── components/       # Reusable UI components (shadcn/ui)
-    │   └── lib/              # Shared utilities
+    │   │   ├── (auth)/       # Auth pages (login, callback)
+    │   │   ├── (dashboard)/  # Dashboard layout and pages
+    │   │   ├── api/auth/     # NextAuth.js API route
+    │   │   └── v1/health/    # Frontend health check endpoint
+    │   ├── components/
+    │   │   ├── ui/           # shadcn/ui base components
+    │   │   ├── layout/       # Sidebar, header, breadcrumbs
+    │   │   └── providers/    # Auth, React Query, and realtime providers
+    │   ├── hooks/            # Custom React hooks
+    │   ├── lib/              # API client, auth config, utilities
+    │   └── types/            # TypeScript type definitions
     ├── package.json          # Node.js project config
     └── Dockerfile            # Multi-stage production image
 
@@ -252,11 +261,26 @@ cd src/frontend
 # Install dependencies
 npm install
 
+# Copy environment template
+cp .env.local.example .env.local
+
 # Start the development server with hot reload
 npm run dev
 ```
 
 The dev server starts at `http://localhost:3000`.
+
+> **Note**: The `.env.local` file is **required** for authentication to work. Copy `.env.local.example` to `.env.local` before starting the dev server. The example file provides sensible defaults for local development.
+
+### Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend API base URL |
+| `NEXTAUTH_URL` | `http://localhost:3000` | Frontend URL for NextAuth.js callbacks |
+| `NEXTAUTH_SECRET` | *(required)* | Secret used to encrypt session tokens |
+
+> **Note**: `NEXTAUTH_SECRET` and `NEXTAUTH_URL` are required to run the frontend. All defaults are pre-configured in `.env.local.example`.
 
 ### Available Scripts
 
@@ -267,6 +291,52 @@ The dev server starts at `http://localhost:3000`.
 | `start` | `npm run start` | Start production server |
 | `lint` | `npm run lint` | Run ESLint |
 | `test` | `npm test` | Run Jest tests |
+
+### Authentication
+
+The frontend uses [NextAuth.js](https://next-auth.js.org/) for authentication with Azure AD B2C as the production provider.
+
+**Development login**: In development mode (`NODE_ENV !== "production"`), a credentials provider (`dev-credentials`) allows login without a real B2C tenant. Enter any email address and password on the login page to sign in.
+
+**Auth flow**:
+
+1. Unauthenticated users are redirected to `/login`
+2. After sign-in, the session includes an `accessToken`
+3. The API client (`lib/api.ts`) automatically attaches the token as an `Authorization: Bearer` header
+4. The dashboard layout guards all `/dashboard/*` routes — unauthenticated requests redirect to `/login`
+
+**Session type**: The NextAuth session is augmented with an `accessToken` field (see `types/next-auth.d.ts`).
+
+### Key Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/v1/health` | Frontend health check — returns `{"status":"ok"}` |
+| `HEAD` | `/v1/health` | Frontend health check — returns `200` with no body |
+| `*` | `/api/auth/*` | NextAuth.js authentication endpoints |
+
+> **Note**: These are frontend-specific endpoints served by Next.js. They are separate from the backend API endpoints under `/api/v1/`.
+
+### Architecture
+
+**Providers** — The root layout wraps the app in three nested providers:
+
+1. **AuthProvider** — NextAuth.js `SessionProvider` for authentication state
+2. **QueryProvider** — TanStack React Query with `staleTime: 30s`, `retry: 1`
+3. **RealtimeProvider** — Stub for Azure Web PubSub (connected in a later task)
+
+**API Client** — `lib/api.ts` exports `apiClient<T>(path, options?)`, a typed fetch wrapper that:
+
+- Prepends `NEXT_PUBLIC_API_URL` to the path
+- Attaches the session's `accessToken` as a Bearer token
+- Parses JSON into `ResponseEnvelope<T>`
+- Throws a typed `ApiError` on non-OK responses
+
+**Dashboard Layout** — `(dashboard)/layout.tsx` provides a consistent shell with:
+
+- Collapsible sidebar with navigation (Projects, Settings)
+- Header with breadcrumbs and user menu
+- Auth guard that redirects unauthenticated users to `/login`
 
 ### UI Components
 
