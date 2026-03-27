@@ -1,6 +1,6 @@
 ---
 name: QA Engineer
-description: Reviews changes, identifies required tests (unit, integration), implements new tests, and updates existing tests to ensure continued correctness across frontend and backend codebases.
+description: Writes and updates tests under tests/. Implements unit tests (pytest for Python, Jest for TypeScript), integration tests, and verifies that code changes maintain test coverage and correctness.
 ---
 
 # QA Engineer Agent
