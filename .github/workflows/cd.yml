@@ -202,6 +202,19 @@ jobs:
             --env-vars "PORT=3000"
 
       - name: Deploy backend Container App
+        env:
+          BACKEND_ENV_VARS: >-
+            PORT=8000
+            ENVIRONMENT=dev
+            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}
+            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}
+            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}
+            EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
+            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.web_pubsub_endpoint }}
+            AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.backend_identity_client_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
+            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
+            ENTRA_CIAM_CLIENT_ID=${{ vars.ENTRA_CIAM_CLIENT_ID }}
         run: |
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-backend" \
@@ -215,7 +228,7 @@ jobs:
             --memory 0.5Gi \
             --min-replicas 0 \
             --max-replicas 10 \
-            --env-vars "PORT=8000 ENVIRONMENT=dev COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }} BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }} EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }} EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }} WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.web_pubsub_endpoint }} AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.backend_identity_client_id }} APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }} ENTRA_CIAM_TENANT_SUBDOMAIN=${{ vars.ENTRA_CIAM_TENANT_SUBDOMAIN }} ENTRA_CIAM_CLIENT_ID=${{ vars.ENTRA_CIAM_CLIENT_ID }}"
+            --env-vars "${BACKEND_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
   # Dev — Deploy Azure Front Door (after Container Apps exist)
@@ -496,6 +509,19 @@ jobs:
             --env-vars "PORT=3000"
 
       - name: Deploy backend Container App
+        env:
+          BACKEND_ENV_VARS: >-
+            PORT=8000
+            ENVIRONMENT=prod
+            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}
+            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}
+            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}
+            EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
+            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.web_pubsub_endpoint }}
+            AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.backend_identity_client_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
+            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
+            ENTRA_CIAM_CLIENT_ID=${{ vars.ENTRA_CIAM_CLIENT_ID }}
         run: |
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-backend" \
@@ -509,7 +535,7 @@ jobs:
             --memory 0.5Gi \
             --min-replicas 1 \
             --max-replicas 10 \
-            --env-vars "PORT=8000 ENVIRONMENT=prod COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }} BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }} EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }} EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }} WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.web_pubsub_endpoint }} AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.backend_identity_client_id }} APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }} ENTRA_CIAM_TENANT_SUBDOMAIN=${{ vars.ENTRA_CIAM_TENANT_SUBDOMAIN }} ENTRA_CIAM_CLIENT_ID=${{ vars.ENTRA_CIAM_CLIENT_ID }}"
+            --env-vars "${BACKEND_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
   # Prod — Deploy Azure Front Door (after Container Apps exist)
