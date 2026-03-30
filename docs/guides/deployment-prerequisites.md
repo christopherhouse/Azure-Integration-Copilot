@@ -67,9 +67,11 @@ Variables are also configured per environment (`dev`, `prod`). Navigate to **Set
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `AZURE_RESOURCE_GROUP` | Name of the Azure resource group where all resources are deployed. | `rg-integration-copilot-dev` |
-| `ENTRA_CIAM_TENANT_SUBDOMAIN` | Microsoft Entra External ID (CIAM) tenant subdomain. This is the first segment of `<subdomain>.onmicrosoft.com`. See [Setting Up Microsoft Entra External ID](#setting-up-microsoft-entra-external-id-ciam). | `myciamtenant` |
-| `ENTRA_CIAM_CLIENT_ID` | Application (client) ID of the **backend API** app registration in the CIAM tenant. The backend validates this as the JWT `aud` (audience) claim. | `b2c4d6e8-1234-5678-9abc-def012345678` |
+| `ENTRA_CIAM_TENANT_SUBDOMAIN` | Microsoft Entra External ID (CIAM) tenant subdomain. This is the first segment of `<subdomain>.onmicrosoft.com`. See [Setting Up Microsoft Entra External ID](#setting-up-microsoft-entra-external-id-ciam). Can also be set as an environment **secret**. | `myciamtenant` |
+| `ENTRA_CIAM_CLIENT_ID` | Application (client) ID of the **backend API** app registration in the CIAM tenant. The backend validates this as the JWT `aud` (audience) claim. Can also be set as an environment **secret**. | `b2c4d6e8-1234-5678-9abc-def012345678` |
 | `CLOUDFLARE_DNS_ZONE_ID` | Cloudflare DNS zone ID (32-character lowercase hexadecimal). Found in the Cloudflare dashboard under your domain's overview page. | `023e105f4ecef8ad9ca31a8372d0c353` |
+
+> **💡 Tip:** `ENTRA_CIAM_TENANT_SUBDOMAIN` and `ENTRA_CIAM_CLIENT_ID` can be stored as either environment **variables** or **secrets**. The CD workflow checks secrets first, then falls back to variables.
 
 ---
 
@@ -88,8 +90,8 @@ The following environment variables are set on the backend container app by the 
 | `WEB_PUBSUB_ENDPOINT` | Bicep output `webPubSubEndpoint` | Azure Web PubSub service endpoint. |
 | `AZURE_CLIENT_ID` | Bicep output `backendIdentityClientId` | Backend User Assigned Managed Identity (UAMI) client ID. Used by the backend for Azure SDK authentication at runtime. |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Bicep output `applicationInsightsConnectionString` | Application Insights connection string for telemetry. |
-| `ENTRA_CIAM_TENANT_SUBDOMAIN` | `vars.ENTRA_CIAM_TENANT_SUBDOMAIN` | Passed through from GitHub variable. |
-| `ENTRA_CIAM_CLIENT_ID` | `vars.ENTRA_CIAM_CLIENT_ID` | Passed through from GitHub variable. |
+| `ENTRA_CIAM_TENANT_SUBDOMAIN` | `secrets.ENTRA_CIAM_TENANT_SUBDOMAIN` or `vars.ENTRA_CIAM_TENANT_SUBDOMAIN` | Passed through from GitHub secret or variable (secret takes precedence). |
+| `ENTRA_CIAM_CLIENT_ID` | `secrets.ENTRA_CIAM_CLIENT_ID` or `vars.ENTRA_CIAM_CLIENT_ID` | Passed through from GitHub secret or variable (secret takes precedence). |
 
 > **⚠️ Important:** The `AZURE_CLIENT_ID` environment variable on the backend container is the **User Assigned Managed Identity** client ID (from Bicep output `backendIdentityClientId`). This is different from the `AZURE_CLIENT_ID` secret used by GitHub Actions for OIDC deployment authentication.
 
