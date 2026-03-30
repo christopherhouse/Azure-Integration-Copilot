@@ -112,8 +112,8 @@ The following environment variables are set on the frontend container app by the
 | `NEXTAUTH_URL` | `secrets.NEXTAUTH_URL` or `vars.NEXTAUTH_URL` | Public URL for OAuth callback resolution. |
 | `NEXTAUTH_SECRET` | `secrets.NEXTAUTH_SECRET` | Encryption key for NextAuth.js session tokens. |
 | `ENTRA_CIAM_TENANT_SUBDOMAIN` | `secrets.ENTRA_CIAM_TENANT_SUBDOMAIN` or `vars.ENTRA_CIAM_TENANT_SUBDOMAIN` | CIAM tenant subdomain for OIDC discovery. |
-| `ENTRA_CIAM_FRONTEND_CLIENT_ID` | `secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID` or `vars.ENTRA_CIAM_FRONTEND_CLIENT_ID` | Frontend app registration client ID. |
-| `ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | `secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | Frontend app registration client secret. |
+| `ENTRA_CIAM_FRONTEND_CLIENT_ID` | `secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID` or `vars.ENTRA_CIAM_FRONTEND_CLIENT_ID` | Frontend app registration client ID. Used by NextAuth.js to identify the application during the OAuth authorization code flow. |
+| `ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | `secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | Frontend app registration client secret. Required by NextAuth.js for the server-side OAuth authorization code exchange. |
 | `ENTRA_CIAM_CLIENT_ID` | `secrets.ENTRA_CIAM_CLIENT_ID` or `vars.ENTRA_CIAM_CLIENT_ID` | Backend API app registration client ID. The frontend uses this to construct the scope `api://<backend-client-id>/access_as_user` when acquiring access tokens. |
 
 > **Note:** The `ENTRA_CIAM_CLIENT_ID` variable on the frontend is the **backend API** client ID — the same value used by the backend container. The frontend needs it to request the correct OAuth scope so the issued access token has the backend's client ID as the `aud` claim.
@@ -267,7 +267,7 @@ The frontend application handles interactive user sign-in and acquires tokens to
      ```
      For example: `https://dev.integrationcopilot.com/api/auth/callback/azure-ad` for dev, `https://integrationcopilot.com/api/auth/callback/azure-ad` for prod.
 3. Click **Register**.
-4. **Create a client secret:** Go to **Certificates & secrets** → **Client secrets** → **New client secret**. Set a description (e.g., `NextAuth`) and expiration. Copy the **Value** — this is `ENTRA_CIAM_FRONTEND_CLIENT_SECRET`.
+4. **Create a client secret:** Go to **Certificates & secrets** → **Client secrets** → **New client secret**. Set a description (e.g., `NextAuth`) and expiration (recommended: 6 months — set a calendar reminder to rotate before it expires). Copy the **Value** — this is `ENTRA_CIAM_FRONTEND_CLIENT_SECRET`.
 5. Record the Application (client) ID — this is `ENTRA_CIAM_FRONTEND_CLIENT_ID`.
 
 > **Tip:** For development, you can add `http://localhost:3000/api/auth/callback/azure-ad` as an additional redirect URI.
