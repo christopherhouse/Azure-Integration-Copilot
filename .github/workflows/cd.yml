@@ -25,15 +25,61 @@ permissions:
   actions: read            # Download artifacts from triggering workflow
 
 # =============================================================================
-# DEV ENVIRONMENT
+# CHANGE DETECTION
 # =============================================================================
 jobs:
+  # ---------------------------------------------------------------------------
+  # Detect changes to infrastructure files
+  # ---------------------------------------------------------------------------
+  detect-changes:
+    name: "Detect Infrastructure Changes"
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      infra_changed: ${{ steps.changes.outputs.infra_changed }}
+      afd_changed: ${{ steps.changes.outputs.afd_changed }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+
+      - name: Check for infrastructure changes
+        id: changes
+        run: |
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          # Check for main.bicep / module / param changes
+          INFRA_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE '^infra/bicep/(main\.bicep|modules/|environments/(dev|prod)\.bicepparam)'; then
+            INFRA_CHANGED=true
+          fi
+          echo "infra_changed=${INFRA_CHANGED}" >> "$GITHUB_OUTPUT"
+
+          # Check for AFD-specific changes
+          AFD_CHANGED=false
+          if echo "$CHANGED_FILES" | grep -qE '^infra/bicep/(front-door-deploy\.bicep|modules/front-door\.bicep|environments/(dev|prod)-afd\.bicepparam)'; then
+            AFD_CHANGED=true
+          fi
+          echo "afd_changed=${AFD_CHANGED}" >> "$GITHUB_OUTPUT"
+
+          echo "Infrastructure changed: ${INFRA_CHANGED}"
+          echo "AFD changed: ${AFD_CHANGED}"
+
+# =============================================================================
+# DEV ENVIRONMENT
+# =============================================================================
+
   # ---------------------------------------------------------------------------
   # Dev — Deploy Infrastructure (Bicep)
   # ---------------------------------------------------------------------------
   deploy-infra-dev:
     name: "Dev — Deploy Infrastructure"
-    if: github.event.workflow_run.conclusion == 'success'
+    needs: [detect-changes]
     runs-on: ubuntu-latest
     environment: dev
     outputs:
@@ -65,6 +111,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy Bicep infrastructure
+        if: needs.detect-changes.outputs.infra_changed == 'true'
         id: deploy
         uses: azure/arm-deploy@v2
         with:
@@ -76,20 +123,50 @@ jobs:
 
       - name: Capture deployment outputs
         id: bicep-outputs
+        env:
+          INFRA_CHANGED: ${{ needs.detect-changes.outputs.infra_changed }}
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
-          echo "acr_login_server=${{ steps.deploy.outputs.containerRegistryLoginServer }}" >> "$GITHUB_OUTPUT"
-          echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
-          echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
-          echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
-          echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "cosmos_db_endpoint=${{ steps.deploy.outputs.cosmosDbEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "blob_storage_endpoint=${{ steps.deploy.outputs.blobStorageEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "event_grid_endpoint=${{ steps.deploy.outputs.eventGridEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "event_grid_topic_name=${{ steps.deploy.outputs.eventGridTopicName }}" >> "$GITHUB_OUTPUT"
-          echo "web_pubsub_endpoint=${{ steps.deploy.outputs.webPubSubEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "appinsights_connection_string=${{ steps.deploy.outputs.applicationInsightsConnectionString }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_client_id=${{ steps.deploy.outputs.backendIdentityClientId }}" >> "$GITHUB_OUTPUT"
+          if [[ "${INFRA_CHANGED}" == "true" ]]; then
+            echo "acr_login_server=${{ steps.deploy.outputs.containerRegistryLoginServer }}" >> "$GITHUB_OUTPUT"
+            echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
+            echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
+            echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
+            echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
+            echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
+            echo "cosmos_db_endpoint=${{ steps.deploy.outputs.cosmosDbEndpoint }}" >> "$GITHUB_OUTPUT"
+            echo "blob_storage_endpoint=${{ steps.deploy.outputs.blobStorageEndpoint }}" >> "$GITHUB_OUTPUT"
+            echo "event_grid_endpoint=${{ steps.deploy.outputs.eventGridEndpoint }}" >> "$GITHUB_OUTPUT"
+            echo "event_grid_topic_name=${{ steps.deploy.outputs.eventGridTopicName }}" >> "$GITHUB_OUTPUT"
+            echo "web_pubsub_endpoint=${{ steps.deploy.outputs.webPubSubEndpoint }}" >> "$GITHUB_OUTPUT"
+            echo "appinsights_connection_string=${{ steps.deploy.outputs.applicationInsightsConnectionString }}" >> "$GITHUB_OUTPUT"
+            echo "backend_identity_client_id=${{ steps.deploy.outputs.backendIdentityClientId }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Bicep deployment skipped — fetching outputs from latest successful deployment"
+            DEPLOYMENT_NAME=$(az deployment group list \
+              --resource-group "${RESOURCE_GROUP}" \
+              --query "[?starts_with(name, 'aic-dev-') && properties.provisioningState=='Succeeded'] | sort_by(@, &properties.timestamp) | [-1].name" \
+              --output tsv)
+            echo "Using deployment: ${DEPLOYMENT_NAME}"
+            OUTPUTS=$(az deployment group show \
+              --resource-group "${RESOURCE_GROUP}" \
+              --name "${DEPLOYMENT_NAME}" \
+              --query 'properties.outputs' \
+              --output json)
+            echo "acr_login_server=$(echo "$OUTPUTS" | jq -r '.containerRegistryLoginServer.value')" >> "$GITHUB_OUTPUT"
+            echo "acr_name=$(echo "$OUTPUTS" | jq -r '.containerRegistryName.value')" >> "$GITHUB_OUTPUT"
+            echo "resource_group=$(echo "$OUTPUTS" | jq -r '.resourceGroupName.value')" >> "$GITHUB_OUTPUT"
+            echo "cae_name=$(echo "$OUTPUTS" | jq -r '.containerAppsEnvironmentName.value')" >> "$GITHUB_OUTPUT"
+            echo "frontend_identity_name=$(echo "$OUTPUTS" | jq -r '.frontendIdentityName.value')" >> "$GITHUB_OUTPUT"
+            echo "backend_identity_name=$(echo "$OUTPUTS" | jq -r '.backendIdentityName.value')" >> "$GITHUB_OUTPUT"
+            echo "cosmos_db_endpoint=$(echo "$OUTPUTS" | jq -r '.cosmosDbEndpoint.value')" >> "$GITHUB_OUTPUT"
+            echo "blob_storage_endpoint=$(echo "$OUTPUTS" | jq -r '.blobStorageEndpoint.value')" >> "$GITHUB_OUTPUT"
+            echo "event_grid_endpoint=$(echo "$OUTPUTS" | jq -r '.eventGridEndpoint.value')" >> "$GITHUB_OUTPUT"
+            echo "event_grid_topic_name=$(echo "$OUTPUTS" | jq -r '.eventGridTopicName.value')" >> "$GITHUB_OUTPUT"
+            echo "web_pubsub_endpoint=$(echo "$OUTPUTS" | jq -r '.webPubSubEndpoint.value')" >> "$GITHUB_OUTPUT"
+            echo "appinsights_connection_string=$(echo "$OUTPUTS" | jq -r '.applicationInsightsConnectionString.value')" >> "$GITHUB_OUTPUT"
+            echo "backend_identity_client_id=$(echo "$OUTPUTS" | jq -r '.backendIdentityClientId.value')" >> "$GITHUB_OUTPUT"
+          fi
 
   # ---------------------------------------------------------------------------
   # Dev — Promote Containers (GHCR → ACR)
@@ -244,17 +321,19 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-afd-dev:
     name: "Dev — Deploy Azure Front Door"
-    needs: [deploy-infra-dev, deploy-apps-dev]
+    needs: [detect-changes, deploy-infra-dev, deploy-apps-dev]
     runs-on: ubuntu-latest
     environment: dev
 
     steps:
       - name: Checkout code
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Azure Login (OIDC)
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -262,6 +341,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy Azure Front Door
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         id: deploy-afd
         env:
           RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
@@ -279,6 +359,7 @@ jobs:
           echo "pubsub_endpoint=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorPubsubEndpoint.value')" >> "$GITHUB_OUTPUT"
 
       - name: Display AFD endpoints and DNS validation info
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         env:
           RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
           PROFILE_NAME: ${{ steps.deploy-afd.outputs.profile_name }}
@@ -326,6 +407,7 @@ jobs:
           echo "========================================"
 
       - name: Configure Cloudflare DNS records
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         env:
           RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
           PROFILE_NAME: ${{ steps.deploy-afd.outputs.profile_name }}
@@ -344,12 +426,16 @@ jobs:
             --domains "cd-frontend,cd-backend,cd-pubsub" \
             --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}"
 
+      - name: Skip notice
+        if: needs.detect-changes.outputs.afd_changed != 'true'
+        run: echo "No AFD changes detected — skipping Front Door deployment"
+
   # ---------------------------------------------------------------------------
   # Prod — Deploy Infrastructure (Bicep)
   # ---------------------------------------------------------------------------
   deploy-infra-prod:
     name: "Prod — Deploy Infrastructure"
-    needs: [deploy-afd-dev]
+    needs: [detect-changes, deploy-afd-dev]
     runs-on: ubuntu-latest
     environment: prod
     outputs:
@@ -381,6 +467,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy Bicep infrastructure
+        if: needs.detect-changes.outputs.infra_changed == 'true'
         id: deploy
         uses: azure/arm-deploy@v2
         with:
@@ -392,20 +479,50 @@ jobs:
 
       - name: Capture deployment outputs
         id: bicep-outputs
+        env:
+          INFRA_CHANGED: ${{ needs.detect-changes.outputs.infra_changed }}
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
-          echo "acr_login_server=${{ steps.deploy.outputs.containerRegistryLoginServer }}" >> "$GITHUB_OUTPUT"
-          echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
-          echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
-          echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
-          echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "cosmos_db_endpoint=${{ steps.deploy.outputs.cosmosDbEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "blob_storage_endpoint=${{ steps.deploy.outputs.blobStorageEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "event_grid_endpoint=${{ steps.deploy.outputs.eventGridEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "event_grid_topic_name=${{ steps.deploy.outputs.eventGridTopicName }}" >> "$GITHUB_OUTPUT"
-          echo "web_pubsub_endpoint=${{ steps.deploy.outputs.webPubSubEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "appinsights_connection_string=${{ steps.deploy.outputs.applicationInsightsConnectionString }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_client_id=${{ steps.deploy.outputs.backendIdentityClientId }}" >> "$GITHUB_OUTPUT"
+          if [[ "${INFRA_CHANGED}" == "true" ]]; then
+            echo "acr_login_server=${{ steps.deploy.outputs.containerRegistryLoginServer }}" >> "$GITHUB_OUTPUT"
+            echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
+            echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
+            echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
+            echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
+            echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
+            echo "cosmos_db_endpoint=${{ steps.deploy.outputs.cosmosDbEndpoint }}" >> "$GITHUB_OUTPUT"
+            echo "blob_storage_endpoint=${{ steps.deploy.outputs.blobStorageEndpoint }}" >> "$GITHUB_OUTPUT"
+            echo "event_grid_endpoint=${{ steps.deploy.outputs.eventGridEndpoint }}" >> "$GITHUB_OUTPUT"
+            echo "event_grid_topic_name=${{ steps.deploy.outputs.eventGridTopicName }}" >> "$GITHUB_OUTPUT"
+            echo "web_pubsub_endpoint=${{ steps.deploy.outputs.webPubSubEndpoint }}" >> "$GITHUB_OUTPUT"
+            echo "appinsights_connection_string=${{ steps.deploy.outputs.applicationInsightsConnectionString }}" >> "$GITHUB_OUTPUT"
+            echo "backend_identity_client_id=${{ steps.deploy.outputs.backendIdentityClientId }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "Bicep deployment skipped — fetching outputs from latest successful deployment"
+            DEPLOYMENT_NAME=$(az deployment group list \
+              --resource-group "${RESOURCE_GROUP}" \
+              --query "[?starts_with(name, 'aic-prod-') && properties.provisioningState=='Succeeded'] | sort_by(@, &properties.timestamp) | [-1].name" \
+              --output tsv)
+            echo "Using deployment: ${DEPLOYMENT_NAME}"
+            OUTPUTS=$(az deployment group show \
+              --resource-group "${RESOURCE_GROUP}" \
+              --name "${DEPLOYMENT_NAME}" \
+              --query 'properties.outputs' \
+              --output json)
+            echo "acr_login_server=$(echo "$OUTPUTS" | jq -r '.containerRegistryLoginServer.value')" >> "$GITHUB_OUTPUT"
+            echo "acr_name=$(echo "$OUTPUTS" | jq -r '.containerRegistryName.value')" >> "$GITHUB_OUTPUT"
+            echo "resource_group=$(echo "$OUTPUTS" | jq -r '.resourceGroupName.value')" >> "$GITHUB_OUTPUT"
+            echo "cae_name=$(echo "$OUTPUTS" | jq -r '.containerAppsEnvironmentName.value')" >> "$GITHUB_OUTPUT"
+            echo "frontend_identity_name=$(echo "$OUTPUTS" | jq -r '.frontendIdentityName.value')" >> "$GITHUB_OUTPUT"
+            echo "backend_identity_name=$(echo "$OUTPUTS" | jq -r '.backendIdentityName.value')" >> "$GITHUB_OUTPUT"
+            echo "cosmos_db_endpoint=$(echo "$OUTPUTS" | jq -r '.cosmosDbEndpoint.value')" >> "$GITHUB_OUTPUT"
+            echo "blob_storage_endpoint=$(echo "$OUTPUTS" | jq -r '.blobStorageEndpoint.value')" >> "$GITHUB_OUTPUT"
+            echo "event_grid_endpoint=$(echo "$OUTPUTS" | jq -r '.eventGridEndpoint.value')" >> "$GITHUB_OUTPUT"
+            echo "event_grid_topic_name=$(echo "$OUTPUTS" | jq -r '.eventGridTopicName.value')" >> "$GITHUB_OUTPUT"
+            echo "web_pubsub_endpoint=$(echo "$OUTPUTS" | jq -r '.webPubSubEndpoint.value')" >> "$GITHUB_OUTPUT"
+            echo "appinsights_connection_string=$(echo "$OUTPUTS" | jq -r '.applicationInsightsConnectionString.value')" >> "$GITHUB_OUTPUT"
+            echo "backend_identity_client_id=$(echo "$OUTPUTS" | jq -r '.backendIdentityClientId.value')" >> "$GITHUB_OUTPUT"
+          fi
 
   # ---------------------------------------------------------------------------
   # Prod — Promote Containers (GHCR → ACR)
@@ -560,17 +677,19 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-afd-prod:
     name: "Prod — Deploy Azure Front Door"
-    needs: [deploy-infra-prod, deploy-apps-prod]
+    needs: [detect-changes, deploy-infra-prod, deploy-apps-prod]
     runs-on: ubuntu-latest
     environment: prod
 
     steps:
       - name: Checkout code
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Azure Login (OIDC)
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
@@ -578,6 +697,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Deploy Azure Front Door
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         id: deploy-afd
         env:
           RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
@@ -595,6 +715,7 @@ jobs:
           echo "pubsub_endpoint=$(echo "$DEPLOYMENT_OUTPUT" | jq -r '.frontDoorPubsubEndpoint.value')" >> "$GITHUB_OUTPUT"
 
       - name: Display AFD endpoints and DNS validation info
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         env:
           RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
           PROFILE_NAME: ${{ steps.deploy-afd.outputs.profile_name }}
@@ -642,6 +763,7 @@ jobs:
           echo "========================================"
 
       - name: Configure Cloudflare DNS records
+        if: needs.detect-changes.outputs.afd_changed == 'true'
         env:
           RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
           PROFILE_NAME: ${{ steps.deploy-afd.outputs.profile_name }}
@@ -659,3 +781,7 @@ jobs:
             --cloudflare-api-key "${CLOUDFLARE_DNS_API_KEY}" \
             --domains "cd-frontend,cd-backend,cd-pubsub" \
             --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}"
+
+      - name: Skip notice
+        if: needs.detect-changes.outputs.afd_changed != 'true'
+        run: echo "No AFD changes detected — skipping Front Door deployment"
