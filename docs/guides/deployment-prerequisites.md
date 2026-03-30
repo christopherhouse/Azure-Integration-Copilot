@@ -14,6 +14,7 @@ For local development setup, see the [Developer Guide](developer-guide.md). For 
 - [GitHub Secrets](#github-secrets)
 - [GitHub Variables](#github-variables)
 - [Backend Container Environment Variables](#backend-container-environment-variables)
+- [Frontend Container Environment Variables](#frontend-container-environment-variables)
 - [Setting Up OIDC for GitHub Actions](#setting-up-oidc-for-github-actions)
 - [Setting Up Microsoft Entra External ID (CIAM)](#setting-up-microsoft-entra-external-id-ciam)
   - [Step 1 — Create a CIAM Tenant](#step-1--create-a-ciam-tenant)
@@ -55,6 +56,8 @@ Secrets are configured per GitHub environment (`dev`, `prod`). Navigate to **Set
 | `AZURE_TENANT_ID` | Azure AD tenant ID for the subscription where resources are deployed. | `f47ac10b-58cc-4372-a567-0e02b2c3d479` |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID that owns the target resource group. | `12345678-aaaa-bbbb-cccc-123456789abc` |
 | `CLOUDFLARE_DNS_API_KEY` | Cloudflare API key with DNS edit permissions for the target zone. See [Setting Up Cloudflare DNS](#setting-up-cloudflare-dns). | `v1.0-abc123...` |
+| `NEXTAUTH_SECRET` | Random string (≥ 32 characters) used by NextAuth.js to encrypt session tokens. Generate with `openssl rand -base64 32`. | `Kx7...base64...==` |
+| `ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | Client secret for the frontend app registration in the CIAM tenant. Created in Step 4 below. | `abc~...` |
 
 > **Note:** `AZURE_CLIENT_ID` here refers to the **service principal** used by GitHub Actions for deployment — not the backend's managed identity. The backend receives its own `AZURE_CLIENT_ID` (a User Assigned Managed Identity client ID) from a Bicep output.
 
@@ -70,8 +73,10 @@ Variables are also configured per environment (`dev`, `prod`). Navigate to **Set
 | `ENTRA_CIAM_TENANT_SUBDOMAIN` | Microsoft Entra External ID (CIAM) tenant subdomain. This is the first segment of `<subdomain>.onmicrosoft.com`. See [Setting Up Microsoft Entra External ID](#setting-up-microsoft-entra-external-id-ciam). Can also be set as an environment **secret**. | `myciamtenant` |
 | `ENTRA_CIAM_CLIENT_ID` | Application (client) ID of the **backend API** app registration in the CIAM tenant. The backend validates this as the JWT `aud` (audience) claim. Can also be set as an environment **secret**. | `b2c4d6e8-1234-5678-9abc-def012345678` |
 | `CLOUDFLARE_DNS_ZONE_ID` | Cloudflare DNS zone ID (32-character lowercase hexadecimal). Found in the Cloudflare dashboard under your domain's overview page. | `023e105f4ecef8ad9ca31a8372d0c353` |
+| `NEXTAUTH_URL` | The public URL where the frontend is accessible. Used by NextAuth.js for OAuth callback resolution. | `https://dev.integrationcopilot.com` |
+| `ENTRA_CIAM_FRONTEND_CLIENT_ID` | Application (client) ID of the **frontend** app registration in the CIAM tenant. See [Step 4](#step-4--register-the-frontend-application). Can also be set as an environment **secret**. | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` |
 
-> **💡 Tip:** `ENTRA_CIAM_TENANT_SUBDOMAIN` and `ENTRA_CIAM_CLIENT_ID` can be stored as either environment **variables** or **secrets**. The CD workflow checks secrets first, then falls back to variables.
+> **💡 Tip:** `ENTRA_CIAM_TENANT_SUBDOMAIN`, `ENTRA_CIAM_CLIENT_ID`, `ENTRA_CIAM_FRONTEND_CLIENT_ID`, and `NEXTAUTH_URL` can be stored as either environment **variables** or **secrets**. The CD workflow checks secrets first, then falls back to variables.
 
 ---
 
@@ -94,6 +99,24 @@ The following environment variables are set on the backend container app by the 
 | `ENTRA_CIAM_CLIENT_ID` | `secrets.ENTRA_CIAM_CLIENT_ID` or `vars.ENTRA_CIAM_CLIENT_ID` | Passed through from GitHub secret or variable (secret takes precedence). |
 
 > **⚠️ Important:** The `AZURE_CLIENT_ID` environment variable on the backend container is the **User Assigned Managed Identity** client ID (from Bicep output `backendIdentityClientId`). This is different from the `AZURE_CLIENT_ID` secret used by GitHub Actions for OIDC deployment authentication.
+
+---
+
+## Frontend Container Environment Variables
+
+The following environment variables are set on the frontend container app by the CD workflow. **You do not need to configure these manually** — they are derived from GitHub secrets/variables or hardcoded in the workflow.
+
+| Variable | Source | Description |
+|----------|--------|-------------|
+| `PORT` | Hardcoded (`3000`) | Frontend HTTP server port. |
+| `NEXTAUTH_URL` | `secrets.NEXTAUTH_URL` or `vars.NEXTAUTH_URL` | Public URL for OAuth callback resolution. |
+| `NEXTAUTH_SECRET` | `secrets.NEXTAUTH_SECRET` | Encryption key for NextAuth.js session tokens. |
+| `ENTRA_CIAM_TENANT_SUBDOMAIN` | `secrets.ENTRA_CIAM_TENANT_SUBDOMAIN` or `vars.ENTRA_CIAM_TENANT_SUBDOMAIN` | CIAM tenant subdomain for OIDC discovery. |
+| `ENTRA_CIAM_FRONTEND_CLIENT_ID` | `secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID` or `vars.ENTRA_CIAM_FRONTEND_CLIENT_ID` | Frontend app registration client ID. |
+| `ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | `secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | Frontend app registration client secret. |
+| `ENTRA_CIAM_CLIENT_ID` | `secrets.ENTRA_CIAM_CLIENT_ID` or `vars.ENTRA_CIAM_CLIENT_ID` | Backend API app registration client ID. The frontend uses this to construct the scope `api://<backend-client-id>/access_as_user` when acquiring access tokens. |
+
+> **Note:** The `ENTRA_CIAM_CLIENT_ID` variable on the frontend is the **backend API** client ID — the same value used by the backend container. The frontend needs it to request the correct OAuth scope so the issued access token has the backend's client ID as the `aud` claim.
 
 ---
 
@@ -238,15 +261,18 @@ The frontend application handles interactive user sign-in and acquires tokens to
 2. Configure the registration:
    - **Name:** `Integration Copilot Frontend` (or similar)
    - **Supported account types:** Accounts in this organizational directory only
-   - **Redirect URI:** Select **Single-page application (SPA)** and enter your frontend callback URL for each environment:
+   - **Redirect URI:** Select **Web** and enter your frontend callback URL for each environment:
      ```
      https://<your-frontend-domain>/api/auth/callback/azure-ad
      ```
      For example: `https://dev.integrationcopilot.com/api/auth/callback/azure-ad` for dev, `https://integrationcopilot.com/api/auth/callback/azure-ad` for prod.
 3. Click **Register**.
-4. Record the Application (client) ID for frontend configuration.
+4. **Create a client secret:** Go to **Certificates & secrets** → **Client secrets** → **New client secret**. Set a description (e.g., `NextAuth`) and expiration. Copy the **Value** — this is `ENTRA_CIAM_FRONTEND_CLIENT_SECRET`.
+5. Record the Application (client) ID — this is `ENTRA_CIAM_FRONTEND_CLIENT_ID`.
 
 > **Tip:** For development, you can add `http://localhost:3000/api/auth/callback/azure-ad` as an additional redirect URI.
+
+> **⚠️ Important:** The frontend uses NextAuth.js which runs server-side and performs the OAuth authorization code flow. This requires a **Web** platform type (not SPA) and a client secret.
 
 ### Step 5 — Grant Frontend Permission to Call the Backend API
 
@@ -296,12 +322,16 @@ User flows define how users sign up and sign in.
 
 ### Step 8 — Record the Values
 
-After completing the steps above, set the following as GitHub environment variables on both `dev` and `prod`:
+After completing the steps above, set the following as GitHub environment configuration on both `dev` and `prod`:
 
-| GitHub Variable | Value |
-|----------------|-------|
-| `ENTRA_CIAM_TENANT_SUBDOMAIN` | The subdomain from Step 1 (e.g., `integrationcopilot`) |
-| `ENTRA_CIAM_CLIENT_ID` | The **backend API** app registration's Application (client) ID from Step 2. This is the value the backend validates as the token audience (`aud` claim). |
+| GitHub Config | Type | Value |
+|--------------|------|-------|
+| `ENTRA_CIAM_TENANT_SUBDOMAIN` | Variable | The subdomain from Step 1 (e.g., `integrationcopilot`) |
+| `ENTRA_CIAM_CLIENT_ID` | Variable | The **backend API** app registration's Application (client) ID from Step 2. This is the value the backend validates as the token audience (`aud` claim). |
+| `ENTRA_CIAM_FRONTEND_CLIENT_ID` | Variable | The **frontend** app registration's Application (client) ID from Step 4. |
+| `ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | Secret | The frontend app registration's client secret from Step 4. |
+| `NEXTAUTH_URL` | Variable | The public URL of the frontend (e.g., `https://dev.integrationcopilot.com` for dev, `https://integrationcopilot.com` for prod). |
+| `NEXTAUTH_SECRET` | Secret | A random string (≥ 32 characters) for NextAuth.js session encryption. Generate with `openssl rand -base64 32`. |
 
 > **Note:** The frontend must request the scope `api://<backend-client-id>/access_as_user` when acquiring access tokens. The `<backend-client-id>` is the same `ENTRA_CIAM_CLIENT_ID` value above. This ensures the issued token's `aud` claim matches what the backend expects.
 
@@ -342,6 +372,8 @@ Use this checklist to verify all prerequisites are in place before triggering th
 - [ ] `AZURE_TENANT_ID` — Azure AD tenant ID
 - [ ] `AZURE_SUBSCRIPTION_ID` — Target subscription ID
 - [ ] `CLOUDFLARE_DNS_API_KEY` — Cloudflare API token with DNS edit permissions
+- [ ] `NEXTAUTH_SECRET` — Random string for NextAuth.js session encryption
+- [ ] `ENTRA_CIAM_FRONTEND_CLIENT_SECRET` — Frontend CIAM app registration client secret
 
 **Variables:**
 
@@ -349,6 +381,8 @@ Use this checklist to verify all prerequisites are in place before triggering th
 - [ ] `ENTRA_CIAM_TENANT_SUBDOMAIN` — CIAM tenant subdomain
 - [ ] `ENTRA_CIAM_CLIENT_ID` — CIAM **backend API** app registration client ID (token audience)
 - [ ] `CLOUDFLARE_DNS_ZONE_ID` — Cloudflare zone ID
+- [ ] `NEXTAUTH_URL` — Public frontend URL for OAuth callbacks
+- [ ] `ENTRA_CIAM_FRONTEND_CLIENT_ID` — CIAM **frontend** app registration client ID
 
 ### One-time Setup
 
@@ -358,6 +392,7 @@ Use this checklist to verify all prerequisites are in place before triggering th
 - [ ] Backend API app registration created in CIAM tenant
 - [ ] API scope `access_as_user` exposed on backend app registration
 - [ ] Frontend app registration created with correct redirect URIs
+- [ ] Frontend app registration uses **Web** platform (not SPA) with a client secret
 - [ ] Frontend granted permission to backend API scope (`access_as_user`)
 - [ ] Token claims (`oid`, `email`) configured on the backend app registration
 - [ ] Sign-up/sign-in user flow created and linked to both app registrations

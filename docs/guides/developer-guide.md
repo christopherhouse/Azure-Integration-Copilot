@@ -303,8 +303,14 @@ The dev server starts at `http://localhost:3000`.
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend API base URL |
 | `NEXTAUTH_URL` | `http://localhost:3000` | Frontend URL for NextAuth.js callbacks |
 | `NEXTAUTH_SECRET` | *(required)* | Secret used to encrypt session tokens |
+| `ENTRA_CIAM_TENANT_SUBDOMAIN` | *(empty)* | Entra External ID tenant subdomain — leave blank to use the dev-credentials provider |
+| `ENTRA_CIAM_FRONTEND_CLIENT_ID` | *(empty)* | Frontend app registration client ID in the CIAM tenant |
+| `ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | *(empty)* | Frontend app registration client secret |
+| `ENTRA_CIAM_CLIENT_ID` | *(empty)* | Backend API app registration client ID — used to construct the `access_as_user` scope |
 
 > **Note**: Copy `.env.local.example` to `.env.local` for local development. The example file provides a placeholder `NEXTAUTH_SECRET` suitable for local use — generate a unique secret for any shared or deployed environment.
+
+> **Note**: The Entra CIAM variables are optional for local development. When left blank, NextAuth.js uses the dev-credentials provider (any email + password). To test with a real CIAM tenant locally, fill in all four `ENTRA_CIAM_*` variables.
 
 ### Available Scripts
 
