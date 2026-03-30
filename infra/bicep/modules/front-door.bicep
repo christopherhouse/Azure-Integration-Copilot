@@ -57,6 +57,25 @@ resource wafPolicy 'Microsoft.Network/FrontDoorWebApplicationFirewallPolicies@20
           ruleSetType: 'DefaultRuleSet'
           ruleSetVersion: '1.0'
           ruleSetAction: 'Block'
+          ruleGroupOverrides: [
+            {
+              ruleGroupName: 'SQLI'
+              rules: [
+                {
+                  ruleId: '942430'
+                  enabledState: 'Enabled'
+                  action: 'Block'
+                  exclusions: [
+                    {
+                      matchVariable: 'QueryStringArgNames'
+                      selectorMatchOperator: 'Equals'
+                      selector: 'code'
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
         }
         {
           ruleSetType: 'Microsoft_BotManagerRuleSet'
