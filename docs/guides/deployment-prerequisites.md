@@ -193,10 +193,11 @@ ENTRA_CIAM_TENANT_SUBDOMAIN=integrationcopilot
 3. Configure the registration:
    - **Name:** `Integration Copilot Frontend` (or similar)
    - **Supported account types:** Accounts in this organizational directory only
-   - **Redirect URI:** Select **Single-page application (SPA)** and enter your frontend callback URL:
+   - **Redirect URI:** Select **Single-page application (SPA)** and enter your frontend callback URL for each environment:
      ```
-     https://your-frontend-domain/api/auth/callback/azure-ad
+     https://<your-frontend-domain>/api/auth/callback/azure-ad
      ```
+     For example: `https://dev.integrationcopilot.com/api/auth/callback/azure-ad` for dev, `https://integrationcopilot.com/api/auth/callback/azure-ad` for prod.
 4. Click **Register**.
 5. **Record the Application (client) ID** — this is the value for `ENTRA_CIAM_CLIENT_ID`.
 
