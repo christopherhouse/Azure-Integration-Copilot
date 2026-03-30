@@ -1,27 +1,65 @@
 import type { AuthOptions } from "next-auth";
+import type { OAuthConfig } from "next-auth/providers/oauth";
 import CredentialsProvider from "next-auth/providers/credentials";
 
 /**
  * NextAuth.js configuration.
  *
- * - In production, Azure AD B2C is the primary provider.
+ * - In production, Microsoft Entra External ID (CIAM) is the primary provider.
  * - In development (`NODE_ENV !== "production"`), a credentials provider
- *   allows login without a real B2C tenant.
+ *   allows login without a real CIAM tenant.
  *
  * The access token is persisted in the JWT and surfaced on the session so
  * the API client can attach it as a Bearer token.
  */
+
+/**
+ * Build an OIDC provider for Microsoft Entra External ID (CIAM) when the
+ * required environment variables are present.  Returns an empty array when
+ * any required variable is missing so the providers list remains valid.
+ */
+function buildEntraCiamProvider(): OAuthConfig<Record<string, unknown>>[] {
+  const subdomain = process.env.ENTRA_CIAM_TENANT_SUBDOMAIN;
+  const clientId = process.env.ENTRA_CIAM_FRONTEND_CLIENT_ID;
+  const clientSecret = process.env.ENTRA_CIAM_FRONTEND_CLIENT_SECRET;
+  const backendClientId = process.env.ENTRA_CIAM_CLIENT_ID;
+
+  if (!subdomain || !clientId || !clientSecret || !backendClientId) {
+    return [];
+  }
+
+  return [
+    {
+      id: "azure-ad",
+      name: "Microsoft Entra",
+      type: "oauth",
+      wellKnown: `https://${subdomain}.ciamlogin.com/${subdomain}.onmicrosoft.com/v2.0/.well-known/openid-configuration`,
+      clientId,
+      clientSecret,
+      authorization: {
+        params: {
+          scope: `openid profile email offline_access api://${backendClientId}/access_as_user`,
+        },
+      },
+      idToken: true,
+      checks: ["pkce", "state"],
+      profile(profile: Record<string, unknown>) {
+        return {
+          id: (profile.oid as string) || (profile.sub as string),
+          name: profile.name as string,
+          email:
+            (profile.email as string) ||
+            (profile.preferred_username as string),
+        };
+      },
+    },
+  ];
+}
+
 export const authOptions: AuthOptions = {
   providers: [
-    // ── Azure AD B2C (production) ──────────────────────────────────
-    // Uncomment and configure when a real B2C tenant is available:
-    // AzureADB2CProvider({
-    //   clientId: process.env.AZURE_AD_B2C_CLIENT_ID!,
-    //   clientSecret: process.env.AZURE_AD_B2C_CLIENT_SECRET!,
-    //   tenantId: process.env.AZURE_AD_B2C_TENANT_ID!,
-    //   primaryUserFlow: process.env.AZURE_AD_B2C_PRIMARY_USER_FLOW!,
-    //   authorization: { params: { scope: "openid profile email offline_access" } },
-    // }),
+    // ── Microsoft Entra External ID (CIAM) ─────────────────────────
+    ...buildEntraCiamProvider(),
 
     // ── Development credentials provider ───────────────────────────
     ...(process.env.NODE_ENV !== "production"
