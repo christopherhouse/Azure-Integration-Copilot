@@ -260,7 +260,7 @@ The frontend app registration must be granted permission to request the `access_
 
 ### Step 6 — Configure Token Claims
 
-The backend extracts two claims from the access token to identify users (see [Tenancy & Auth](../architecture/tenancy-and-auth.md) for details):
+The backend requires and extracts two claims from the access token to identify users (see [Tenancy & Auth](../architecture/tenancy-and-auth.md) for details):
 
 | Claim | Purpose | Required |
 |-------|---------|----------|
@@ -270,7 +270,7 @@ The backend extracts two claims from the access token to identify users (see [Te
 To ensure these claims are included in tokens issued for the backend:
 
 1. In the **backend** app registration, go to **Token configuration** → **Add optional claim**.
-2. Select **Access token**.
+2. Select **Access token** (not ID token — the backend validates access tokens issued by the frontend's token request with the backend as the audience).
 3. Add the following claims:
    - `email`
    - `oid` (typically included by default)
