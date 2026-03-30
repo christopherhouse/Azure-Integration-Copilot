@@ -213,8 +213,8 @@ jobs:
             WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.web_pubsub_endpoint }}
             AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.backend_identity_client_id }}
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
-            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
-            ENTRA_CIAM_CLIENT_ID=${{ vars.ENTRA_CIAM_CLIENT_ID }}
+            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
+            ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
         run: |
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-backend" \
@@ -520,8 +520,8 @@ jobs:
             WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.web_pubsub_endpoint }}
             AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.backend_identity_client_id }}
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
-            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
-            ENTRA_CIAM_CLIENT_ID=${{ vars.ENTRA_CIAM_CLIENT_ID }}
+            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
+            ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
         run: |
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-backend" \
