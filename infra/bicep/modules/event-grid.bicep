@@ -123,5 +123,5 @@ output namespaceName string = eventGridNamespace.outputs.name
 
 // Event Grid Namespace endpoints follow the Azure standard format:
 // https://learn.microsoft.com/azure/event-grid/publish-events-using-namespace-topics
-@description('Endpoint hostname of the Event Grid namespace')
-output endpoint string = '${namespaceName}.${location}-1.eventgrid.azure.net'
+@description('Endpoint URL of the Event Grid namespace')
+output endpoint string = 'https://${namespaceName}.${location}-1.eventgrid.azure.net'

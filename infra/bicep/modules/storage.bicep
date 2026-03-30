@@ -101,3 +101,6 @@ output storageAccountId string = storage.outputs.resourceId
 
 @description('Name of the storage account')
 output storageAccountName string = storage.outputs.name
+
+@description('Primary blob endpoint of the storage account')
+output blobEndpoint string = 'https://${storage.outputs.name}.blob.${environment().suffixes.storage}'

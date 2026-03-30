@@ -308,6 +308,39 @@ resource backendCosmosDataContributor 'Microsoft.DocumentDB/databaseAccounts/sql
   }
 }
 
+// Storage Blob Data Contributor for backend identity
+resource backendStorageBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.storageAccount, resourceNames.idBackend, 'StorageBlobDataContributor')
+  scope: storageResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalId: identityBackend.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// EventGrid Data Sender for backend identity
+resource backendEventGridDataSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.eventGrid, resourceNames.idBackend, 'EventGridDataSender')
+  scope: eventGridResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'd5a91429-5739-47e2-a06b-3470a27159e7')
+    principalId: identityBackend.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Web PubSub Service Owner for backend identity
+resource backendWebPubSubOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.webPubSub, resourceNames.idBackend, 'WebPubSubServiceOwner')
+  scope: webPubSubResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12cf5a90-567b-43ae-8102-96cf46c7d9b4')
+    principalId: identityBackend.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // Existing resource references for RBAC scoping
 resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: resourceNames.containerRegistry
@@ -319,6 +352,18 @@ resource kvResource 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
 
 resource cosmosResource 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' existing = {
   name: resourceNames.cosmosDb
+}
+
+resource storageResource 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
+  name: resourceNames.storageAccount
+}
+
+resource eventGridResource 'Microsoft.EventGrid/namespaces@2024-06-01-preview' existing = {
+  name: resourceNames.eventGrid
+}
+
+resource webPubSubResource 'Microsoft.SignalRService/webPubSub@2024-03-01' existing = {
+  name: resourceNames.webPubSub
 }
 
 // ---------------------------------------------------------------------------
@@ -401,6 +446,9 @@ output keyVaultUri string = keyVault.outputs.keyVaultUri
 @description('Endpoint of the Cosmos DB account')
 output cosmosDbEndpoint string = cosmosDb.outputs.endpoint
 
+@description('Primary blob endpoint of the storage account')
+output blobStorageEndpoint string = storage.outputs.blobEndpoint
+
 @description('Endpoint of the Event Grid namespace')
 output eventGridEndpoint string = eventGrid.outputs.endpoint
 
@@ -419,6 +467,9 @@ output containerAppsDefaultDomain string = containerAppsEnv.outputs.defaultDomai
 @description('Hostname of the Web PubSub service')
 output webPubSubHostname string = webPubSub.outputs.hostname
 
+@description('Endpoint URL of the Web PubSub service')
+output webPubSubEndpoint string = 'https://${webPubSub.outputs.hostname}'
+
 @description('Resource ID of the frontend managed identity')
 output frontendIdentityResourceId string = identityFrontend.outputs.resourceId
 
@@ -430,6 +481,9 @@ output frontendIdentityName string = identityFrontend.outputs.name
 
 @description('Name of the backend managed identity')
 output backendIdentityName string = identityBackend.outputs.name
+
+@description('Client ID of the backend managed identity')
+output backendIdentityClientId string = identityBackend.outputs.clientId
 
 @description('Resource ID of the Front Door profile')
 output frontDoorId string = deployFrontDoor ? frontDoor!.outputs.id : ''

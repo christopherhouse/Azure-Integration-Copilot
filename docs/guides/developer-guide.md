@@ -482,6 +482,8 @@ The CD workflow triggers via `workflow_run` when CI completes successfully on `m
 | **promote-containers-prod** | prod | Imports frontend/backend images from GHCR → prod ACR |
 | **deploy-apps-prod** | prod | Deploys Container Apps to prod using the deployment script |
 
+> 📋 **Before deploying:** See the [Deployment Prerequisites](deployment-prerequisites.md) guide for all GitHub secrets, variables, and external service setup required by the CD pipeline — including Microsoft Entra External ID (CIAM) tenant configuration and Azure OIDC setup.
+
 ### Running CI Locally
 
 You can replicate the key CI steps locally:
