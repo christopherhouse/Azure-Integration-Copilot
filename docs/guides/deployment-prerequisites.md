@@ -17,10 +17,13 @@ For local development setup, see the [Developer Guide](developer-guide.md). For 
 - [Setting Up OIDC for GitHub Actions](#setting-up-oidc-for-github-actions)
 - [Setting Up Microsoft Entra External ID (CIAM)](#setting-up-microsoft-entra-external-id-ciam)
   - [Step 1 — Create a CIAM Tenant](#step-1--create-a-ciam-tenant)
-  - [Step 2 — Register an Application](#step-2--register-an-application)
-  - [Step 3 — Configure Token Claims](#step-3--configure-token-claims)
-  - [Step 4 — Enable User Flows](#step-4--enable-user-flows)
-  - [Step 5 — Record the Values](#step-5--record-the-values)
+  - [Step 2 — Register the Backend API Application](#step-2--register-the-backend-api-application)
+  - [Step 3 — Expose API Scopes on the Backend](#step-3--expose-api-scopes-on-the-backend)
+  - [Step 4 — Register the Frontend Application](#step-4--register-the-frontend-application)
+  - [Step 5 — Grant Frontend Permission to Call the Backend API](#step-5--grant-frontend-permission-to-call-the-backend-api)
+  - [Step 6 — Configure Token Claims](#step-6--configure-token-claims)
+  - [Step 7 — Enable User Flows](#step-7--enable-user-flows)
+  - [Step 8 — Record the Values](#step-8--record-the-values)
 - [Setting Up Cloudflare DNS](#setting-up-cloudflare-dns)
 - [Configuration Checklist](#configuration-checklist)
 
@@ -65,7 +68,7 @@ Variables are also configured per environment (`dev`, `prod`). Navigate to **Set
 |----------|-------------|---------|
 | `AZURE_RESOURCE_GROUP` | Name of the Azure resource group where all resources are deployed. | `rg-integration-copilot-dev` |
 | `ENTRA_CIAM_TENANT_SUBDOMAIN` | Microsoft Entra External ID (CIAM) tenant subdomain. This is the first segment of `<subdomain>.onmicrosoft.com`. See [Setting Up Microsoft Entra External ID](#setting-up-microsoft-entra-external-id-ciam). | `myciamtenant` |
-| `ENTRA_CIAM_CLIENT_ID` | Application (client) ID of the app registration created in the CIAM tenant. | `b2c4d6e8-1234-5678-9abc-def012345678` |
+| `ENTRA_CIAM_CLIENT_ID` | Application (client) ID of the **backend API** app registration in the CIAM tenant. The backend validates this as the JWT `aud` (audience) claim. | `b2c4d6e8-1234-5678-9abc-def012345678` |
 | `CLOUDFLARE_DNS_ZONE_ID` | Cloudflare DNS zone ID (32-character lowercase hexadecimal). Found in the Cloudflare dashboard under your domain's overview page. | `023e105f4ecef8ad9ca31a8372d0c353` |
 
 ---
@@ -186,18 +189,16 @@ https://<subdomain>.ciamlogin.com/<subdomain>.onmicrosoft.com/v2.0/.well-known/o
 ENTRA_CIAM_TENANT_SUBDOMAIN=integrationcopilot
 ```
 
-### Step 2 — Register an Application
+### Step 2 — Register the Backend API Application
+
+The backend API needs its own app registration so it can validate incoming tokens. The backend auth middleware (`src/backend/middleware/auth.py`) checks the JWT `aud` (audience) claim against this app registration's client ID.
 
 1. **Switch to the CIAM tenant** — in the Azure portal, click your profile icon → **Switch directory** and select the newly created CIAM tenant.
 2. Navigate to **Microsoft Entra ID** → **App registrations** → **New registration**.
 3. Configure the registration:
-   - **Name:** `Integration Copilot Frontend` (or similar)
+   - **Name:** `Integration Copilot Backend API` (or similar)
    - **Supported account types:** Accounts in this organizational directory only
-   - **Redirect URI:** Select **Single-page application (SPA)** and enter your frontend callback URL for each environment:
-     ```
-     https://<your-frontend-domain>/api/auth/callback/azure-ad
-     ```
-     For example: `https://dev.integrationcopilot.com/api/auth/callback/azure-ad` for dev, `https://integrationcopilot.com/api/auth/callback/azure-ad` for prod.
+   - **Redirect URI:** Leave blank — the backend is an API and does not handle interactive sign-in
 4. Click **Register**.
 5. **Record the Application (client) ID** — this is the value for `ENTRA_CIAM_CLIENT_ID`.
 
@@ -206,21 +207,70 @@ ENTRA_CIAM_TENANT_SUBDOMAIN=integrationcopilot
 ENTRA_CIAM_CLIENT_ID=b2c4d6e8-1234-5678-9abc-def012345678
 ```
 
+> **⚠️ Important:** This client ID is what the backend validates as the token audience (`aud` claim). It is **not** the frontend's client ID.
+
+### Step 3 — Expose API Scopes on the Backend
+
+Define a delegated permission scope so the frontend can request access to the backend API on behalf of the signed-in user.
+
+1. In the backend app registration, go to **Expose an API**.
+2. Click **Set** next to **Application ID URI**. Accept the default (`api://<client-id>`) or set a custom URI.
+3. Click **Add a scope** and configure:
+   - **Scope name:** `access_as_user`
+   - **Who can consent:** Admins and users
+   - **Admin consent display name:** `Access Integration Copilot API`
+   - **Admin consent description:** `Allows the app to access the Integration Copilot API on behalf of the signed-in user.`
+   - **State:** Enabled
+4. Click **Add scope**.
+5. Note the full scope string — you will need this when configuring the frontend:
+
+```
+api://<backend-client-id>/access_as_user
+```
+
+### Step 4 — Register the Frontend Application
+
+The frontend application handles interactive user sign-in and acquires tokens to call the backend API.
+
+1. In the CIAM tenant, navigate to **App registrations** → **New registration**.
+2. Configure the registration:
+   - **Name:** `Integration Copilot Frontend` (or similar)
+   - **Supported account types:** Accounts in this organizational directory only
+   - **Redirect URI:** Select **Single-page application (SPA)** and enter your frontend callback URL for each environment:
+     ```
+     https://<your-frontend-domain>/api/auth/callback/azure-ad
+     ```
+     For example: `https://dev.integrationcopilot.com/api/auth/callback/azure-ad` for dev, `https://integrationcopilot.com/api/auth/callback/azure-ad` for prod.
+3. Click **Register**.
+4. Record the Application (client) ID for frontend configuration.
+
 > **Tip:** For development, you can add `http://localhost:3000/api/auth/callback/azure-ad` as an additional redirect URI.
 
-### Step 3 — Configure Token Claims
+### Step 5 — Grant Frontend Permission to Call the Backend API
 
-The backend extracts two claims from the ID token to identify users (see [Tenancy & Auth](../architecture/tenancy-and-auth.md) for details):
+The frontend app registration must be granted permission to request the `access_as_user` scope exposed by the backend.
+
+1. In the **frontend** app registration, go to **API permissions** → **Add a permission**.
+2. Select the **My APIs** tab → select **Integration Copilot Backend API** (the backend app registration from Step 2).
+3. Select **Delegated permissions** → check **access_as_user**.
+4. Click **Add permissions**.
+5. (Optional) Click **Grant admin consent for \<tenant\>** if you want to pre-consent for all users in the tenant.
+
+> **Note:** When the frontend acquires an access token, it must request the scope `api://<backend-client-id>/access_as_user`. The resulting token will have the backend's client ID as the `aud` claim, which the backend auth middleware validates.
+
+### Step 6 — Configure Token Claims
+
+The backend extracts two claims from the access token to identify users (see [Tenancy & Auth](../architecture/tenancy-and-auth.md) for details):
 
 | Claim | Purpose | Required |
 |-------|---------|----------|
 | `oid` | Object ID — used as the `external_id` for user identification. Falls back to `sub` if `oid` is absent. | ✅ Yes |
 | `email` | User's email address. Extracted from the `emails` array or `email` claim. | ✅ Yes |
 
-To ensure these claims are included in tokens:
+To ensure these claims are included in tokens issued for the backend:
 
-1. In the app registration, go to **Token configuration** → **Add optional claim**.
-2. Select **ID token**.
+1. In the **backend** app registration, go to **Token configuration** → **Add optional claim**.
+2. Select **Access token**.
 3. Add the following claims:
    - `email`
    - `oid` (typically included by default)
@@ -228,7 +278,7 @@ To ensure these claims are included in tokens:
 
 > **Note:** The `oid` claim is usually included by default in Microsoft Entra tokens. The `email` claim may require granting the **email** OpenID permission under **API permissions**.
 
-### Step 4 — Enable User Flows
+### Step 7 — Enable User Flows
 
 User flows define how users sign up and sign in.
 
@@ -237,18 +287,21 @@ User flows define how users sign up and sign in.
    - Select **Email with password** as the identity provider (and/or social providers like Google, GitHub, etc.)
    - Choose which attributes to collect during sign-up (e.g., display name, email)
    - Choose which claims to return in the token
-3. **Link the user flow to your app registration:**
+3. **Link the user flow to both app registrations:**
    - Go to the user flow → **Applications** → **Add application**
-   - Select the app registration created in Step 2
+   - Select **Integration Copilot Backend API** (Step 2)
+   - Select **Integration Copilot Frontend** (Step 4)
 
-### Step 5 — Record the Values
+### Step 8 — Record the Values
 
 After completing the steps above, set the following as GitHub environment variables on both `dev` and `prod`:
 
 | GitHub Variable | Value |
 |----------------|-------|
 | `ENTRA_CIAM_TENANT_SUBDOMAIN` | The subdomain from Step 1 (e.g., `integrationcopilot`) |
-| `ENTRA_CIAM_CLIENT_ID` | The Application (client) ID from Step 2 |
+| `ENTRA_CIAM_CLIENT_ID` | The **backend API** app registration's Application (client) ID from Step 2. This is the value the backend validates as the token audience (`aud` claim). |
+
+> **Note:** The frontend must request the scope `api://<backend-client-id>/access_as_user` when acquiring access tokens. The `<backend-client-id>` is the same `ENTRA_CIAM_CLIENT_ID` value above. This ensures the issued token's `aud` claim matches what the backend expects.
 
 You can verify the CIAM tenant is correctly configured by checking the discovery endpoint:
 
@@ -292,7 +345,7 @@ Use this checklist to verify all prerequisites are in place before triggering th
 
 - [ ] `AZURE_RESOURCE_GROUP` — Target resource group name
 - [ ] `ENTRA_CIAM_TENANT_SUBDOMAIN` — CIAM tenant subdomain
-- [ ] `ENTRA_CIAM_CLIENT_ID` — CIAM app registration client ID
+- [ ] `ENTRA_CIAM_CLIENT_ID` — CIAM **backend API** app registration client ID (token audience)
 - [ ] `CLOUDFLARE_DNS_ZONE_ID` — Cloudflare zone ID
 
 ### One-time Setup
@@ -300,9 +353,12 @@ Use this checklist to verify all prerequisites are in place before triggering th
 - [ ] Azure service principal created with `Contributor` role (and `User Access Administrator` if needed)
 - [ ] Federated credentials configured for `repo:<org>/<repo>:environment:dev` and `:environment:prod`
 - [ ] Microsoft Entra External ID (CIAM) tenant created
-- [ ] App registration created in CIAM tenant with correct redirect URIs
-- [ ] Token claims (`oid`, `email`) configured on the app registration
-- [ ] Sign-up/sign-in user flow created and linked to the app registration
+- [ ] Backend API app registration created in CIAM tenant
+- [ ] API scope `access_as_user` exposed on backend app registration
+- [ ] Frontend app registration created with correct redirect URIs
+- [ ] Frontend granted permission to backend API scope (`access_as_user`)
+- [ ] Token claims (`oid`, `email`) configured on the backend app registration
+- [ ] Sign-up/sign-in user flow created and linked to both app registrations
 - [ ] Cloudflare API token created with zone-scoped DNS edit permissions
 - [ ] GitHub environments `dev` and `prod` created with the secrets and variables above
 
