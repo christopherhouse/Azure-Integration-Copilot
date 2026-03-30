@@ -185,6 +185,15 @@ jobs:
           echo "backend_id=${BACKEND_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy frontend Container App
+        env:
+          FRONTEND_ENV_VARS: >-
+            PORT=3000
+            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
+            ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
+            ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
+            ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
@@ -199,7 +208,7 @@ jobs:
             --memory 0.5Gi \
             --min-replicas 0 \
             --max-replicas 10 \
-            --env-vars "PORT=3000"
+            --env-vars "${FRONTEND_ENV_VARS}"
 
       - name: Deploy backend Container App
         env:
@@ -492,6 +501,15 @@ jobs:
           echo "backend_id=${BACKEND_ID}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy frontend Container App
+        env:
+          FRONTEND_ENV_VARS: >-
+            PORT=3000
+            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
+            ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
+            ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
+            ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
@@ -506,7 +524,7 @@ jobs:
             --memory 0.5Gi \
             --min-replicas 1 \
             --max-replicas 10 \
-            --env-vars "PORT=3000"
+            --env-vars "${FRONTEND_ENV_VARS}"
 
       - name: Deploy backend Container App
         env:
