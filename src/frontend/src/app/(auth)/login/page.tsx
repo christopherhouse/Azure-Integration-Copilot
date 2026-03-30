@@ -43,7 +43,7 @@ export default function LoginPage() {
         ) : (
           <Button
             className="w-full"
-            onClick={() => signIn(undefined, { callbackUrl: "/dashboard" })}
+            onClick={() => signIn("azure-ad", { callbackUrl: "/dashboard" })}
           >
             Sign in
           </Button>
