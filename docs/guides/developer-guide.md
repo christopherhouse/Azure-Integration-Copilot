@@ -328,6 +328,8 @@ The frontend uses [NextAuth.js](https://next-auth.js.org/) for authentication wi
 
 **Development login**: In development mode (`NODE_ENV !== "production"`), a credentials provider (`dev-credentials`) allows login without a real Entra External ID tenant. Enter any email address and password on the login page to sign in.
 
+> **⚠️ Entra CIAM App Registration:** The frontend's Entra CIAM app registration **must** use the **Web** platform type (not SPA) because NextAuth.js runs server-side and exchanges the authorization code using a client secret. Using the SPA platform type causes an opaque `error=OAuthCallback` after login with no useful client-side detail. See the [deployment prerequisites](deployment-prerequisites.md#step-4--register-the-frontend-application) for setup instructions and troubleshooting.
+
 **Auth flow**:
 
 1. Unauthenticated users are redirected to `/login`
