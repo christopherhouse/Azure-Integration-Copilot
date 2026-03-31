@@ -1,9 +1,11 @@
+import asyncio
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
@@ -17,7 +19,7 @@ from shared.cosmos import cosmos_service
 from shared.events import event_grid_publisher
 from shared.exceptions import AppError
 from shared.logging import setup_logging, setup_telemetry
-from shared.models import ErrorDetail, ErrorResponse, Meta, ResponseEnvelope
+from shared.models import ErrorDetail, ErrorResponse, Meta, ResourceStatus, ResponseEnvelope
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -91,15 +93,80 @@ async def not_found_handler(request: Request, _exc: Exception) -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
+# Dependency health checks
+# ---------------------------------------------------------------------------
+
+async def _check_database() -> ResourceStatus:
+    """Check Cosmos DB connectivity and measure latency."""
+    if not settings.cosmos_db_endpoint:
+        return ResourceStatus(type="database", available=False)
+    start = time.perf_counter()
+    available = await cosmos_service.ping()
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    if available:
+        return ResourceStatus(
+            type="database", available=True, latency=f"{elapsed_ms:.1f} ms"
+        )
+    return ResourceStatus(type="database", available=False)
+
+
+async def _check_object_storage() -> ResourceStatus:
+    """Placeholder check for Azure Blob Storage."""
+    return ResourceStatus(type="object_storage", available=False)
+
+
+async def _check_broker() -> ResourceStatus:
+    """Placeholder check for Azure Event Grid."""
+    return ResourceStatus(type="broker", available=False)
+
+
+async def _check_messaging() -> ResourceStatus:
+    """Placeholder check for Azure Web PubSub."""
+    return ResourceStatus(type="messaging", available=False)
+
+
+async def _check_all_resources() -> list[ResourceStatus]:
+    """Run all dependency checks in parallel."""
+    results = await asyncio.gather(
+        _check_database(),
+        _check_object_storage(),
+        _check_broker(),
+        _check_messaging(),
+    )
+    return list(results)
+
+
+def _resource_header_prefix(resource_type: str) -> str:
+    """Convert a resource type like 'object_storage' to 'Object-Storage'."""
+    return resource_type.replace("_", "-").title()
+
+
+# ---------------------------------------------------------------------------
 # Health endpoints
 # ---------------------------------------------------------------------------
 
 @app.api_route("/api/v1/health", methods=["GET", "HEAD"])
 async def health(request: Request):
-    """Liveness probe – always returns 200 when the process is running."""
+    """Health probe – checks downstream dependencies and returns their status."""
     req_id = _request_id(request)
+    resources = await _check_all_resources()
+
+    if request.method == "HEAD":
+        headers: dict[str, str] = {}
+        for r in resources:
+            prefix = _resource_header_prefix(r.type)
+            headers[f"X-Resource-{prefix}-Available"] = str(r.available).lower()
+            if r.latency is not None:
+                headers[f"X-Resource-{prefix}-Latency"] = r.latency
+        return Response(status_code=200, headers=headers)
+
     envelope = ResponseEnvelope(
-        data={"status": "ok"},
+        data={
+            "status": "ok",
+            "resources": [
+                r.model_dump(exclude_none=True) for r in resources
+            ],
+        },
         meta=Meta(request_id=req_id, timestamp=datetime.now(UTC)),
     )
     return envelope.model_dump()

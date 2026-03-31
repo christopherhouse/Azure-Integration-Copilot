@@ -184,15 +184,23 @@ async def test_health_head_no_latency_header_when_unavailable(client):
 # Mocked Cosmos DB available (GET and HEAD)
 # ---------------------------------------------------------------------------
 
+_FAKE_COSMOS_ENDPOINT = "https://fake-cosmos.documents.azure.com:443/"
 
-@pytest.mark.asyncio
-async def test_health_get_database_available_with_latency(client):
-    """When Cosmos DB is reachable, database resource shows available=True with latency."""
+
+@pytest.fixture()
+def _mock_cosmos_available():
+    """Patch cosmos_service.ping to succeed and settings to have a valid endpoint."""
     with (
         patch("main.cosmos_service.ping", new_callable=AsyncMock, return_value=True),
-        patch("main.settings.cosmos_db_endpoint", "https://fake-cosmos.documents.azure.com:443/"),
+        patch("main.settings.cosmos_db_endpoint", _FAKE_COSMOS_ENDPOINT),
     ):
-        response = await client.get("/api/v1/health")
+        yield
+
+
+@pytest.mark.asyncio
+async def test_health_get_database_available_with_latency(client, _mock_cosmos_available):
+    """When Cosmos DB is reachable, database resource shows available=True with latency."""
+    response = await client.get("/api/v1/health")
     assert response.status_code == 200
     resources = response.json()["data"]["resources"]
     db_resource = next(r for r in resources if r["type"] == "database")
@@ -204,13 +212,9 @@ async def test_health_get_database_available_with_latency(client):
 
 
 @pytest.mark.asyncio
-async def test_health_head_database_latency_header_when_available(client):
+async def test_health_head_database_latency_header_when_available(client, _mock_cosmos_available):
     """When Cosmos DB is reachable, HEAD includes X-Resource-Database-Latency header."""
-    with (
-        patch("main.cosmos_service.ping", new_callable=AsyncMock, return_value=True),
-        patch("main.settings.cosmos_db_endpoint", "https://fake-cosmos.documents.azure.com:443/"),
-    ):
-        response = await client.head("/api/v1/health")
+    response = await client.head("/api/v1/health")
     assert response.status_code == 200
     assert "x-resource-database-available" in response.headers
     assert response.headers["x-resource-database-available"] == "true"
