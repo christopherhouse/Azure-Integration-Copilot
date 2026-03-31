@@ -49,7 +49,7 @@ resource wafPolicy 'Microsoft.Network/FrontDoorWebApplicationFirewallPolicies@20
   properties: {
     policySettings: {
       enabledState: 'Enabled'
-      mode: 'Prevention'
+      mode: 'Detection' // TODO: revert to 'Prevention' once WAF rules are validated and tuned
     }
     managedRules: {
       managedRuleSets: [
