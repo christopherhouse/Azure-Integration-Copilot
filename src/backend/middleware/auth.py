@@ -14,6 +14,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 # Dev-mode identity used when SKIP_AUTH=true
 _DEV_EXTERNAL_ID = "dev-user-001"
 _DEV_EMAIL = "dev@localhost"
+_DEV_DISPLAY_NAME = "Dev User"
 
 # JWKS cache
 _jwks_cache: dict | None = None
@@ -72,12 +73,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/v1/health"):
             request.state.external_id = "anonymous"
             request.state.email = ""
+            request.state.display_name = ""
             return await call_next(request)
 
         # Dev mode: skip JWT validation
         if settings.skip_auth:
             request.state.external_id = _DEV_EXTERNAL_ID
             request.state.email = _DEV_EMAIL
+            request.state.display_name = _DEV_DISPLAY_NAME
             return await call_next(request)
 
         # Extract Bearer token
@@ -111,6 +114,9 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
             request.state.external_id = payload.get("oid", payload.get("sub", ""))
             request.state.email = payload.get("email", "")
+            request.state.display_name = payload.get(
+                "name", payload.get("preferred_username", "")
+            )
 
             if not request.state.external_id:
                 return _make_401_response("Token missing required claims.", request_id)
