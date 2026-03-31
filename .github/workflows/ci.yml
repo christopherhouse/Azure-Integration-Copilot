@@ -175,7 +175,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -199,8 +199,8 @@ jobs:
           FRONTEND_TAGS="${FRONTEND_IMAGE}:${SHORT_SHA}"
           BACKEND_TAGS="${BACKEND_IMAGE}:${SHORT_SHA}"
 
-          # On pushes to main, also tag as latest
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          # On pushes to main or workflow dispatch, also tag as latest
+          if [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "workflow_dispatch") && "${{ github.ref }}" == "refs/heads/main" ]]; then
             FRONTEND_TAGS="${FRONTEND_TAGS}
           ${FRONTEND_IMAGE}:latest"
             BACKEND_TAGS="${BACKEND_TAGS}
@@ -276,9 +276,9 @@ jobs:
           sarif_file: backend-trivy-results.sarif
           category: trivy-backend
 
-      # -- Push images to GHCR (only on push to main) -------------------------
+      # -- Push images to GHCR (push to main or workflow dispatch) --------------
       - name: Push frontend image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         id: push-frontend
         run: |
           FRONTEND_IMAGE="${{ steps.meta.outputs.frontend_image }}"
@@ -288,7 +288,7 @@ jobs:
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
       - name: Push backend image
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         id: push-backend
         run: |
           BACKEND_IMAGE="${{ steps.meta.outputs.backend_image }}"
@@ -297,9 +297,9 @@ jobs:
           DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
-      # -- Container metadata (only on push to main) -------------------------
+      # -- Container metadata (push to main or workflow dispatch) --------------
       - name: Generate container metadata
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         env:
           FRONTEND_DIGEST: ${{ steps.push-frontend.outputs.digest }}
           BACKEND_DIGEST: ${{ steps.push-backend.outputs.digest }}
@@ -337,7 +337,7 @@ jobs:
           EOF
 
       - name: Upload container metadata
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: container-metadata
