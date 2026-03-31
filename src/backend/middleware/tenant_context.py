@@ -1,3 +1,5 @@
+"""Tenant context middleware — auto-provisions tenants on first request."""
+
 import structlog
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -10,27 +12,14 @@ from domains.tenants.service import tenant_service, tier_service, user_service
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
-def _make_401_response(message: str) -> JSONResponse:
-    """Build a standard 401 error response."""
-    return JSONResponse(
-        status_code=401,
-        content={
-            "error": {
-                "code": "UNAUTHORIZED",
-                "message": message,
-            }
-        },
-    )
-
-
 class TenantContextMiddleware(BaseHTTPMiddleware):
     """Tenant context middleware.
 
     Resolves the current user's tenant and tier from Cosmos DB
     and sets ``request.state.tenant`` and ``request.state.tier``.
 
-    If the user has not yet registered, only ``POST /api/v1/tenants``
-    (registration) is allowed; all other routes return 401.
+    If the user has not yet registered, a new tenant and owner user are
+    provisioned automatically on the first authenticated API call.
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -59,23 +48,45 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             # Load tenant and tier
             tenant = await tenant_service.get_tenant(user.tenant_id)
             if tenant is None:
-                return _make_401_response("Tenant not found for this user.")
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "error": {
+                            "code": "INTERNAL_ERROR",
+                            "message": "Tenant not found for this user.",
+                        }
+                    },
+                )
 
             tier = tier_service.get_tier(tenant.tier_id)
             request.state.tenant = tenant
             request.state.tier = tier
             structlog.contextvars.bind_contextvars(tenant_id=tenant.id)
         else:
-            # User not found — only allow tenant registration
-            is_registration = (
-                request.method == "POST"
-                and request.url.path.rstrip("/") == "/api/v1/tenants"
-            )
-            if not is_registration:
-                return _make_401_response(
-                    "User not registered. Create a tenant first via POST /api/v1/tenants."
+            # Auto-provision tenant on first authenticated request
+            try:
+                email = getattr(request.state, "email", "")
+                display_name = getattr(request.state, "display_name", "")
+                tenant, _user = await tenant_service.get_or_create_tenant_for_external_user(
+                    external_id=external_id,
+                    email=email,
+                    display_name=display_name,
                 )
-            request.state.tenant = None
-            request.state.tier = FREE_TIER
+                tier = tier_service.get_tier(tenant.tier_id)
+                request.state.tenant = tenant
+                request.state.tier = tier
+                structlog.contextvars.bind_contextvars(tenant_id=tenant.id)
+                logger.info("tenant_auto_provisioned_via_middleware", tenant_id=tenant.id)
+            except Exception:
+                logger.exception("tenant_auto_provision_failed", external_id=external_id)
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "error": {
+                            "code": "PROVISIONING_ERROR",
+                            "message": "Unable to provision tenant. Please try again.",
+                        }
+                    },
+                )
 
         return await call_next(request)

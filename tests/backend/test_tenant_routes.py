@@ -91,18 +91,24 @@ async def test_create_tenant_returns_201(client):
     """POST /api/v1/tenants creates a tenant and returns 201."""
     new_tenant = _make_tenant("t-new", "New Tenant")
     new_user = _make_user("t-new")
+    auto_tenant = _make_tenant("t-auto", "Auto")
+    auto_user = _make_user("t-auto")
 
     with (
         patch("middleware.tenant_context.user_service") as mock_ctx_user_svc,
+        patch("middleware.tenant_context.tenant_service") as mock_ctx_tenant_svc,
         patch("middleware.tenant_context.settings") as mock_settings,
         patch("domains.tenants.router.user_service") as mock_router_user_svc,
         patch("domains.tenants.router.tenant_service") as mock_router_tenant_svc,
     ):
         mock_settings.skip_auth = True
         mock_settings.cosmos_db_endpoint = "https://fake.documents.azure.com/"
-        # User not found in middleware — allow registration
+        # Middleware: user not found → auto-provision
         mock_ctx_user_svc.get_user_by_external_id = AsyncMock(return_value=None)
-        # Router checks: no existing user
+        mock_ctx_tenant_svc.get_or_create_tenant_for_external_user = AsyncMock(
+            return_value=(auto_tenant, auto_user),
+        )
+        # Router checks: no existing user → create
         mock_router_user_svc.get_user_by_external_id = AsyncMock(return_value=None)
         mock_router_tenant_svc.create_tenant = AsyncMock(return_value=(new_tenant, new_user))
 
@@ -149,13 +155,20 @@ async def test_create_tenant_conflict_when_user_exists(client):
 @pytest.mark.asyncio
 async def test_create_tenant_requires_display_name(client):
     """POST /api/v1/tenants without displayName returns 422."""
+    auto_tenant = _make_tenant("t-auto")
+    auto_user = _make_user("t-auto")
+
     with (
         patch("middleware.tenant_context.user_service") as mock_ctx_user_svc,
+        patch("middleware.tenant_context.tenant_service") as mock_ctx_tenant_svc,
         patch("middleware.tenant_context.settings") as mock_settings,
     ):
         mock_settings.skip_auth = True
         mock_settings.cosmos_db_endpoint = "https://fake.documents.azure.com/"
         mock_ctx_user_svc.get_user_by_external_id = AsyncMock(return_value=None)
+        mock_ctx_tenant_svc.get_or_create_tenant_for_external_user = AsyncMock(
+            return_value=(auto_tenant, auto_user),
+        )
 
         response = await client.post(
             "/api/v1/tenants",
