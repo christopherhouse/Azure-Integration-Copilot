@@ -88,6 +88,10 @@ class TenantRepository:
             batch_operations=batch_operations,
             partition_key=tenant.id,
         )
+        if len(results) != 2:  # pragma: no cover — defensive check
+            raise RuntimeError(
+                f"Transactional batch returned {len(results)} results, expected 2"
+            )
         created_tenant = Tenant.model_validate(results[0])
         created_user = User.model_validate(results[1])
         logger.info(

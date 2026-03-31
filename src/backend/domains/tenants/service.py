@@ -102,6 +102,13 @@ class TenantService:
             tenant = await tenant_repository.get_tenant(user.tenant_id)
             if tenant is not None:
                 return tenant, user
+            # Orphaned user record — tenant missing. Log and fall through to
+            # create a fresh tenant+user pair.
+            logger.warning(
+                "orphaned_user_record",
+                external_id=external_id,
+                tenant_id=user.tenant_id,
+            )
 
         # 2. Derive a sensible default display name for auto-provisioned tenants
         tenant_display_name = display_name or email or external_id
@@ -133,6 +140,11 @@ class TenantService:
                 tenant = await tenant_repository.get_tenant(user.tenant_id)
                 if tenant is not None:
                     return tenant, user
+                logger.error(
+                    "conflict_retry_tenant_missing",
+                    external_id=external_id,
+                    tenant_id=user.tenant_id,
+                )
             # If we still can't find the user after a conflict, something is
             # seriously wrong.  Let the caller handle the error.
             raise
