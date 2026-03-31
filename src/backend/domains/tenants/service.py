@@ -4,6 +4,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import structlog
+from azure.cosmos import exceptions as cosmos_exceptions
 
 from .models import (
     FREE_TIER,
@@ -28,11 +29,14 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 class TenantService:
     """Manages tenant lifecycle operations."""
 
-    async def create_tenant(self, request: CreateTenantRequest, owner_external_id: str) -> tuple[Tenant, User]:
-        """Create a new tenant and its owner user.
-
-        Returns the created tenant and user.
-        """
+    def _build_tenant_and_user(
+        self,
+        display_name: str,
+        owner_external_id: str,
+        email: str = "",
+        user_display_name: str = "",
+    ) -> tuple[Tenant, User]:
+        """Build Tenant and User model instances (no persistence)."""
         tenant_id = str(uuid.uuid4())
         user_id = str(uuid.uuid4())
         now = datetime.now(UTC)
@@ -40,31 +44,110 @@ class TenantService:
         tenant = Tenant(
             id=tenant_id,
             partitionKey=tenant_id,
-            displayName=request.display_name,
+            displayName=display_name,
             ownerId=user_id,
             tierId=FREE_TIER.id,
             usage=Usage(daily_analysis_reset_at=now + timedelta(days=1)),
             createdAt=now,
             updatedAt=now,
         )
-        created_tenant = await tenant_repository.create_tenant(tenant)
-
         user = User(
             id=user_id,
             partitionKey=tenant_id,
             tenantId=tenant_id,
             externalId=owner_external_id,
+            email=email,
+            displayName=user_display_name,
             role=UserRole.OWNER,
             createdAt=now,
         )
-        created_user = await tenant_repository.create_user(user)
+        return tenant, user
+
+    async def create_tenant(self, request: CreateTenantRequest, owner_external_id: str) -> tuple[Tenant, User]:
+        """Create a new tenant and its owner user.
+
+        Uses a Cosmos DB transactional batch so both documents are created
+        atomically.  Returns the created tenant and user.
+        """
+        tenant, user = self._build_tenant_and_user(
+            display_name=request.display_name,
+            owner_external_id=owner_external_id,
+        )
+        created_tenant, created_user = await tenant_repository.create_tenant_and_user(tenant, user)
 
         logger.info(
             "tenant_registered",
-            tenant_id=tenant_id,
-            user_id=user_id,
+            tenant_id=created_tenant.id,
+            user_id=created_user.id,
         )
         return created_tenant, created_user
+
+    async def get_or_create_tenant_for_external_user(
+        self,
+        external_id: str,
+        email: str = "",
+        display_name: str = "",
+    ) -> tuple[Tenant, User]:
+        """Idempotent provisioning: return existing tenant or create a new one.
+
+        1. Query user by *external_id*.
+        2. If found, load and return the associated tenant.
+        3. If not found, create a new tenant + owner user atomically.
+        4. Handle race conditions: if a concurrent request already created the
+           user, catch the conflict and return the existing tenant.
+        """
+        # 1. Fast path — user already provisioned
+        user = await tenant_repository.get_user_by_external_id(external_id)
+        if user is not None:
+            tenant = await tenant_repository.get_tenant(user.tenant_id)
+            if tenant is not None:
+                return tenant, user
+            # Orphaned user record — tenant missing. Log and fall through to
+            # create a fresh tenant+user pair.
+            logger.warning(
+                "orphaned_user_record",
+                external_id=external_id,
+                tenant_id=user.tenant_id,
+            )
+
+        # 2. Derive a sensible default display name for auto-provisioned tenants
+        tenant_display_name = display_name or email or external_id
+
+        tenant, user_model = self._build_tenant_and_user(
+            display_name=tenant_display_name,
+            owner_external_id=external_id,
+            email=email,
+            user_display_name=display_name,
+        )
+
+        try:
+            created_tenant, created_user = await tenant_repository.create_tenant_and_user(
+                tenant, user_model
+            )
+            logger.info(
+                "tenant_auto_provisioned",
+                tenant_id=created_tenant.id,
+                user_id=created_user.id,
+                external_id=external_id,
+            )
+            return created_tenant, created_user
+
+        except (cosmos_exceptions.CosmosResourceExistsError, cosmos_exceptions.CosmosBatchOperationError):
+            # A concurrent request already created docs — retry the lookup.
+            logger.info("tenant_provision_conflict_retry", external_id=external_id)
+            user = await tenant_repository.get_user_by_external_id(external_id)
+            if user is not None:
+                tenant = await tenant_repository.get_tenant(user.tenant_id)
+                if tenant is not None:
+                    return tenant, user
+                logger.error(
+                    "conflict_retry_tenant_missing",
+                    external_id=external_id,
+                    tenant_id=user.tenant_id,
+                )
+            # If we still can't find the user after a conflict, something is
+            # seriously wrong.  Let the caller handle the error.
+            raise
 
     async def get_tenant(self, tenant_id: str) -> Tenant | None:
         """Get a tenant by ID."""

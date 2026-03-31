@@ -1,4 +1,4 @@
-"""Tests for tenant context middleware — tenant resolution and first-login flow."""
+"""Tests for tenant context middleware — tenant resolution and auto-provisioning."""
 
 import os
 import sys
@@ -88,45 +88,49 @@ async def test_tenant_resolved_for_known_user(client):
 
 
 @pytest.mark.asyncio
-async def test_unregistered_user_allowed_to_post_tenants(client):
-    """Unregistered user can POST /api/v1/tenants (registration)."""
+async def test_new_user_auto_provisioned(client):
+    """First request by a new user auto-creates tenant/user and proceeds (200)."""
+    tenant = _make_tenant("t-auto")
+    user = _make_user("t-auto")
+
     with (
         patch("middleware.tenant_context.user_service") as mock_user_svc,
+        patch("middleware.tenant_context.tenant_service") as mock_tenant_svc,
         patch("middleware.tenant_context.settings") as mock_settings,
-        patch("domains.tenants.router.user_service") as mock_router_user_svc,
-        patch("domains.tenants.router.tenant_service") as mock_router_tenant_svc,
     ):
         mock_settings.skip_auth = True
         mock_settings.cosmos_db_endpoint = "https://fake.documents.azure.com/"
         mock_user_svc.get_user_by_external_id = AsyncMock(return_value=None)
-        mock_router_user_svc.get_user_by_external_id = AsyncMock(return_value=None)
-
-        new_tenant = _make_tenant("t-new")
-        new_user = _make_user("t-new")
-        mock_router_tenant_svc.create_tenant = AsyncMock(return_value=(new_tenant, new_user))
-
-        response = await client.post(
-            "/api/v1/tenants",
-            json={"displayName": "New Tenant"},
+        mock_tenant_svc.get_or_create_tenant_for_external_user = AsyncMock(
+            return_value=(tenant, user),
         )
-        assert response.status_code == 201
+
+        response = await client.get("/api/v1/tenants/me")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["data"]["id"] == "t-auto"
+        mock_tenant_svc.get_or_create_tenant_for_external_user.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_unregistered_user_blocked_from_other_routes(client):
-    """Unregistered user gets 401 for routes other than POST /api/v1/tenants."""
+async def test_auto_provision_failure_returns_503(client):
+    """Provisioning failure returns a controlled 503 error."""
     with (
         patch("middleware.tenant_context.user_service") as mock_user_svc,
+        patch("middleware.tenant_context.tenant_service") as mock_tenant_svc,
         patch("middleware.tenant_context.settings") as mock_settings,
     ):
         mock_settings.skip_auth = True
         mock_settings.cosmos_db_endpoint = "https://fake.documents.azure.com/"
         mock_user_svc.get_user_by_external_id = AsyncMock(return_value=None)
+        mock_tenant_svc.get_or_create_tenant_for_external_user = AsyncMock(
+            side_effect=RuntimeError("Cosmos DB unavailable"),
+        )
 
         response = await client.get("/api/v1/tenants/me")
-        assert response.status_code == 401
+        assert response.status_code == 503
         body = response.json()
-        assert body["error"]["code"] == "UNAUTHORIZED"
+        assert body["error"]["code"] == "PROVISIONING_ERROR"
 
 
 @pytest.mark.asyncio

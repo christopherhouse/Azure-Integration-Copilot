@@ -70,6 +70,37 @@ class TenantRepository:
         logger.info("user_created", user_id=user.id, tenant_id=user.tenant_id)
         return User.model_validate(result)
 
+    async def create_tenant_and_user(self, tenant: Tenant, user: User) -> tuple[Tenant, User]:
+        """Atomically create a tenant and its owner user via transactional batch.
+
+        Both documents share the same partition key (``tenant_id``), so they
+        can be written in a single Cosmos DB transactional batch.  If either
+        operation fails the entire batch is rolled back.
+        """
+        container = await self._get_container()
+        tenant_doc = tenant.model_dump(by_alias=True)
+        user_doc = user.model_dump(by_alias=True)
+        batch_operations = [
+            ("create", (tenant_doc,), {}),
+            ("create", (user_doc,), {}),
+        ]
+        results = await container.execute_item_batch(
+            batch_operations=batch_operations,
+            partition_key=tenant.id,
+        )
+        if len(results) != 2:  # pragma: no cover — defensive check
+            raise RuntimeError(
+                f"Transactional batch returned {len(results)} results, expected 2"
+            )
+        created_tenant = Tenant.model_validate(results[0])
+        created_user = User.model_validate(results[1])
+        logger.info(
+            "tenant_and_user_created",
+            tenant_id=tenant.id,
+            user_id=user.id,
+        )
+        return created_tenant, created_user
+
     async def get_user_by_external_id(self, external_id: str) -> User | None:
         """Find a user by their external identity provider ID (cross-partition query)."""
         container = await self._get_container()
