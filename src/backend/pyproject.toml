@@ -21,6 +21,7 @@ dependencies = [
     "opentelemetry-instrumentation-logging",
     "azure-monitor-opentelemetry-exporter",
     "python-jose[cryptography]>=3.5.0",
+    "azure-messaging-webpubsubservice>=1.3.0",
 ]
 
 [dependency-groups]

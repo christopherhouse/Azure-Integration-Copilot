@@ -1,3 +1,5 @@
+import logging
+
 import structlog
 from azure.identity.aio import DefaultAzureCredential
 from azure.storage.blob.aio import BlobServiceClient
@@ -22,6 +24,16 @@ class BlobService:
                 account_url=settings.blob_storage_endpoint, credential=self._credential
             )
         return self._client
+
+    async def ping(self) -> bool:
+        """Check connectivity to Azure Blob Storage. Returns True if reachable."""
+        try:
+            client = await self._get_client()
+            await client.get_account_information()
+            return True
+        except Exception:
+            logger.warning("blob_storage_ping_failed", exc_info=True, level=logging.WARNING)
+            return False
 
     async def close(self) -> None:
         """Close the Blob Storage client and credential."""
