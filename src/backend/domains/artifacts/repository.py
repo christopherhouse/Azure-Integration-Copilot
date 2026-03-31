@@ -59,10 +59,10 @@ class ArtifactRepository:
         """List artifacts for a project (paginated, excluding deleted)."""
         container = await self._get_container()
 
-        # Build WHERE clause
+        # Build WHERE clause — exclude soft-deleted artifacts via deletedAt
         where_clause = (
             "WHERE c.partitionKey = @tenantId AND c.type = 'artifact' "
-            "AND c.projectId = @projectId AND c.status != 'deleted'"
+            "AND c.projectId = @projectId AND (NOT IS_DEFINED(c.deletedAt) OR IS_NULL(c.deletedAt))"
         )
         params = [
             {"name": "@tenantId", "value": tenant_id},
@@ -121,11 +121,10 @@ class ArtifactRepository:
         return updated
 
     async def soft_delete(self, tenant_id: str, artifact_id: str) -> Artifact | None:
-        """Soft-delete an artifact by setting status to deleted."""
+        """Soft-delete an artifact by setting deletedAt timestamp."""
         artifact = await self.get_by_id(tenant_id, artifact_id)
         if artifact is None:
             return None
-        artifact.status = "deleted"
         artifact.deleted_at = datetime.now(UTC)
         artifact.updated_at = datetime.now(UTC)
 

@@ -20,7 +20,7 @@ class ArtifactService:
             return None
         if artifact.project_id != project_id:
             return None
-        if artifact.status == "deleted":
+        if artifact.deleted_at is not None:
             return None
         return artifact
 
