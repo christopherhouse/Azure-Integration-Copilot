@@ -1,6 +1,8 @@
 import logging
+from typing import Any
 
 import structlog
+from azure.core.messaging import CloudEvent
 from azure.core.rest import HttpRequest
 from azure.eventgrid.aio import EventGridPublisherClient
 from azure.identity.aio import DefaultAzureCredential
@@ -9,6 +11,28 @@ from config import settings
 from shared.credential import create_credential
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+# ---------------------------------------------------------------------------
+# Event type constants
+# ---------------------------------------------------------------------------
+
+ARTIFACT_UPLOADED = "com.integration-copilot.artifact.uploaded.v1"
+
+
+def build_cloud_event(
+    *,
+    event_type: str,
+    subject: str,
+    data: dict[str, Any],
+    source: str = "/integration-copilot/api",
+) -> CloudEvent:
+    """Build an Azure SDK ``CloudEvent`` instance in CloudEvents v1.0 format."""
+    return CloudEvent(
+        type=event_type,
+        source=source,
+        subject=subject,
+        data=data,
+    )
 
 
 class EventGridPublisher:
@@ -26,6 +50,23 @@ class EventGridPublisher:
                 credential=self._credential,
             )
         return self._client
+
+    async def publish_event(self, event: CloudEvent) -> None:
+        """Publish a single CloudEvent to the configured Event Grid topic.
+
+        If Event Grid is not configured (empty endpoint), the event is
+        silently skipped with a warning log.
+        """
+        if not settings.event_grid_namespace_endpoint:
+            logger.warning("event_grid_not_configured", event_type=event.type)
+            return
+
+        try:
+            client = await self._get_client()
+            await client.send(event, namespace_topic=settings.event_grid_topic)
+            logger.info("event_published", event_type=event.type, subject=event.subject)
+        except Exception:
+            logger.warning("event_publish_failed", event_type=event.type, exc_info=True)
 
     async def ping(self) -> bool:
         """Check connectivity to Azure Event Grid Namespace. Returns True if reachable."""

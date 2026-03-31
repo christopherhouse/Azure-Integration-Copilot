@@ -81,6 +81,7 @@ class Artifact(BaseModel):
     artifact_type: str | None = Field(default=None, alias="artifactType")
     status: ArtifactStatus = ArtifactStatus.UPLOADING
     file_size_bytes: int | None = Field(default=None, alias="fileSizeBytes")
+    blob_path: str | None = Field(default=None, alias="blobPath")
     content_hash: str | None = Field(default=None, alias="contentHash")
     error: ArtifactError | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), alias="createdAt")
