@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-
 # Expected resource types returned by the health endpoint
 EXPECTED_RESOURCE_TYPES = {"database", "object_storage", "broker", "messaging"}
 
