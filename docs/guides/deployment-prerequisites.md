@@ -257,11 +257,14 @@ api://<backend-client-id>/access_as_user
 
 The frontend application handles interactive user sign-in and acquires tokens to call the backend API.
 
+> **⚠️ Critical — You MUST select the "Web" platform, not "SPA":**
+> NextAuth.js runs **server-side** and performs the OAuth authorization code flow with a client secret. This requires the redirect URI to be registered under the **Web** platform type. The **SPA** (Single Page Application) platform type does **not** support client secrets and will cause the token exchange to fail silently. See the [troubleshooting note](#-common-pitfall--spa-vs-web-platform-type) below if you hit issues after login.
+
 1. In the CIAM tenant, navigate to **App registrations** → **New registration**.
 2. Configure the registration:
    - **Name:** `Integration Copilot Frontend` (or similar)
    - **Supported account types:** Accounts in this organizational directory only
-   - **Redirect URI:** Select **Web** and enter your frontend callback URL for each environment:
+   - **Redirect URI:** Select **Web** (⚠️ **not** SPA) and enter your frontend callback URL for each environment:
      ```
      https://<your-frontend-domain>/api/auth/callback/azure-ad
      ```
@@ -272,7 +275,17 @@ The frontend application handles interactive user sign-in and acquires tokens to
 
 > **Tip:** For development, you can add `http://localhost:3000/api/auth/callback/azure-ad` as an additional redirect URI.
 
-> **⚠️ Important:** The frontend uses NextAuth.js which runs server-side and performs the OAuth authorization code flow. This requires a **Web** platform type (not SPA) and a client secret.
+> #### 🔧 Common Pitfall — SPA vs. Web Platform Type
+>
+> **Symptom:** After a successful CIAM login, the user is redirected back to the application but lands on an error page with `error=OAuthCallback` (or the URL contains `?error=OAuthCallback`). No useful error detail is shown in the browser.
+>
+> **Root Cause:** The frontend Entra CIAM app registration has the redirect URI configured under the **SPA** platform instead of the **Web** platform. SPA registrations do not support client secrets, so when NextAuth.js (running server-side) attempts to exchange the authorization code for tokens using the client secret, the token endpoint rejects the request.
+>
+> **Fix:**
+> 1. In the Azure portal, go to the frontend app registration → **Authentication**.
+> 2. Under **Platform configurations**, remove the redirect URI from the **Single-page application** section.
+> 3. Click **Add a platform** → select **Web** → re-enter the same redirect URI (`https://<your-domain>/api/auth/callback/azure-ad`).
+> 4. Save and retry the login.
 
 ### Step 5 — Grant Frontend Permission to Call the Backend API
 
