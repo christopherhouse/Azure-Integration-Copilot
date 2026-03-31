@@ -35,6 +35,14 @@ class PaginatedResponse[T](BaseModel):
     pagination: PaginationInfo
 
 
+class ResourceStatus(BaseModel):
+    """Status of a downstream dependency checked during health probes."""
+
+    type: str
+    available: bool
+    latency: str | None = None
+
+
 class ErrorDetail(BaseModel):
     """Detail of an error in a standard error response."""
 
