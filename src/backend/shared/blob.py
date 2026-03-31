@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 
 import structlog
 from azure.identity.aio import DefaultAzureCredential
+from azure.storage.blob import ContentSettings
 from azure.storage.blob.aio import BlobServiceClient
 
 from config import settings
@@ -33,7 +34,9 @@ class BlobService:
         client = await self._get_client()
         container_client = client.get_container_client(ARTIFACTS_CONTAINER)
         blob_client = container_client.get_blob_client(blob_path)
-        await blob_client.upload_blob(data, overwrite=True, content_settings={"content_type": content_type})
+        await blob_client.upload_blob(
+            data, overwrite=True, content_settings=ContentSettings(content_type=content_type)
+        )
         logger.info("blob_uploaded", blob_path=blob_path)
 
     async def download_blob(self, blob_path: str) -> bytes:
