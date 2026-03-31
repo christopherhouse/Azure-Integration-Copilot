@@ -23,9 +23,9 @@ param webPubSubSku = 'Free_F1'
 
 // Azure Front Door — set to true after first deployment
 param deployFrontDoor = false
-param frontendHostname = 'dev.aic.christopher-house.com'
-param backendHostname = 'dev.api-aic.christopher-house.com'
-param webpubsubHostname = 'dev.pubsub.christopher-house.com'
+param frontendHostname = 'dev.integrisight.ai'
+param backendHostname = 'dev.api.integrisight.ai'
+param webpubsubHostname = 'dev.pubsub.integrisight.ai'
 
 // Cosmos DB databases
 param cosmosSqlDatabases = [
