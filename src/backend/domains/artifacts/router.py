@@ -73,12 +73,19 @@ async def upload_artifact(
             artifact_type_override=artifact_type,
         )
     except ValueError as exc:
+        logger.warning(
+            "File upload rejected due to ValueError",
+            request_id=req_id,
+            tenant_id=_get_tenant_id(request),
+            project_id=project_id,
+            error=str(exc),
+        )
         return JSONResponse(
             status_code=413,
             content={
                 "error": {
                     "code": "FILE_TOO_LARGE",
-                    "message": str(exc),
+                    "message": "Uploaded file is too large.",
                     "request_id": req_id,
                 }
             },
