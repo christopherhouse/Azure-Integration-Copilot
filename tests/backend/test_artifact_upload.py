@@ -183,8 +183,10 @@ async def test_upload_artifact_with_type_override(client):
 @pytest.mark.asyncio
 async def test_upload_artifact_returns_401_without_tenant(client):
     """POST upload without tenant context returns 401."""
-    mock1, mock2, mock3 = _setup_context_mocks(None)
-    with mock1, mock2, mock3:
+    # Patch settings so the middleware takes the dev-mode-no-cosmos path,
+    # which sets request.state.tenant = None and lets the route handler
+    # return 401.
+    with patch("middleware.tenant_context.settings", skip_auth=True, cosmos_db_endpoint=""):
         response = await client.post(
             "/api/v1/projects/prj-001/artifacts",
             files={"file": ("test.json", b'{}', "application/json")},
