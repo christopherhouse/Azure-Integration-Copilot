@@ -10,6 +10,8 @@ from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 from config import settings
+from domains.artifacts.router import router as artifact_router
+from domains.projects.router import router as project_router
 from domains.tenants.router import router as tenant_router
 from middleware.auth import AuthMiddleware
 from middleware.quota import QuotaMiddleware
@@ -53,6 +55,8 @@ app.add_middleware(AuthMiddleware)
 
 # Register routers
 app.include_router(tenant_router)
+app.include_router(project_router)
+app.include_router(artifact_router)
 
 
 

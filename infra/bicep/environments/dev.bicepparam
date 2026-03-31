@@ -30,8 +30,17 @@ param webpubsubHostname = 'dev.pubsub.integrisight.ai'
 // Cosmos DB databases
 param cosmosSqlDatabases = [
   {
-    name: 'integration-cp'
-    containers: []
+    name: 'integration-copilot'
+    containers: [
+      {
+        name: 'tenants'
+        paths: ['/partitionKey']
+      }
+      {
+        name: 'projects'
+        paths: ['/partitionKey']
+      }
+    ]
   }
 ]
 
