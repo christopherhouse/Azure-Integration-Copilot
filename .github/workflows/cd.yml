@@ -335,15 +335,21 @@ jobs:
           PUBSUB_ENDPOINT: ${{ steps.deploy-afd.outputs.pubsub_endpoint }}
           CLOUDFLARE_DNS_ZONE_ID: ${{ vars.CLOUDFLARE_DNS_ZONE_ID }}
           CLOUDFLARE_DNS_API_KEY: ${{ secrets.CLOUDFLARE_DNS_API_KEY }}
+          CLOUDFLARE_DEBUG: ${{ vars.CLOUDFLARE_DEBUG }}
         run: |
           chmod +x infra/scripts/configure-cloudflare-dns.sh
+          DEBUG_FLAG=""
+          if [[ "${CLOUDFLARE_DEBUG}" == "true" ]]; then
+            DEBUG_FLAG="--debug"
+          fi
           ./infra/scripts/configure-cloudflare-dns.sh \
             --profile-name "${PROFILE_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
             --cloudflare-zone-id "${CLOUDFLARE_DNS_ZONE_ID}" \
             --cloudflare-api-key "${CLOUDFLARE_DNS_API_KEY}" \
             --domains "cd-frontend,cd-backend,cd-pubsub" \
-            --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}"
+            --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}" \
+            ${DEBUG_FLAG}
 
   # ---------------------------------------------------------------------------
   # Prod — Deploy Infrastructure (Bicep)
@@ -651,12 +657,18 @@ jobs:
           PUBSUB_ENDPOINT: ${{ steps.deploy-afd.outputs.pubsub_endpoint }}
           CLOUDFLARE_DNS_ZONE_ID: ${{ vars.CLOUDFLARE_DNS_ZONE_ID }}
           CLOUDFLARE_DNS_API_KEY: ${{ secrets.CLOUDFLARE_DNS_API_KEY }}
+          CLOUDFLARE_DEBUG: ${{ vars.CLOUDFLARE_DEBUG }}
         run: |
           chmod +x infra/scripts/configure-cloudflare-dns.sh
+          DEBUG_FLAG=""
+          if [[ "${CLOUDFLARE_DEBUG}" == "true" ]]; then
+            DEBUG_FLAG="--debug"
+          fi
           ./infra/scripts/configure-cloudflare-dns.sh \
             --profile-name "${PROFILE_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
             --cloudflare-zone-id "${CLOUDFLARE_DNS_ZONE_ID}" \
             --cloudflare-api-key "${CLOUDFLARE_DNS_API_KEY}" \
             --domains "cd-frontend,cd-backend,cd-pubsub" \
-            --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}"
+            --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}" \
+            ${DEBUG_FLAG}

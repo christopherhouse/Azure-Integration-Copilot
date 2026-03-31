@@ -12,7 +12,8 @@
 #     --cloudflare-zone-id <cloudflare-dns-zone-id> \
 #     --cloudflare-api-key <cloudflare-api-token> \
 #     --domains "cd-frontend,cd-backend,cd-pubsub" \
-#     --endpoints "frontend.azurefd.net,backend.azurefd.net,pubsub.azurefd.net"
+#     --endpoints "frontend.azurefd.net,backend.azurefd.net,pubsub.azurefd.net" \
+#     [--debug]
 # =============================================================================
 
 set -euo pipefail
@@ -35,6 +36,7 @@ log_warn()    { echo -e "${YELLOW}⚠${NC}  $*"; }
 log_error()   { echo -e "${RED}✖${NC}  $*" >&2; }
 log_step()    { echo -e "${CYAN}▶${NC}  ${BOLD}$*${NC}"; }
 log_detail()  { echo -e "   ${MAGENTA}→${NC} $*"; }
+log_debug()   { [[ "${DEBUG_MODE}" == "true" ]] && echo -e "   ${YELLOW}[DEBUG]${NC} $*" || true; }
 
 print_banner() {
   echo -e ""
@@ -52,6 +54,7 @@ CF_ZONE_ID=""
 CF_API_KEY=""
 DOMAINS_CSV=""
 ENDPOINTS_CSV=""
+DEBUG_MODE="false"
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -64,6 +67,7 @@ while [[ $# -gt 0 ]]; do
     --cloudflare-api-key) CF_API_KEY="$2";       shift 2 ;;
     --domains)            DOMAINS_CSV="$2";      shift 2 ;;
     --endpoints)          ENDPOINTS_CSV="$2";    shift 2 ;;
+    --debug)              DEBUG_MODE="true";     shift   ;;
     *)
       log_error "Unknown option: $1"
       exit 1
@@ -108,6 +112,22 @@ fi
 CF_API="https://api.cloudflare.com/client/v4"
 
 # ---------------------------------------------------------------------------
+# Debug: print configuration summary (mask sensitive values)
+# ---------------------------------------------------------------------------
+if [[ "${DEBUG_MODE}" == "true" ]]; then
+  MASKED_KEY="${CF_API_KEY:0:4}••••${CF_API_KEY: -4}"
+  log_info "Debug mode enabled"
+  log_debug "Profile name  : ${PROFILE_NAME}"
+  log_debug "Resource group: ${RESOURCE_GROUP}"
+  log_debug "CF Zone ID    : ${CF_ZONE_ID}"
+  log_debug "CF API key    : ${MASKED_KEY}"
+  log_debug "CF API base   : ${CF_API}"
+  log_debug "Domains       : ${DOMAINS_CSV}"
+  log_debug "Endpoints     : ${ENDPOINTS_CSV}"
+  echo ""
+fi
+
+# ---------------------------------------------------------------------------
 # Cloudflare API helpers
 # ---------------------------------------------------------------------------
 
@@ -117,14 +137,20 @@ cf_record_exists() {
   local RECORD_TYPE="$1"
   local RECORD_NAME="$2"
 
+  local URL="${CF_API}/zones/${CF_ZONE_ID}/dns_records?type=${RECORD_TYPE}&name=${RECORD_NAME}"
+  log_debug "cf_record_exists → GET ${URL}"
+
   local RESPONSE
   RESPONSE=$(curl -s -X GET \
-    "${CF_API}/zones/${CF_ZONE_ID}/dns_records?type=${RECORD_TYPE}&name=${RECORD_NAME}" \
+    "${URL}" \
     -H "Authorization: Bearer ${CF_API_KEY}" \
     -H "Content-Type: application/json")
 
+  log_debug "cf_record_exists → Response: ${RESPONSE}"
+
   local COUNT
   COUNT=$(echo "${RESPONSE}" | jq -r '.result | length')
+  log_debug "cf_record_exists → Matching records: ${COUNT}"
   [[ "${COUNT}" -gt 0 ]]
 }
 
@@ -135,12 +161,19 @@ cf_create_record() {
   local RECORD_NAME="$2"
   local RECORD_CONTENT="$3"
 
+  local URL="${CF_API}/zones/${CF_ZONE_ID}/dns_records"
+  local PAYLOAD="{\"type\":\"${RECORD_TYPE}\",\"name\":\"${RECORD_NAME}\",\"content\":\"${RECORD_CONTENT}\",\"ttl\":1,\"proxied\":false}"
+  log_debug "cf_create_record → POST ${URL}"
+  log_debug "cf_create_record → Payload: ${PAYLOAD}"
+
   local RESPONSE
   RESPONSE=$(curl -s -X POST \
-    "${CF_API}/zones/${CF_ZONE_ID}/dns_records" \
+    "${URL}" \
     -H "Authorization: Bearer ${CF_API_KEY}" \
     -H "Content-Type: application/json" \
-    --data "{\"type\":\"${RECORD_TYPE}\",\"name\":\"${RECORD_NAME}\",\"content\":\"${RECORD_CONTENT}\",\"ttl\":1,\"proxied\":false}")
+    --data "${PAYLOAD}")
+
+  log_debug "cf_create_record → Response: ${RESPONSE}"
 
   local SUCCESS
   SUCCESS=$(echo "${RESPONSE}" | jq -r '.success')
