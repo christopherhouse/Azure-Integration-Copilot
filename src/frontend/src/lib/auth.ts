@@ -28,20 +28,25 @@ function buildEntraCiamProvider(): OAuthConfig<Record<string, unknown>>[] {
     return [];
   }
 
+  // NextAuth v4 runtime supports type "oidc" for full OpenID Connect handling
+  // (ID token validation, JWKS, etc.), but the TypeScript declarations only
+  // include "oauth".  The assertion through `unknown` satisfies the compiler.
   return [
     {
       id: "azure-ad",
       name: "Microsoft Entra",
-      type: "oauth",
+      type: "oidc",
       wellKnown: `https://${subdomain}.ciamlogin.com/${subdomain}.onmicrosoft.com/v2.0/.well-known/openid-configuration`,
       clientId,
       clientSecret,
+      client: {
+        token_endpoint_auth_method: "client_secret_post",
+      },
       authorization: {
         params: {
           scope: `openid profile email offline_access api://${backendClientId}/access_as_user`,
         },
       },
-      idToken: true,
       checks: ["pkce", "state"],
       profile(profile: Record<string, unknown>) {
         return {
@@ -52,7 +57,7 @@ function buildEntraCiamProvider(): OAuthConfig<Record<string, unknown>>[] {
             (profile.preferred_username as string),
         };
       },
-    },
+    } as unknown as OAuthConfig<Record<string, unknown>>,
   ];
 }
 
