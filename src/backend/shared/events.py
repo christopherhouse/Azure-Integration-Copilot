@@ -1,4 +1,7 @@
+import logging
+
 import structlog
+from azure.core.rest import HttpRequest
 from azure.eventgrid.aio import EventGridPublisherClient
 from azure.identity.aio import DefaultAzureCredential
 
@@ -23,6 +26,20 @@ class EventGridPublisher:
                 credential=self._credential,
             )
         return self._client
+
+    async def ping(self) -> bool:
+        """Check connectivity to Azure Event Grid Namespace. Returns True if reachable."""
+        try:
+            client = await self._get_client()
+            # Use the SDK pipeline to issue a lightweight GET against the namespace
+            # endpoint.  Any HTTP-level response (including 404) confirms network
+            # reachability; only transport / auth failures should surface as errors.
+            request = HttpRequest(method="GET", url=settings.event_grid_namespace_endpoint)
+            response = await client.send_request(request)
+            return response.status_code < 500
+        except Exception:
+            logger.warning("event_grid_ping_failed", exc_info=True, level=logging.WARNING)
+            return False
 
     async def close(self) -> None:
         """Close the Event Grid publisher client and credential."""

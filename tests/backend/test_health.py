@@ -131,17 +131,15 @@ async def test_health_get_database_unavailable_when_not_configured(client):
 
 
 @pytest.mark.asyncio
-async def test_health_get_scaffolded_resources_unavailable(client):
-    """object_storage, broker, and messaging are all available=False."""
+async def test_health_get_all_resources_unavailable_when_not_configured(client):
+    """All resources show available=False when endpoints are empty."""
     response = await client.get("/api/v1/health")
     assert response.status_code == 200
     resources = response.json()["data"]["resources"]
-    scaffolded_types = {"object_storage", "broker", "messaging"}
     for resource in resources:
-        if resource["type"] in scaffolded_types:
-            assert resource["available"] is False, (
-                f"Expected {resource['type']} to be unavailable"
-            )
+        assert resource["available"] is False, (
+            f"Expected {resource['type']} to be unavailable when endpoint is not configured"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -222,3 +220,171 @@ async def test_health_head_database_latency_header_when_available(client, mock_c
     assert re.match(r"^\d+\.\d+ ms$", latency_value), (
         f"Latency header format unexpected: {latency_value}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Mocked Blob Storage available (GET and HEAD)
+# ---------------------------------------------------------------------------
+
+_FAKE_BLOB_ENDPOINT = "https://fakestorage.blob.core.windows.net/"
+
+
+@pytest.fixture()
+def mock_blob_available():
+    """Patch blob_service.ping to succeed and settings to have a valid endpoint."""
+    with (
+        patch("main.blob_service.ping", new_callable=AsyncMock, return_value=True),
+        patch("main.settings.blob_storage_endpoint", _FAKE_BLOB_ENDPOINT),
+    ):
+        yield
+
+
+@pytest.mark.asyncio
+async def test_health_get_blob_available_with_latency(client, mock_blob_available):
+    """When Blob Storage is reachable, object_storage resource shows available=True with latency."""
+    response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    resources = response.json()["data"]["resources"]
+    blob_resource = next(r for r in resources if r["type"] == "object_storage")
+    assert blob_resource["available"] is True
+    assert "latency" in blob_resource
+    assert re.match(r"^\d+\.\d+ ms$", blob_resource["latency"])
+
+
+@pytest.mark.asyncio
+async def test_health_head_blob_latency_header_when_available(client, mock_blob_available):
+    """When Blob Storage is reachable, HEAD includes X-Resource-Object-Storage-Latency header."""
+    response = await client.head("/api/v1/health")
+    assert response.status_code == 200
+    assert response.headers["x-resource-object-storage-available"] == "true"
+    assert "x-resource-object-storage-latency" in response.headers
+    latency_value = response.headers["x-resource-object-storage-latency"]
+    assert re.match(r"^\d+\.\d+ ms$", latency_value)
+
+
+# ---------------------------------------------------------------------------
+# Mocked Event Grid available (GET and HEAD)
+# ---------------------------------------------------------------------------
+
+_FAKE_EVENT_GRID_ENDPOINT = "https://fake-eventgrid.westus2-1.eventgrid.azure.net/"
+
+
+@pytest.fixture()
+def mock_event_grid_available():
+    """Patch event_grid_publisher.ping to succeed and settings to have a valid endpoint."""
+    with (
+        patch("main.event_grid_publisher.ping", new_callable=AsyncMock, return_value=True),
+        patch("main.settings.event_grid_namespace_endpoint", _FAKE_EVENT_GRID_ENDPOINT),
+    ):
+        yield
+
+
+@pytest.mark.asyncio
+async def test_health_get_event_grid_available_with_latency(client, mock_event_grid_available):
+    """When Event Grid is reachable, broker resource shows available=True with latency."""
+    response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    resources = response.json()["data"]["resources"]
+    eg_resource = next(r for r in resources if r["type"] == "broker")
+    assert eg_resource["available"] is True
+    assert "latency" in eg_resource
+    assert re.match(r"^\d+\.\d+ ms$", eg_resource["latency"])
+
+
+@pytest.mark.asyncio
+async def test_health_head_event_grid_latency_header_when_available(client, mock_event_grid_available):
+    """When Event Grid is reachable, HEAD includes X-Resource-Broker-Latency header."""
+    response = await client.head("/api/v1/health")
+    assert response.status_code == 200
+    assert response.headers["x-resource-broker-available"] == "true"
+    assert "x-resource-broker-latency" in response.headers
+    latency_value = response.headers["x-resource-broker-latency"]
+    assert re.match(r"^\d+\.\d+ ms$", latency_value)
+
+
+# ---------------------------------------------------------------------------
+# Mocked Web PubSub available (GET and HEAD)
+# ---------------------------------------------------------------------------
+
+_FAKE_WEB_PUBSUB_ENDPOINT = "https://fake-webpubsub.webpubsub.azure.com/"
+
+
+@pytest.fixture()
+def mock_web_pubsub_available():
+    """Patch web_pubsub_service.ping to succeed and settings to have a valid endpoint."""
+    with (
+        patch("main.web_pubsub_service.ping", new_callable=AsyncMock, return_value=True),
+        patch("main.settings.web_pubsub_endpoint", _FAKE_WEB_PUBSUB_ENDPOINT),
+    ):
+        yield
+
+
+@pytest.mark.asyncio
+async def test_health_get_web_pubsub_available_with_latency(client, mock_web_pubsub_available):
+    """When Web PubSub is reachable, messaging resource shows available=True with latency."""
+    response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    resources = response.json()["data"]["resources"]
+    wps_resource = next(r for r in resources if r["type"] == "messaging")
+    assert wps_resource["available"] is True
+    assert "latency" in wps_resource
+    assert re.match(r"^\d+\.\d+ ms$", wps_resource["latency"])
+
+
+@pytest.mark.asyncio
+async def test_health_head_web_pubsub_latency_header_when_available(client, mock_web_pubsub_available):
+    """When Web PubSub is reachable, HEAD includes X-Resource-Messaging-Latency header."""
+    response = await client.head("/api/v1/health")
+    assert response.status_code == 200
+    assert response.headers["x-resource-messaging-available"] == "true"
+    assert "x-resource-messaging-latency" in response.headers
+    latency_value = response.headers["x-resource-messaging-latency"]
+    assert re.match(r"^\d+\.\d+ ms$", latency_value)
+
+
+# ---------------------------------------------------------------------------
+# All resources available
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def mock_all_resources_available(
+    mock_cosmos_available,
+    mock_blob_available,
+    mock_event_grid_available,
+    mock_web_pubsub_available,
+):
+    """Composite fixture: all four downstream dependencies are reachable."""
+    yield
+
+
+@pytest.mark.asyncio
+async def test_health_get_all_resources_available(client, mock_all_resources_available):
+    """When all dependencies are reachable, every resource shows available=True with latency."""
+    response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    resources = response.json()["data"]["resources"]
+    for resource in resources:
+        assert resource["available"] is True, (
+            f"Expected {resource['type']} to be available"
+        )
+        assert "latency" in resource, (
+            f"Expected latency for {resource['type']}"
+        )
+        assert re.match(r"^\d+\.\d+ ms$", resource["latency"])
+
+
+@pytest.mark.asyncio
+async def test_health_head_all_latency_headers_when_all_available(client, mock_all_resources_available):
+    """When all resources are available, HEAD returns latency headers for all four."""
+    response = await client.head("/api/v1/health")
+    assert response.status_code == 200
+    expected_latency_headers = [
+        "x-resource-database-latency",
+        "x-resource-object-storage-latency",
+        "x-resource-broker-latency",
+        "x-resource-messaging-latency",
+    ]
+    for header in expected_latency_headers:
+        assert header in response.headers, f"Missing latency header: {header}"
+        assert re.match(r"^\d+\.\d+ ms$", response.headers[header])

@@ -20,6 +20,7 @@ from shared.events import event_grid_publisher
 from shared.exceptions import AppError
 from shared.logging import setup_logging, setup_telemetry
 from shared.models import ErrorDetail, ErrorResponse, Meta, ResourceStatus, ResponseEnvelope
+from shared.webpubsub import web_pubsub_service
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -34,6 +35,7 @@ async def lifespan(_app: FastAPI):
     await cosmos_service.close()
     await blob_service.close()
     await event_grid_publisher.close()
+    await web_pubsub_service.close()
     logger.info("app_stopped")
 
 
@@ -111,17 +113,44 @@ async def _check_database() -> ResourceStatus:
 
 
 async def _check_object_storage() -> ResourceStatus:
-    """Placeholder check for Azure Blob Storage."""
+    """Check Azure Blob Storage connectivity and measure latency."""
+    if not settings.blob_storage_endpoint:
+        return ResourceStatus(type="object_storage", available=False)
+    start_time = time.perf_counter()
+    available = await blob_service.ping()
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    if available:
+        return ResourceStatus(
+            type="object_storage", available=True, latency=f"{elapsed_ms:.1f} ms"
+        )
     return ResourceStatus(type="object_storage", available=False)
 
 
 async def _check_broker() -> ResourceStatus:
-    """Placeholder check for Azure Event Grid."""
+    """Check Azure Event Grid Namespace connectivity and measure latency."""
+    if not settings.event_grid_namespace_endpoint:
+        return ResourceStatus(type="broker", available=False)
+    start_time = time.perf_counter()
+    available = await event_grid_publisher.ping()
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    if available:
+        return ResourceStatus(
+            type="broker", available=True, latency=f"{elapsed_ms:.1f} ms"
+        )
     return ResourceStatus(type="broker", available=False)
 
 
 async def _check_messaging() -> ResourceStatus:
-    """Placeholder check for Azure Web PubSub."""
+    """Check Azure Web PubSub connectivity and measure latency."""
+    if not settings.web_pubsub_endpoint:
+        return ResourceStatus(type="messaging", available=False)
+    start_time = time.perf_counter()
+    available = await web_pubsub_service.ping()
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
+    if available:
+        return ResourceStatus(
+            type="messaging", available=True, latency=f"{elapsed_ms:.1f} ms"
+        )
     return ResourceStatus(type="messaging", available=False)
 
 
