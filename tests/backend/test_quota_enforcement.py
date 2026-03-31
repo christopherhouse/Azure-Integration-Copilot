@@ -182,9 +182,11 @@ async def test_quota_not_checked_for_get_requests(client):
 
     mock1, mock2, mock3 = _setup_tenant_mocks(tenant)
     with mock1, mock2, mock3:
-        response = await client.get("/api/v1/projects")
-        # Should not be 429
-        assert response.status_code != 429
+        with patch("domains.projects.router.project_service") as mock_svc:
+            mock_svc.list_projects = AsyncMock(return_value=([], 0))
+            response = await client.get("/api/v1/projects")
+            # Should not be 429
+            assert response.status_code != 429
 
 
 @pytest.mark.asyncio
