@@ -10,9 +10,9 @@ param environment = 'dev'
 param workload = 'aic'
 
 // Custom domain hostnames
-param frontendHostname = 'dev.aic.christopher-house.com'
-param backendHostname = 'dev.api-aic.christopher-house.com'
-param webpubsubHostname = 'dev.pubsub.christopher-house.com'
+param frontendHostname = 'dev.integrisight.ai'
+param backendHostname = 'dev.api.integrisight.ai'
+param webpubsubHostname = 'dev.pubsub.integrisight.ai'
 
 param tags = {
   project: 'azure-integration-copilot'
