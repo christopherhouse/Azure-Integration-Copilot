@@ -1,15 +1,124 @@
 """Artifact domain service — business logic for artifact metadata."""
 
-import structlog
+import uuid
 
-from .models import Artifact, ArtifactStatus
+import structlog
+from fastapi import UploadFile
+
+from domains.tenants.models import Tenant, TierDefinition
+from domains.tenants.repository import tenant_repository
+from shared.blob import blob_service
+from shared.events import ARTIFACT_UPLOADED, build_cloud_event, event_grid_publisher
+
+from .content_hash import compute_hash
+from .models import Artifact, ArtifactStatus, transition_status
 from .repository import artifact_repository
+from .type_detector import detect_artifact_type
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 class ArtifactService:
     """Manages artifact metadata operations."""
+
+    async def upload_artifact(
+        self,
+        tenant: Tenant,
+        tier: TierDefinition,
+        project_id: str,
+        file: UploadFile,
+        artifact_type_override: str | None = None,
+    ) -> Artifact:
+        """Upload an artifact file, store in Blob Storage, and publish event.
+
+        Returns the created artifact metadata document.
+        Raises ValueError for file size violations.
+        """
+        # --- File size validation ---
+        max_size = tier.limits.max_file_size_mb * 1024 * 1024
+        content = await file.read()
+        file_size = len(content)
+        await file.seek(0)
+
+        if file_size > max_size:
+            raise ValueError(
+                f"File size {file_size} exceeds maximum {max_size} bytes "
+                f"({tier.limits.max_file_size_mb} MB)."
+            )
+
+        # --- Generate artifact ID ---
+        artifact_id = f"art_{uuid.uuid4().hex[:12]}"
+
+        # --- Detect artifact type ---
+        filename = file.filename or "unknown"
+        if artifact_type_override:
+            detected_type = artifact_type_override
+        else:
+            detected_type = await detect_artifact_type(filename, file)
+
+        # --- Create initial metadata (status: uploading) ---
+        artifact = Artifact(
+            id=artifact_id,
+            partitionKey=tenant.id,
+            tenantId=tenant.id,
+            projectId=project_id,
+            name=filename,
+            artifactType=detected_type,
+            status=ArtifactStatus.UPLOADING,
+            fileSizeBytes=file_size,
+        )
+        artifact = await artifact_repository.create(artifact)
+
+        # --- Upload to Blob Storage ---
+        blob_path = f"tenants/{tenant.id}/projects/{project_id}/artifacts/{artifact_id}/{filename}"
+        await blob_service.upload_blob(blob_path, content, content_type=file.content_type or "application/octet-stream")
+
+        # --- Compute content hash ---
+        content_hash = await compute_hash(file)
+
+        # --- Update metadata to uploaded / unsupported ---
+        target_status = ArtifactStatus.UNSUPPORTED if detected_type == "unknown" else ArtifactStatus.UPLOADED
+        transition_status(artifact.status, target_status)
+        artifact.status = target_status
+        artifact.blob_path = blob_path
+        artifact.content_hash = content_hash
+        artifact = await artifact_repository.update(artifact)
+
+        # --- Increment tenant usage ---
+        await tenant_repository.increment_usage(tenant.id, "total_artifact_count")
+
+        # --- Publish ArtifactUploaded event ---
+        if target_status == ArtifactStatus.UPLOADED:
+            event = build_cloud_event(
+                event_type=ARTIFACT_UPLOADED,
+                subject=f"tenants/{tenant.id}/projects/{project_id}/artifacts/{artifact_id}",
+                data={
+                    "tenantId": tenant.id,
+                    "projectId": project_id,
+                    "artifactId": artifact_id,
+                    "artifactType": detected_type,
+                    "blobPath": blob_path,
+                    "fileSizeBytes": file_size,
+                    "contentHash": content_hash,
+                },
+            )
+            await event_grid_publisher.publish_event(event)
+
+        return artifact
+
+    async def download_artifact(
+        self, tenant_id: str, project_id: str, artifact_id: str
+    ) -> tuple[bytes, str] | None:
+        """Download artifact file content from Blob Storage.
+
+        Returns (content_bytes, filename) or None if artifact not found.
+        """
+        artifact = await self.get_artifact(tenant_id, project_id, artifact_id)
+        if artifact is None or artifact.blob_path is None:
+            return None
+
+        content = await blob_service.download_blob(artifact.blob_path)
+        return content, artifact.name
 
     async def get_artifact(
         self, tenant_id: str, project_id: str, artifact_id: str

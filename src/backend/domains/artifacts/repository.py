@@ -120,6 +120,21 @@ class ArtifactRepository:
         updated.etag = result.get("_etag")
         return updated
 
+    async def update(self, artifact: Artifact) -> Artifact:
+        """Persist an artifact document (full replace) with optimistic concurrency."""
+        container = await self._get_container()
+        artifact.updated_at = datetime.now(UTC)
+        doc = artifact.model_dump(by_alias=True)
+        kwargs: dict = {}
+        if artifact.etag:
+            kwargs["etag"] = artifact.etag
+            kwargs["match_condition"] = "IfMatch"
+        result = await container.replace_item(item=artifact.id, body=doc, **kwargs)
+        logger.info("artifact_updated", artifact_id=artifact.id)
+        updated = Artifact.model_validate(result)
+        updated.etag = result.get("_etag")
+        return updated
+
     async def soft_delete(self, tenant_id: str, artifact_id: str) -> Artifact | None:
         """Soft-delete an artifact by setting deletedAt timestamp."""
         artifact = await self.get_by_id(tenant_id, artifact_id)

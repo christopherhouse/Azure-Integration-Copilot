@@ -5,8 +5,8 @@ import uuid
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, File, Form, Query, Request, UploadFile
+from fastapi.responses import JSONResponse, Response
 
 from shared.models import Meta, PaginatedResponse, PaginationInfo, ResponseEnvelope
 
@@ -22,11 +22,89 @@ def _request_id(request: Request) -> str:
     return request.headers.get("X-Request-ID", str(uuid.uuid4()))
 
 
+def _get_tenant(request: Request):
+    """Return (tenant, tier) or (None, None) from request state."""
+    tenant = getattr(request.state, "tenant", None)
+    tier = getattr(request.state, "tier", None)
+    return tenant, tier
+
+
 def _get_tenant_id(request: Request) -> str | None:
     tenant = getattr(request.state, "tenant", None)
     if tenant is None:
         return None
     return tenant.id
+
+
+# ---------------------------------------------------------------------------
+# POST — Upload artifact
+# ---------------------------------------------------------------------------
+
+
+@router.post("", status_code=202)
+async def upload_artifact(
+    project_id: str,
+    request: Request,
+    file: UploadFile = File(...),  # noqa: B008
+    artifact_type: str | None = Form(default=None),  # noqa: B008
+):
+    """Upload an artifact file (multipart/form-data)."""
+    req_id = _request_id(request)
+    tenant, tier = _get_tenant(request)
+
+    if tenant is None or tier is None:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Tenant context required.",
+                    "request_id": req_id,
+                }
+            },
+        )
+
+    try:
+        artifact = await artifact_service.upload_artifact(
+            tenant=tenant,
+            tier=tier,
+            project_id=project_id,
+            file=file,
+            artifact_type_override=artifact_type,
+        )
+    except ValueError as exc:
+        logger.warning(
+            "File upload rejected due to ValueError",
+            request_id=req_id,
+            tenant_id=_get_tenant_id(request),
+            project_id=project_id,
+            error=str(exc),
+        )
+        return JSONResponse(
+            status_code=413,
+            content={
+                "error": {
+                    "code": "FILE_TOO_LARGE",
+                    "message": "Uploaded file is too large.",
+                    "request_id": req_id,
+                }
+            },
+        )
+
+    artifact_resp = ArtifactResponse.from_artifact(artifact)
+    envelope = ResponseEnvelope(
+        data=artifact_resp.model_dump(by_alias=True),
+        meta=Meta(request_id=req_id, timestamp=datetime.now(UTC)),
+    )
+    return JSONResponse(
+        status_code=202,
+        content=envelope.model_dump(mode="json"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET — List artifacts
+# ---------------------------------------------------------------------------
 
 
 @router.get("")
@@ -144,3 +222,47 @@ async def delete_artifact(project_id: str, artifact_id: str, request: Request):
         )
 
     return None
+
+
+# ---------------------------------------------------------------------------
+# GET — Download artifact file
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{artifact_id}/download")
+async def download_artifact(project_id: str, artifact_id: str, request: Request):
+    """Download the raw artifact file from Blob Storage."""
+    req_id = _request_id(request)
+    tenant_id = _get_tenant_id(request)
+
+    if tenant_id is None:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Tenant context required.",
+                    "request_id": req_id,
+                }
+            },
+        )
+
+    result = await artifact_service.download_artifact(tenant_id, project_id, artifact_id)
+    if result is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "RESOURCE_NOT_FOUND",
+                    "message": "Artifact not found.",
+                    "request_id": req_id,
+                }
+            },
+        )
+
+    content, filename = result
+    return Response(
+        content=content,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
