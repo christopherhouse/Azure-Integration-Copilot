@@ -76,6 +76,9 @@ param backendOriginHostname string = ''
 @description('Cosmos DB SQL databases to create')
 param cosmosSqlDatabases array = []
 
+@description('Public IP addresses allowed to access Cosmos DB')
+param cosmosAllowedIpAddresses array = []
+
 @description('Additional tags to apply to all resources')
 param tags object = {}
 
@@ -207,6 +210,7 @@ module cosmosDb 'modules/cosmos-db.bicep' = {
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     sqlDatabases: cosmosSqlDatabases
     tags: commonTags
+    allowedIpAddresses: cosmosAllowedIpAddresses
   }
 }
 

@@ -44,6 +44,14 @@ param cosmosSqlDatabases = [
   }
 ]
 
+// Cosmos DB network restrictions
+param cosmosAllowedIpAddresses = [
+  '4.210.172.107'
+  '13.88.56.148'
+  '13.91.105.215'
+  '40.91.218.243'
+]
+
 param tags = {
   project: 'azure-integration-copilot'
   cost_center: 'engineering'
