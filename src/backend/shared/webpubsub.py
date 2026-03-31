@@ -34,7 +34,7 @@ class WebPubSubService:
         """Check connectivity to Azure Web PubSub. Returns True if reachable."""
         try:
             client = await self._get_client()
-            # generate_client_token is a lightweight server-side call that
+            # get_client_access_token is a lightweight server-side call that
             # exercises authentication and network connectivity without
             # side-effects on connected clients.
             await client.get_client_access_token()
