@@ -9,6 +9,7 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic>=2.0",
     "pydantic-settings",
+    "aiohttp",
     "azure-identity",
     "azure-cosmos",
     "azure-storage-blob",
