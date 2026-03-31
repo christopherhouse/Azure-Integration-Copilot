@@ -100,9 +100,9 @@ async def _check_database() -> ResourceStatus:
     """Check Cosmos DB connectivity and measure latency."""
     if not settings.cosmos_db_endpoint:
         return ResourceStatus(type="database", available=False)
-    start = time.perf_counter()
+    start_time = time.perf_counter()
     available = await cosmos_service.ping()
-    elapsed_ms = (time.perf_counter() - start) * 1000
+    elapsed_ms = (time.perf_counter() - start_time) * 1000
     if available:
         return ResourceStatus(
             type="database", available=True, latency=f"{elapsed_ms:.1f} ms"
@@ -152,13 +152,13 @@ async def health(request: Request):
     resources = await _check_all_resources()
 
     if request.method == "HEAD":
-        headers: dict[str, str] = {}
+        resource_headers: dict[str, str] = {}
         for r in resources:
             prefix = _resource_header_prefix(r.type)
-            headers[f"X-Resource-{prefix}-Available"] = str(r.available).lower()
+            resource_headers[f"X-Resource-{prefix}-Available"] = str(r.available).lower()
             if r.latency is not None:
-                headers[f"X-Resource-{prefix}-Latency"] = r.latency
-        return Response(status_code=200, headers=headers)
+                resource_headers[f"X-Resource-{prefix}-Latency"] = r.latency
+        return Response(status_code=200, headers=resource_headers)
 
     envelope = ResponseEnvelope(
         data={

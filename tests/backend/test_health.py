@@ -187,7 +187,7 @@ _FAKE_COSMOS_ENDPOINT = "https://fake-cosmos.documents.azure.com:443/"
 
 
 @pytest.fixture()
-def _mock_cosmos_available():
+def mock_cosmos_available():
     """Patch cosmos_service.ping to succeed and settings to have a valid endpoint."""
     with (
         patch("main.cosmos_service.ping", new_callable=AsyncMock, return_value=True),
@@ -197,7 +197,7 @@ def _mock_cosmos_available():
 
 
 @pytest.mark.asyncio
-async def test_health_get_database_available_with_latency(client, _mock_cosmos_available):
+async def test_health_get_database_available_with_latency(client, mock_cosmos_available):
     """When Cosmos DB is reachable, database resource shows available=True with latency."""
     response = await client.get("/api/v1/health")
     assert response.status_code == 200
@@ -211,7 +211,7 @@ async def test_health_get_database_available_with_latency(client, _mock_cosmos_a
 
 
 @pytest.mark.asyncio
-async def test_health_head_database_latency_header_when_available(client, _mock_cosmos_available):
+async def test_health_head_database_latency_header_when_available(client, mock_cosmos_available):
     """When Cosmos DB is reachable, HEAD includes X-Resource-Database-Latency header."""
     response = await client.head("/api/v1/health")
     assert response.status_code == 200
