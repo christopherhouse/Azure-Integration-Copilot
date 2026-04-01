@@ -9,10 +9,17 @@ export function RuntimeConfig() {
     apiBaseUrl: process.env.API_BASE_URL ?? "",
   };
 
+  // JSON.stringify does not escape "</script>" sequences which would break
+  // out of the inline script tag.  Replace angle-bracket sequences with
+  // their Unicode escape equivalents so the value is safe to embed.
+  const serialized = JSON.stringify(config)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e");
+
   return (
     <script
       dangerouslySetInnerHTML={{
-        __html: `window.__RUNTIME_CONFIG__=${JSON.stringify(config)};`,
+        __html: `window.__RUNTIME_CONFIG__=${serialized};`,
       }}
     />
   );
