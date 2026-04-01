@@ -25,7 +25,7 @@ class ArtifactRepository:
     async def create(self, artifact: Artifact) -> Artifact:
         """Create a new artifact document."""
         container = await self._get_container()
-        doc = artifact.model_dump(by_alias=True)
+        doc = artifact.model_dump(by_alias=True, mode="json")
         result = await container.create_item(body=doc)
         logger.info(
             "artifact_created",
@@ -109,7 +109,7 @@ class ArtifactRepository:
         artifact.updated_at = datetime.now(UTC)
 
         container = await self._get_container()
-        doc = artifact.model_dump(by_alias=True)
+        doc = artifact.model_dump(by_alias=True, mode="json")
         kwargs: dict = {}
         if artifact.etag:
             kwargs["etag"] = artifact.etag
@@ -124,7 +124,7 @@ class ArtifactRepository:
         """Persist an artifact document (full replace) with optimistic concurrency."""
         container = await self._get_container()
         artifact.updated_at = datetime.now(UTC)
-        doc = artifact.model_dump(by_alias=True)
+        doc = artifact.model_dump(by_alias=True, mode="json")
         kwargs: dict = {}
         if artifact.etag:
             kwargs["etag"] = artifact.etag
@@ -144,7 +144,7 @@ class ArtifactRepository:
         artifact.updated_at = datetime.now(UTC)
 
         container = await self._get_container()
-        doc = artifact.model_dump(by_alias=True)
+        doc = artifact.model_dump(by_alias=True, mode="json")
         kwargs: dict = {}
         if artifact.etag:
             kwargs["etag"] = artifact.etag
