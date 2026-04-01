@@ -1,7 +1,7 @@
 # =============================================================================
-# CD Workflow — Azure Integration Copilot
+# CD Workflow — Azure Integration Copilot  (reusable child workflow)
 # =============================================================================
-# Triggered on successful completion of the CI workflow on the main branch.
+# Called by the parent cicd.yml workflow after CI succeeds on the main branch.
 # Deploys infrastructure (Bicep) and container apps (script) to dev, then prod.
 #
 # Jobs per environment:
@@ -13,10 +13,7 @@
 name: CD
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
@@ -34,7 +31,6 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-infra-dev:
     name: "Dev — Deploy Infrastructure"
-    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: dev
     outputs:
@@ -55,8 +51,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
@@ -72,7 +66,7 @@ jobs:
           resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
           template: infra/bicep/main.bicep
           parameters: infra/bicep/environments/dev.bicepparam
-          overrideParameters: vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
+          additionalArguments: --parameters vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
           deploymentName: "aic-dev-${{ github.run_number }}"
           failOnStdErr: false
 
@@ -116,8 +110,6 @@ jobs:
         uses: actions/download-artifact@v4.1.3
         with:
           name: container-metadata
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Parse container metadata
         id: metadata
@@ -166,8 +158,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
@@ -253,8 +243,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
@@ -378,8 +366,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
@@ -395,7 +381,7 @@ jobs:
           resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
           template: infra/bicep/main.bicep
           parameters: infra/bicep/environments/prod.bicepparam
-          overrideParameters: vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
+          additionalArguments: --parameters vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
           deploymentName: "aic-prod-${{ github.run_number }}"
           failOnStdErr: false
 
@@ -439,8 +425,6 @@ jobs:
         uses: actions/download-artifact@v4.1.3
         with:
           name: container-metadata
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Parse container metadata
         id: metadata
@@ -489,8 +473,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
@@ -576,8 +558,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2

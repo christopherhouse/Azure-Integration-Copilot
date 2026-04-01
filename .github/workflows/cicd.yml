@@ -1,0 +1,44 @@
+# =============================================================================
+# CI/CD Workflow — Azure Integration Copilot
+# =============================================================================
+# Unified pipeline that runs CI on every PR and push to main, and additionally
+# runs CD on push to main and manual dispatch.
+#
+# CI and CD are implemented as reusable child workflows:
+#   - .github/workflows/ci.yml  (build, lint, test, scan, push containers)
+#   - .github/workflows/cd.yml  (deploy infra & apps to dev → prod)
+# =============================================================================
+
+name: CI/CD
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
+      security-events: write
+      checks: write
+      pull-requests: write
+    secrets: inherit
+
+  cd:
+    name: CD
+    if: github.event_name != 'pull_request'
+    needs: [ci]
+    uses: ./.github/workflows/cd.yml
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
+      actions: read
+    secrets: inherit
