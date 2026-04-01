@@ -1,4 +1,3 @@
-import logging
 from typing import Any
 
 import structlog
@@ -79,7 +78,7 @@ class EventGridPublisher:
             response = await client.send_request(request)
             return response.status_code < 500
         except Exception:
-            logger.warning("event_grid_ping_failed", exc_info=True, level=logging.WARNING)
+            logger.warning("event_grid_ping_failed", exc_info=True)
             return False
 
     async def close(self) -> None:

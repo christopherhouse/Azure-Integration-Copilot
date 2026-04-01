@@ -1,5 +1,3 @@
-import logging
-
 import structlog
 from azure.identity.aio import DefaultAzureCredential
 from azure.messaging.webpubsubservice.aio import WebPubSubServiceClient
@@ -40,7 +38,7 @@ class WebPubSubService:
             await client.get_client_access_token()
             return True
         except Exception:
-            logger.warning("web_pubsub_ping_failed", exc_info=True, level=logging.WARNING)
+            logger.warning("web_pubsub_ping_failed", exc_info=True)
             return False
 
     async def close(self) -> None:

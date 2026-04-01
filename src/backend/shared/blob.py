@@ -1,4 +1,3 @@
-import logging
 from collections.abc import AsyncIterator
 
 import structlog
@@ -63,7 +62,7 @@ class BlobService:
             await client.get_account_information()
             return True
         except Exception:
-            logger.warning("blob_storage_ping_failed", exc_info=True, level=logging.WARNING)
+            logger.warning("blob_storage_ping_failed", exc_info=True)
             return False
 
     async def close(self) -> None:
