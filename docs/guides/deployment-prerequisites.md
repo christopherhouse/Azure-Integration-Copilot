@@ -58,6 +58,7 @@ Secrets are configured per GitHub environment (`dev`, `prod`). Navigate to **Set
 | `CLOUDFLARE_DNS_API_KEY` | Cloudflare API key with DNS edit permissions for the target zone. See [Setting Up Cloudflare DNS](#setting-up-cloudflare-dns). | `v1.0-abc123...` |
 | `NEXTAUTH_SECRET` | Random string (≥ 32 characters) used by NextAuth.js to encrypt session tokens. Generate with `openssl rand -base64 32`. | `Kx7...base64...==` |
 | `ENTRA_CIAM_FRONTEND_CLIENT_SECRET` | Client secret for the frontend app registration in the CIAM tenant. Created in Step 4 below. | `abc~...` |
+| `JUMPBOX_PASSWORD` | Admin password for the Windows jumpbox VM. Must meet [Azure password complexity requirements](https://learn.microsoft.com/en-us/azure/virtual-machines/windows/faq#what-are-the-password-requirements-when-creating-a-vm-). | *(not shown)* |
 
 > **Note:** `AZURE_CLIENT_ID` here refers to the **service principal** used by GitHub Actions for deployment — not the backend's managed identity. The backend receives its own `AZURE_CLIENT_ID` (a User Assigned Managed Identity client ID) from a Bicep output.
 
@@ -75,6 +76,7 @@ Variables are also configured per environment (`dev`, `prod`). Navigate to **Set
 | `CLOUDFLARE_DNS_ZONE_ID` | Cloudflare DNS zone ID (32-character lowercase hexadecimal). Found in the Cloudflare dashboard under your domain's overview page. | `023e105f4ecef8ad9ca31a8372d0c353` |
 | `NEXTAUTH_URL` | The public URL where the frontend is accessible. Used by NextAuth.js for OAuth callback resolution. | `https://dev.integrationcopilot.com` |
 | `ENTRA_CIAM_FRONTEND_CLIENT_ID` | Application (client) ID of the **frontend** app registration in the CIAM tenant. See [Step 4](#step-4--register-the-frontend-application). Can also be set as an environment **secret**. | `a1b2c3d4-e5f6-7890-abcd-ef1234567890` |
+| `JUMPBOX_USER` | Admin username for the Windows jumpbox VM. Used by the Bicep deployment to configure the VM. | `azureadmin` |
 
 > **💡 Tip:** `ENTRA_CIAM_TENANT_SUBDOMAIN`, `ENTRA_CIAM_CLIENT_ID`, `ENTRA_CIAM_FRONTEND_CLIENT_ID`, and `NEXTAUTH_URL` can be stored as either environment **variables** or **secrets**. The CD workflow checks secrets first, then falls back to variables.
 
@@ -387,6 +389,7 @@ Use this checklist to verify all prerequisites are in place before triggering th
 - [ ] `CLOUDFLARE_DNS_API_KEY` — Cloudflare API token with DNS edit permissions
 - [ ] `NEXTAUTH_SECRET` — Random string for NextAuth.js session encryption
 - [ ] `ENTRA_CIAM_FRONTEND_CLIENT_SECRET` — Frontend CIAM app registration client secret
+- [ ] `JUMPBOX_PASSWORD` — Admin password for the Windows jumpbox VM
 
 **Variables:**
 
@@ -396,6 +399,7 @@ Use this checklist to verify all prerequisites are in place before triggering th
 - [ ] `CLOUDFLARE_DNS_ZONE_ID` — Cloudflare zone ID
 - [ ] `NEXTAUTH_URL` — Public frontend URL for OAuth callbacks
 - [ ] `ENTRA_CIAM_FRONTEND_CLIENT_ID` — CIAM **frontend** app registration client ID
+- [ ] `JUMPBOX_USER` — Admin username for the Windows jumpbox VM
 
 ### One-time Setup
 
