@@ -1,5 +1,3 @@
-import logging
-
 import structlog
 from azure.cosmos.aio import ContainerProxy, CosmosClient
 from azure.identity.aio import DefaultAzureCredential
@@ -38,7 +36,7 @@ class CosmosService:
                 break
             return True
         except Exception:
-            logger.warning("cosmos_ping_failed", exc_info=True, level=logging.WARNING)
+            logger.warning("cosmos_ping_failed", exc_info=True)
             return False
 
     async def close(self) -> None:
