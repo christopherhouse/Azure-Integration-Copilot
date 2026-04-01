@@ -69,7 +69,7 @@ The application consists of a **Next.js frontend** and a **Python backend**, bot
 │   └── agents/                  # Microsoft Foundry agent definitions
 ├── infra/
 │   ├── bicep/
-│   │   ├── modules/             # 9 reusable Bicep modules (AVM-based)
+│   │   ├── modules/             # 11 reusable Bicep modules (AVM-based)
 │   │   │   ├── container-apps-env.bicep  # Container Apps Environment
 │   │   │   ├── container-registry.bicep  # Azure Container Registry
 │   │   │   ├── cosmos-db.bicep           # Cosmos DB (serverless)
@@ -79,7 +79,9 @@ The application consists of a **Next.js frontend** and a **Python backend**, bot
 │   │   │   ├── observability.bicep       # Log Analytics + Application Insights
 │   │   │   ├── event-grid.bicep           # Azure Event Grid Namespace
 │   │   │   ├── storage.bicep             # Azure Storage Account
-│   │   │   └── web-pubsub.bicep          # Azure Web PubSub
+│   │   │   ├── web-pubsub.bicep          # Azure Web PubSub
+│   │   │   ├── bastion.bicep             # Azure Bastion (Standard SKU)
+│   │   │   └── jumpbox-vm.bicep          # Windows jumpbox VM (Bastion-only access)
 │   │   ├── main.bicep           # Main infrastructure template
 │   │   └── environments/
 │   │       ├── dev.bicepparam   # Development environment parameters
@@ -145,7 +147,8 @@ For the full developer guide — including setup, testing, and tooling details �
 | **Azure Key Vault** | Secrets management |
 | **Azure Storage** | Blob, queue, and table storage |
 | **Azure Web PubSub** | Real-time messaging for live agent updates to clients |
-| **Virtual Network** | Network isolation with three dedicated subnets |
+| **Azure Bastion** | Standard SKU bastion host for secure VM access — no public IP required on target VMs |
+| **Virtual Network** | Network isolation with five dedicated subnets |
 | **Private Endpoints** | Secure connectivity to all PaaS services |
 | **User Assigned Managed Identities** | RBAC-based authentication for frontend and backend |
 
@@ -171,6 +174,12 @@ graph TB
         subgraph INT ["Integration Subnet"]
             RS[Reserved for future use]
         end
+        subgraph BAS ["AzureBastionSubnet<br/><i>dev: 10.0.4.0/26 · prod: 10.1.4.0/26</i>"]
+            BASTION[Azure Bastion]
+        end
+        subgraph JB ["Jumpbox Subnet<br/><i>dev: 10.0.4.64/27 · prod: 10.1.4.64/27</i>"]
+            VM[Windows Jumpbox VM]
+        end
     end
 
     AFD[Azure Front Door Premium<br/>WAF + Microsoft Managed Certs]
@@ -183,11 +192,14 @@ graph TB
     PE --> KV[Key Vault]
     PE --> SA[Storage]
     PE --> WPS
+    BASTION -- "RDP" --> VM
 ```
 
 - **Container Apps subnet** — Delegated to the Container Apps Environment with an internal load balancer. AFD Premium connects via Private Link.
 - **Private Endpoints subnet** — Secure connectivity to PaaS services over the VNet backbone.
 - **Integration subnet** — Reserved for future integrations.
+- **AzureBastionSubnet** — Hosts Azure Bastion (Standard SKU) with a Standard public IP for secure remote access into the VNet.
+- **Jumpbox subnet** — Contains a Windows Server 2022 VM (Standard_D2s_v5) with no public IP, accessible only via Azure Bastion.
 
 ### Managed Identities
 
