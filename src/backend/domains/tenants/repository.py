@@ -92,8 +92,10 @@ class TenantRepository:
             raise RuntimeError(
                 f"Transactional batch returned {len(results)} results, expected 2"
             )
-        created_tenant = Tenant.model_validate(results[0])
-        created_user = User.model_validate(results[1])
+        # execute_item_batch returns response envelopes with statusCode,
+        # requestCharge, resourceBody, etc.  Extract the actual documents.
+        created_tenant = Tenant.model_validate(results[0]["resourceBody"])
+        created_user = User.model_validate(results[1]["resourceBody"])
         logger.info(
             "tenant_and_user_created",
             tenant_id=tenant.id,
