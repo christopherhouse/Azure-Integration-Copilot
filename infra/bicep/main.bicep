@@ -89,7 +89,7 @@ param cosmosAllowedIpAddresses array = []
 param tags object = {}
 
 @description('Admin username for the jumpbox VM')
-param vmAdminUsername string = 'azureadmin'
+param vmAdminUsername string
 
 @secure()
 @description('Admin password for the jumpbox VM')

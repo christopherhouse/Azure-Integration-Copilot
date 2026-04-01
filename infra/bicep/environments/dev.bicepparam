@@ -23,9 +23,6 @@ param blobDeleteRetentionDays = 7
 param containerDeleteRetentionDays = 7
 param webPubSubSku = 'Free_F1'
 
-// Jumpbox VM
-param vmAdminUsername = 'azureadmin'
-
 // Azure Front Door — set to true after first deployment
 param deployFrontDoor = false
 param frontendHostname = 'dev.integrisight.ai'
