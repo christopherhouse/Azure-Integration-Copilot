@@ -169,6 +169,24 @@ async def _check_all_resources() -> list[ResourceStatus]:
     return list(results)
 
 
+def _compute_health_status(resources: list[ResourceStatus]) -> str:
+    """Compute overall health status from resource availability.
+
+    Returns:
+        "ok"       – all dependencies available
+        "degraded" – one or more but not all dependencies failed
+        "failed"   – all dependencies failed
+    """
+    if not resources:
+        return "failed"
+    available_count = sum(1 for r in resources if r.available)
+    if available_count == len(resources):
+        return "ok"
+    if available_count == 0:
+        return "failed"
+    return "degraded"
+
+
 def _resource_header_prefix(resource_type: str) -> str:
     """Convert a resource type like 'object_storage' to 'Object-Storage'."""
     return resource_type.replace("_", "-").title()
@@ -193,9 +211,10 @@ async def health(request: Request):
                 resource_headers[f"X-Resource-{prefix}-Latency"] = r.latency
         return Response(status_code=200, headers=resource_headers)
 
+    status = _compute_health_status(resources)
     envelope = ResponseEnvelope(
         data={
-            "status": "ok",
+            "status": status,
             "resources": [
                 r.model_dump(exclude_none=True) for r in resources
             ],
