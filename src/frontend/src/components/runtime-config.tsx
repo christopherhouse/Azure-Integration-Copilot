@@ -1,3 +1,5 @@
+import { unstable_noStore as noStore } from "next/cache";
+
 /**
  * Server component that injects runtime configuration into the page via a
  * script tag.  This lets the client read environment values (like the API
@@ -5,6 +7,10 @@
  * build time — avoiding the NEXT_PUBLIC_* build-time inlining problem.
  */
 export function RuntimeConfig() {
+  // Mark this component as dynamic so API_BASE_URL is read from the container
+  // environment at request-time instead of being inlined at image build-time.
+  noStore();
+
   const apiBaseUrl = process.env.API_BASE_URL;
 
   // Only inject the config object if we have a valid API_BASE_URL.
