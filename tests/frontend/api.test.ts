@@ -2,7 +2,7 @@
  * Tests for the apiFetch helper in @/lib/api.
  *
  * Verifies that:
- * 1. Requests are sent to API_BASE_URL (not relative to the frontend).
+ * 1. Requests are sent to the API base URL (not relative to the frontend).
  * 2. Authorization headers are injected when a session exists.
  * 3. Caller-supplied headers are forwarded.
  */
@@ -25,7 +25,7 @@ function fakeResponse(body: string, status = 200) {
 const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
 
-import { apiFetch, API_BASE_URL } from "@/lib/api";
+import { apiFetch, getApiBaseUrl } from "@/lib/api";
 
 describe("apiFetch", () => {
   beforeEach(() => {
@@ -33,14 +33,14 @@ describe("apiFetch", () => {
     mockFetch.mockResolvedValue(fakeResponse("{}"));
   });
 
-  it("prepends API_BASE_URL to the request path", async () => {
+  it("prepends the API base URL to the request path", async () => {
     mockGetSession.mockResolvedValue(null);
 
     await apiFetch("/api/v1/projects");
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe(`${API_BASE_URL}/api/v1/projects`);
+    expect(url).toBe(`${getApiBaseUrl()}/api/v1/projects`);
   });
 
   it("adds Authorization header when session has accessToken", async () => {

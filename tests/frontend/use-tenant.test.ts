@@ -20,7 +20,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { createElement } from "react";
 import { useTenant } from "@/hooks/use-tenant";
-import { API_BASE_URL } from "@/lib/api";
+import { getApiBaseUrl } from "@/lib/api";
 
 function fakeResponse(body: string, status = 200) {
   return {
@@ -83,7 +83,7 @@ describe("useTenant", () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe(`${API_BASE_URL}/api/v1/tenants/me`);
+    expect(url).toBe(`${getApiBaseUrl()}/api/v1/tenants/me`);
   });
 
   it("returns the tenant object on success", async () => {

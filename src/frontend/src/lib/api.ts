@@ -1,8 +1,25 @@
 import { getSession } from "next-auth/react";
 import type { ApiError, ResponseEnvelope } from "@/types/api";
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+/**
+ * Return the API base URL.
+ *
+ * On the **client** the value is read from `window.__RUNTIME_CONFIG__`
+ * which is injected at request-time by the `<RuntimeConfig>` server
+ * component.  This avoids the Next.js `NEXT_PUBLIC_*` build-time
+ * inlining problem — the URL no longer needs to be known when the
+ * container image is built.
+ *
+ * On the **server** (SSR) or during **local development** the value
+ * falls back to the `API_BASE_URL` env var, then to
+ * `http://localhost:8000`.
+ */
+export function getApiBaseUrl(): string {
+  if (typeof window !== "undefined" && window.__RUNTIME_CONFIG__?.apiBaseUrl) {
+    return window.__RUNTIME_CONFIG__.apiBaseUrl;
+  }
+  return process.env.API_BASE_URL ?? "http://localhost:8000";
+}
 
 /**
  * Build a headers object that merges caller-supplied headers with an
@@ -39,7 +56,7 @@ export async function apiClient<T>(
     ...(options?.headers as Record<string, string> | undefined),
   });
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetch(`${getApiBaseUrl()}${path}`, {
     ...options,
     headers,
   });
@@ -60,7 +77,7 @@ export async function apiClient<T>(
 }
 
 /**
- * Low-level fetch wrapper that prepends {@link API_BASE_URL} and injects an
+ * Low-level fetch wrapper that prepends the API base URL and injects an
  * Authorization header from the current NextAuth session.
  *
  * Unlike {@link apiClient}, this returns the raw {@link Response} so callers
@@ -72,7 +89,7 @@ export async function apiFetch(
 ): Promise<Response> {
   const headers = await buildHeaders(options?.headers);
 
-  return fetch(`${API_BASE_URL}${path}`, {
+  return fetch(`${getApiBaseUrl()}${path}`, {
     ...options,
     headers,
   });
