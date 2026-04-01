@@ -55,8 +55,9 @@ param cosmosAllowedIpAddresses = [
 ]
 
 // Jumpbox VM credentials — placeholders overridden by the CD workflow via
-// additionalArguments in azure/arm-deploy@v2.  Do NOT use readEnvironmentVariable()
-// here; it is only evaluated by the Bicep CLI, not by the ARM deploy action.
+// the 'parameters' field in azure/arm-deploy@v2. The workflow appends
+// 'vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}'
+// to the parameters field, which overrides these placeholder values.
 param vmAdminUsername = 'azureadmin'
 param vmAdminPassword = 'OVERRIDE_IN_PIPELINE'
 

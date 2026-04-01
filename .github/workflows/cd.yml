@@ -65,8 +65,7 @@ jobs:
         with:
           resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
           template: infra/bicep/main.bicep
-          parameters: infra/bicep/environments/dev.bicepparam
-          additionalArguments: --parameters vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
+          parameters: infra/bicep/environments/dev.bicepparam vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
           deploymentName: "aic-dev-${{ github.run_number }}"
           failOnStdErr: false
 
@@ -380,8 +379,7 @@ jobs:
         with:
           resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
           template: infra/bicep/main.bicep
-          parameters: infra/bicep/environments/prod.bicepparam
-          additionalArguments: --parameters vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
+          parameters: infra/bicep/environments/prod.bicepparam vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
           deploymentName: "aic-prod-${{ github.run_number }}"
           failOnStdErr: false
 
