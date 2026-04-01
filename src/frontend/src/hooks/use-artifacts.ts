@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 import type { ArtifactStatus } from "@/types/api";
 
 /** Artifact data returned from the API. */
@@ -31,7 +32,7 @@ async function fetchArtifacts(
   page = 1,
   pageSize = 20,
 ): Promise<ArtifactListResponse> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/v1/projects/${projectId}/artifacts?page=${page}&pageSize=${pageSize}`,
   );
   if (!res.ok) throw new Error("Failed to fetch artifacts");
@@ -44,7 +45,7 @@ async function uploadArtifact(
 ): Promise<Artifact> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`/api/v1/projects/${projectId}/artifacts`, {
+  const res = await apiFetch(`/api/v1/projects/${projectId}/artifacts`, {
     method: "POST",
     body: form,
   });
