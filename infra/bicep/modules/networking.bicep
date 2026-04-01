@@ -20,6 +20,9 @@ param subnetPrivateEndpointsPrefix string = '10.0.3.0/26'
 @description('Address prefix for integration subnet')
 param subnetIntegrationPrefix string = '10.0.3.64/26'
 
+@description('Address prefix for AzureBastionSubnet (/26 minimum)')
+param subnetBastionPrefix string = '10.0.4.0/26'
+
 @description('Tags to apply')
 param tags object = {}
 
@@ -43,6 +46,131 @@ resource nsgIntegration 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
   name: 'nsg-integration-${vnetName}'
   location: location
   tags: tags
+}
+
+resource nsgBastion 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: 'nsg-bastion-${vnetName}'
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      // ---- Inbound rules ----
+      {
+        name: 'AllowHttpsInbound'
+        properties: {
+          priority: 120
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: 'Internet'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '443'
+        }
+      }
+      {
+        name: 'AllowGatewayManagerInbound'
+        properties: {
+          priority: 130
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: 'GatewayManager'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '443'
+        }
+      }
+      {
+        name: 'AllowAzureLoadBalancerInbound'
+        properties: {
+          priority: 140
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: 'AzureLoadBalancer'
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRange: '443'
+        }
+      }
+      {
+        name: 'AllowBastionHostCommunicationInbound'
+        properties: {
+          priority: 150
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          sourcePortRange: '*'
+          destinationAddressPrefix: 'VirtualNetwork'
+          destinationPortRanges: [
+            '8080'
+            '5701'
+          ]
+        }
+      }
+      // ---- Outbound rules ----
+      {
+        name: 'AllowSshRdpOutbound'
+        properties: {
+          priority: 100
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: '*'
+          sourceAddressPrefix: '*'
+          sourcePortRange: '*'
+          destinationAddressPrefix: 'VirtualNetwork'
+          destinationPortRanges: [
+            '22'
+            '3389'
+          ]
+        }
+      }
+      {
+        name: 'AllowAzureCloudOutbound'
+        properties: {
+          priority: 110
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: '*'
+          sourcePortRange: '*'
+          destinationAddressPrefix: 'AzureCloud'
+          destinationPortRange: '443'
+        }
+      }
+      {
+        name: 'AllowBastionCommunicationOutbound'
+        properties: {
+          priority: 120
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: '*'
+          sourceAddressPrefix: 'VirtualNetwork'
+          sourcePortRange: '*'
+          destinationAddressPrefix: 'VirtualNetwork'
+          destinationPortRanges: [
+            '8080'
+            '5701'
+          ]
+        }
+      }
+      {
+        name: 'AllowHttpOutbound'
+        properties: {
+          priority: 130
+          direction: 'Outbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: '*'
+          sourcePortRange: '*'
+          destinationAddressPrefix: 'Internet'
+          destinationPortRange: '80'
+        }
+      }
+    ]
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -73,6 +201,11 @@ module vnet 'br/public:avm/res/network/virtual-network:0.5.2' = {
         name: 'snet-integration'
         addressPrefix: subnetIntegrationPrefix
         networkSecurityGroupResourceId: nsgIntegration.id
+      }
+      {
+        name: 'AzureBastionSubnet'
+        addressPrefix: subnetBastionPrefix
+        networkSecurityGroupResourceId: nsgBastion.id
       }
     ]
   }
@@ -116,6 +249,8 @@ output vnetId string = vnet.outputs.resourceId
 @description('Name of the virtual network')
 output vnetName string = vnet.outputs.name
 
+// Subnet resource IDs — indices match subnet array order in the vnet module above:
+// [0] snet-container-apps, [1] snet-private-endpoints, [2] snet-integration, [3] AzureBastionSubnet
 @description('ID of the container apps subnet')
 output subnetContainerAppsId string = vnet.outputs.subnetResourceIds[0]
 
@@ -124,6 +259,9 @@ output subnetPrivateEndpointsId string = vnet.outputs.subnetResourceIds[1]
 
 @description('ID of the integration subnet')
 output subnetIntegrationId string = vnet.outputs.subnetResourceIds[2]
+
+@description('ID of the AzureBastionSubnet')
+output subnetBastionId string = vnet.outputs.subnetResourceIds[3]
 
 @description('Map of private DNS zone names to resource IDs')
 output privateDnsZoneIdVaultcore string = privateDnsZones[0].outputs.resourceId

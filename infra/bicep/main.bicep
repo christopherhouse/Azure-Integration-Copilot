@@ -32,6 +32,9 @@ param subnetPrivateEndpointsPrefix string = '10.0.3.0/26'
 @description('Address prefix for integration subnet')
 param subnetIntegrationPrefix string = '10.0.3.64/26'
 
+@description('Address prefix for AzureBastionSubnet (/26 minimum)')
+param subnetBastionPrefix string = '10.0.4.0/26'
+
 
 @description('Container Registry SKU')
 @allowed(['Basic', 'Standard', 'Premium'])
@@ -104,6 +107,7 @@ var resourceNames = {
   webPubSub: 'wps-${namePrefix}'
   idFrontend: 'id-frontend-${namePrefix}'
   idBackend: 'id-backend-${namePrefix}'
+  bastion: 'bas-${namePrefix}'
 }
 
 var commonTags = union(tags, {
@@ -140,6 +144,7 @@ module networking 'modules/networking.bicep' = {
     subnetContainerAppsPrefix: subnetContainerAppsPrefix
     subnetPrivateEndpointsPrefix: subnetPrivateEndpointsPrefix
     subnetIntegrationPrefix: subnetIntegrationPrefix
+    subnetBastionPrefix: subnetBastionPrefix
     tags: commonTags
   }
 }
@@ -399,6 +404,22 @@ module webPubSub 'modules/web-pubsub.bicep' = {
     sku: webPubSubSku
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
     privateDnsZoneId: networking.outputs.privateDnsZoneIdWebpubsub
+    tags: commonTags
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Azure Bastion
+// ---------------------------------------------------------------------------
+
+module bastion 'modules/bastion.bicep' = {
+  name: 'bastion'
+  params: {
+    location: location
+    bastionName: resourceNames.bastion
+    vnetResourceId: networking.outputs.vnetId
+    logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     tags: commonTags
   }
 }
