@@ -197,6 +197,7 @@ jobs:
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
+            CORS_ALLOWED_ORIGINS=https://${{ vars.FRONTEND_CUSTOM_DOMAIN }}
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
@@ -213,24 +214,11 @@ jobs:
             --max-replicas 10 \
             --env-vars "${BACKEND_ENV_VARS}"
 
-      - name: Get backend Container App FQDN
-        id: backend-fqdn
-        env:
-          RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
-        run: |
-          BACKEND_FQDN=$(az containerapp show \
-            --name "ca-backend" \
-            --resource-group "${RESOURCE_GROUP}" \
-            --query "properties.configuration.ingress.fqdn" \
-            --output tsv)
-          echo "Backend FQDN: https://${BACKEND_FQDN}"
-          echo "fqdn=https://${BACKEND_FQDN}" >> "$GITHUB_OUTPUT"
-
       - name: Deploy frontend Container App
         env:
           FRONTEND_ENV_VARS: >-
             PORT=3000
-            API_BASE_URL=${{ steps.backend-fqdn.outputs.fqdn }}
+            API_BASE_URL=https://${{ vars.BACKEND_CUSTOM_DOMAIN }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
@@ -533,6 +521,7 @@ jobs:
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
+            CORS_ALLOWED_ORIGINS=https://${{ vars.FRONTEND_CUSTOM_DOMAIN }}
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
@@ -549,24 +538,11 @@ jobs:
             --max-replicas 10 \
             --env-vars "${BACKEND_ENV_VARS}"
 
-      - name: Get backend Container App FQDN
-        id: backend-fqdn
-        env:
-          RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
-        run: |
-          BACKEND_FQDN=$(az containerapp show \
-            --name "ca-backend" \
-            --resource-group "${RESOURCE_GROUP}" \
-            --query "properties.configuration.ingress.fqdn" \
-            --output tsv)
-          echo "Backend FQDN: https://${BACKEND_FQDN}"
-          echo "fqdn=https://${BACKEND_FQDN}" >> "$GITHUB_OUTPUT"
-
       - name: Deploy frontend Container App
         env:
           FRONTEND_ENV_VARS: >-
             PORT=3000
-            API_BASE_URL=${{ steps.backend-fqdn.outputs.fqdn }}
+            API_BASE_URL=https://${{ vars.BACKEND_CUSTOM_DOMAIN }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}

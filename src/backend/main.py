@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 import structlog
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
@@ -47,11 +48,23 @@ app = FastAPI(title="Integration Copilot API", version="0.1.0", lifespan=lifespa
 FastAPIInstrumentor.instrument_app(app)
 
 # Register middleware (execution order is reversed from registration order in Starlette)
-# Desired request flow: auth → tenant_context → quota → handler
-# So register in reverse: quota first, then tenant_context, then auth
+# Desired request flow: cors → auth → tenant_context → quota → handler
+# So register in reverse: quota first, then tenant_context, then auth, then cors
 app.add_middleware(QuotaMiddleware)
 app.add_middleware(TenantContextMiddleware)
 app.add_middleware(AuthMiddleware)
+
+# CORS must be outermost so preflight OPTIONS requests are handled before auth.
+# Starlette reverses registration order, so register CORS last.
+if settings.cors_allowed_origins:
+    cors_origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+        allow_credentials=True,
+    )
 
 # Register routers
 app.include_router(tenant_router)

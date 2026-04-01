@@ -14,6 +14,9 @@ class Settings(BaseSettings):
     applicationinsights_connection_string: str = ""
     defender_scan_enabled: bool = False
 
+    # CORS settings
+    cors_allowed_origins: str = ""
+
     # Auth settings (Microsoft Entra External ID / CIAM)
     skip_auth: bool = False
     entra_ciam_tenant_subdomain: str = ""
