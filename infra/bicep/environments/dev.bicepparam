@@ -54,6 +54,11 @@ param cosmosAllowedIpAddresses = [
   '40.91.218.243'
 ]
 
+// Jumpbox VM credentials — read from environment variables at deploy time,
+// set via GitHub Actions secrets/vars in the CD workflow.
+param vmAdminUsername = readEnvironmentVariable('VM_ADMIN_USERNAME', 'azureadmin')
+param vmAdminPassword = readEnvironmentVariable('VM_ADMIN_PASSWORD', '')
+
 param tags = {
   project: 'azure-integration-copilot'
   cost_center: 'engineering'
