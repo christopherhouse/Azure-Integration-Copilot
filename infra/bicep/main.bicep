@@ -35,8 +35,6 @@ param subnetIntegrationPrefix string = '10.0.3.64/26'
 @description('Address prefix for AzureBastionSubnet (/26 minimum)')
 param subnetBastionPrefix string = '10.0.4.0/26'
 
-@description('Address prefix for jumpbox subnet')
-param subnetJumpboxPrefix string = '10.0.4.64/27'
 
 @description('Container Registry SKU')
 @allowed(['Basic', 'Standard', 'Premium'])
@@ -88,12 +86,6 @@ param cosmosAllowedIpAddresses array = []
 @description('Additional tags to apply to all resources')
 param tags object = {}
 
-@description('Admin username for the jumpbox VM')
-param vmAdminUsername string
-
-@secure()
-@description('Admin password for the jumpbox VM')
-param vmAdminPassword string
 
 // ---------------------------------------------------------------------------
 // Naming
@@ -116,7 +108,6 @@ var resourceNames = {
   idFrontend: 'id-frontend-${namePrefix}'
   idBackend: 'id-backend-${namePrefix}'
   bastion: 'bas-${namePrefix}'
-  jumpboxVm: 'vm-jumpbox-${namePrefix}'
 }
 
 var commonTags = union(tags, {
@@ -154,7 +145,6 @@ module networking 'modules/networking.bicep' = {
     subnetPrivateEndpointsPrefix: subnetPrivateEndpointsPrefix
     subnetIntegrationPrefix: subnetIntegrationPrefix
     subnetBastionPrefix: subnetBastionPrefix
-    subnetJumpboxPrefix: subnetJumpboxPrefix
     tags: commonTags
   }
 }
@@ -418,6 +408,7 @@ module webPubSub 'modules/web-pubsub.bicep' = {
   }
 }
 
+
 // ---------------------------------------------------------------------------
 // Azure Bastion
 // ---------------------------------------------------------------------------
@@ -433,21 +424,6 @@ module bastion 'modules/bastion.bicep' = {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Jumpbox VM
-// ---------------------------------------------------------------------------
-
-module jumpboxVm 'modules/jumpbox-vm.bicep' = {
-  name: 'jumpbox-vm'
-  params: {
-    location: location
-    vmName: resourceNames.jumpboxVm
-    subnetJumpboxId: networking.outputs.subnetJumpboxId
-    adminUsername: vmAdminUsername
-    adminPassword: vmAdminPassword
-    tags: commonTags
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Azure Front Door Premium — conditionally deployed

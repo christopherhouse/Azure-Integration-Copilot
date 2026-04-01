@@ -23,9 +23,6 @@ param subnetIntegrationPrefix string = '10.0.3.64/26'
 @description('Address prefix for AzureBastionSubnet (/26 minimum)')
 param subnetBastionPrefix string = '10.0.4.0/26'
 
-@description('Address prefix for jumpbox subnet')
-param subnetJumpboxPrefix string = '10.0.4.64/27'
-
 @description('Tags to apply')
 param tags object = {}
 
@@ -176,42 +173,6 @@ resource nsgBastion 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
   }
 }
 
-resource nsgJumpbox 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
-  name: 'nsg-jumpbox-${vnetName}'
-  location: location
-  tags: tags
-  properties: {
-    securityRules: [
-      {
-        name: 'AllowVirtualNetworkInbound'
-        properties: {
-          priority: 100
-          direction: 'Inbound'
-          access: 'Allow'
-          protocol: '*'
-          sourceAddressPrefix: 'VirtualNetwork'
-          sourcePortRange: '*'
-          destinationAddressPrefix: 'VirtualNetwork'
-          destinationPortRange: '*'
-        }
-      }
-      {
-        name: 'DenyInternetInbound'
-        properties: {
-          priority: 4000
-          direction: 'Inbound'
-          access: 'Deny'
-          protocol: '*'
-          sourceAddressPrefix: 'Internet'
-          sourcePortRange: '*'
-          destinationAddressPrefix: '*'
-          destinationPortRange: '*'
-        }
-      }
-    ]
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Virtual Network + subnets — AVM
 // ---------------------------------------------------------------------------
@@ -245,11 +206,6 @@ module vnet 'br/public:avm/res/network/virtual-network:0.5.2' = {
         name: 'AzureBastionSubnet'
         addressPrefix: subnetBastionPrefix
         networkSecurityGroupResourceId: nsgBastion.id
-      }
-      {
-        name: 'jumpbox'
-        addressPrefix: subnetJumpboxPrefix
-        networkSecurityGroupResourceId: nsgJumpbox.id
       }
     ]
   }
@@ -293,6 +249,8 @@ output vnetId string = vnet.outputs.resourceId
 @description('Name of the virtual network')
 output vnetName string = vnet.outputs.name
 
+// Subnet resource IDs — indices match subnet array order in the vnet module above:
+// [0] snet-container-apps, [1] snet-private-endpoints, [2] snet-integration, [3] AzureBastionSubnet
 @description('ID of the container apps subnet')
 output subnetContainerAppsId string = vnet.outputs.subnetResourceIds[0]
 
@@ -304,9 +262,6 @@ output subnetIntegrationId string = vnet.outputs.subnetResourceIds[2]
 
 @description('ID of the AzureBastionSubnet')
 output subnetBastionId string = vnet.outputs.subnetResourceIds[3]
-
-@description('ID of the jumpbox subnet')
-output subnetJumpboxId string = vnet.outputs.subnetResourceIds[4]
 
 @description('Map of private DNS zone names to resource IDs')
 output privateDnsZoneIdVaultcore string = privateDnsZones[0].outputs.resourceId
