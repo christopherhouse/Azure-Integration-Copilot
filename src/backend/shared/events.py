@@ -75,7 +75,8 @@ class EventGridPublisher:
             # namespace endpoint.  Any HTTP-level response (including 401/404)
             # confirms network reachability; only transport failures surface
             # as errors.
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(settings.event_grid_namespace_endpoint) as resp:
                     return resp.status < 500
         except Exception:
