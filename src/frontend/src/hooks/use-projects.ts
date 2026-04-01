@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiFetch } from "@/lib/api";
 
 /** Project data returned from the API. */
 export interface Project {
@@ -30,7 +31,7 @@ async function fetchProjects(
   page = 1,
   pageSize = 20,
 ): Promise<ProjectListResponse> {
-  const res = await fetch(
+  const res = await apiFetch(
     `/api/v1/projects?page=${page}&pageSize=${pageSize}`,
   );
   if (!res.ok) throw new Error("Failed to fetch projects");
@@ -41,7 +42,7 @@ async function createProject(data: {
   name: string;
   description?: string;
 }): Promise<Project> {
-  const res = await fetch("/api/v1/projects", {
+  const res = await apiFetch("/api/v1/projects", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),

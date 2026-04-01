@@ -1,7 +1,7 @@
 import { getSession } from "next-auth/react";
 import type { ApiError, ResponseEnvelope } from "@/types/api";
 
-const BASE_URL =
+export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /**
@@ -26,7 +26,7 @@ export async function apiClient<T>(
       `Bearer ${session.accessToken}`;
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers,
   });
@@ -44,4 +44,32 @@ export async function apiClient<T>(
   }
 
   return res.json() as Promise<ResponseEnvelope<T>>;
+}
+
+/**
+ * Low-level fetch wrapper that prepends {@link API_BASE_URL} and injects an
+ * Authorization header from the current NextAuth session.
+ *
+ * Unlike {@link apiClient}, this returns the raw {@link Response} so callers
+ * can handle different response shapes (e.g. paginated lists, file uploads).
+ */
+export async function apiFetch(
+  path: string,
+  options?: RequestInit,
+): Promise<Response> {
+  const session = await getSession();
+
+  const headers: HeadersInit = {
+    ...(options?.headers as Record<string, string> | undefined),
+  };
+
+  if (session?.accessToken) {
+    (headers as Record<string, string>)["Authorization"] =
+      `Bearer ${session.accessToken}`;
+  }
+
+  return fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+  });
 }
