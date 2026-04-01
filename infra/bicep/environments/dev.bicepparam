@@ -12,6 +12,8 @@ param vnetAddressSpace = ['10.0.0.0/16']
 param subnetContainerAppsPrefix = '10.0.0.0/23'
 param subnetPrivateEndpointsPrefix = '10.0.3.0/26'
 param subnetIntegrationPrefix = '10.0.3.64/26'
+param subnetBastionPrefix = '10.0.4.0/26'
+param subnetJumpboxPrefix = '10.0.4.64/27'
 
 // Service tiers — cost-optimized for dev
 param containerRegistrySku = 'Basic'
@@ -20,6 +22,9 @@ param kvSoftDeleteRetentionDays = 7
 param blobDeleteRetentionDays = 7
 param containerDeleteRetentionDays = 7
 param webPubSubSku = 'Free_F1'
+
+// Jumpbox VM
+param vmAdminUsername = 'azureadmin'
 
 // Azure Front Door — set to true after first deployment
 param deployFrontDoor = false
