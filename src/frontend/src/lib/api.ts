@@ -15,9 +15,15 @@ import type { ApiError, ResponseEnvelope } from "@/types/api";
  * `http://localhost:8000`.
  */
 export function getApiBaseUrl(): string {
-  if (typeof window !== "undefined" && window.__RUNTIME_CONFIG__?.apiBaseUrl) {
-    return window.__RUNTIME_CONFIG__.apiBaseUrl;
+  // On the client, check for runtime config injection
+  if (typeof window !== "undefined") {
+    const runtimeUrl = window.__RUNTIME_CONFIG__?.apiBaseUrl;
+    if (runtimeUrl) {
+      return runtimeUrl;
+    }
   }
+
+  // On the server (SSR) or when runtime config is not available, use env var
   return process.env.API_BASE_URL ?? "http://localhost:8000";
 }
 

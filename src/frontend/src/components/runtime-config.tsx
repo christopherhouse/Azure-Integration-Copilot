@@ -5,8 +5,16 @@
  * build time — avoiding the NEXT_PUBLIC_* build-time inlining problem.
  */
 export function RuntimeConfig() {
+  const apiBaseUrl = process.env.API_BASE_URL;
+
+  // Only inject the config object if we have a valid API_BASE_URL.
+  // If not set, the client-side getApiBaseUrl() will fall back to localhost.
+  if (!apiBaseUrl) {
+    return null;
+  }
+
   const config = {
-    apiBaseUrl: process.env.API_BASE_URL ?? "",
+    apiBaseUrl,
   };
 
   // JSON.stringify does not escape "</script>" sequences which would break
