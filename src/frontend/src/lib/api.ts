@@ -5,6 +5,26 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /**
+ * Build a headers object that merges caller-supplied headers with an
+ * Authorization header from the current NextAuth session (when available).
+ */
+async function buildHeaders(
+  extra?: HeadersInit,
+): Promise<Record<string, string>> {
+  const session = await getSession();
+
+  const headers: Record<string, string> = {
+    ...(extra as Record<string, string> | undefined),
+  };
+
+  if (session?.accessToken) {
+    headers["Authorization"] = `Bearer ${session.accessToken}`;
+  }
+
+  return headers;
+}
+
+/**
  * Typed fetch wrapper that adds an Authorization header from the current
  * NextAuth session and parses JSON responses into a {@link ResponseEnvelope}.
  *
@@ -14,17 +34,10 @@ export async function apiClient<T>(
   path: string,
   options?: RequestInit,
 ): Promise<ResponseEnvelope<T>> {
-  const session = await getSession();
-
-  const headers: HeadersInit = {
+  const headers = await buildHeaders({
     "Content-Type": "application/json",
     ...(options?.headers as Record<string, string> | undefined),
-  };
-
-  if (session?.accessToken) {
-    (headers as Record<string, string>)["Authorization"] =
-      `Bearer ${session.accessToken}`;
-  }
+  });
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -57,16 +70,7 @@ export async function apiFetch(
   path: string,
   options?: RequestInit,
 ): Promise<Response> {
-  const session = await getSession();
-
-  const headers: HeadersInit = {
-    ...(options?.headers as Record<string, string> | undefined),
-  };
-
-  if (session?.accessToken) {
-    (headers as Record<string, string>)["Authorization"] =
-      `Bearer ${session.accessToken}`;
-  }
+  const headers = await buildHeaders(options?.headers);
 
   return fetch(`${API_BASE_URL}${path}`, {
     ...options,
