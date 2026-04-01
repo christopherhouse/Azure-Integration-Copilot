@@ -51,6 +51,12 @@ module storage 'br/public:avm/res/storage/storage-account:0.18.0' = {
       deleteRetentionPolicyEnabled: true
       containerDeleteRetentionPolicyDays: containerDeleteRetentionDays
       containerDeleteRetentionPolicyEnabled: true
+      containers: [
+        {
+          name: 'artifacts'
+          publicAccess: 'None'
+        }
+      ]
     }
     privateEndpoints: [
       {

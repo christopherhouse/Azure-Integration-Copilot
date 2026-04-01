@@ -1,8 +1,8 @@
 from typing import Any
 
+import aiohttp
 import structlog
 from azure.core.messaging import CloudEvent
-from azure.core.rest import HttpRequest
 from azure.eventgrid.aio import EventGridPublisherClient
 from azure.identity.aio import DefaultAzureCredential
 
@@ -70,13 +70,15 @@ class EventGridPublisher:
     async def ping(self) -> bool:
         """Check connectivity to Azure Event Grid Namespace. Returns True if reachable."""
         try:
-            client = await self._get_client()
-            # Use the SDK pipeline to issue a lightweight GET against the namespace
-            # endpoint.  Any HTTP-level response (including 404) confirms network
-            # reachability; only transport / auth failures should surface as errors.
-            request = HttpRequest(method="GET", url=settings.event_grid_namespace_endpoint)
-            response = await client.send_request(request)
-            return response.status_code < 500
+            # EventGridPublisherClient does not expose a lightweight read
+            # operation, so we use aiohttp to issue a plain GET against the
+            # namespace endpoint.  Any HTTP-level response (including 401/404)
+            # confirms network reachability; only transport failures surface
+            # as errors.
+            timeout = aiohttp.ClientTimeout(total=5)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(settings.event_grid_namespace_endpoint) as resp:
+                    return resp.status < 500
         except Exception:
             logger.warning("event_grid_ping_failed", exc_info=True)
             return False

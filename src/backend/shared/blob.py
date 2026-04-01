@@ -59,7 +59,8 @@ class BlobService:
         """Check connectivity to Azure Blob Storage. Returns True if reachable."""
         try:
             client = await self._get_client()
-            await client.get_account_information()
+            container_client = client.get_container_client(ARTIFACTS_CONTAINER)
+            await container_client.get_container_properties()
             return True
         except Exception:
             logger.warning("blob_storage_ping_failed", exc_info=True)
