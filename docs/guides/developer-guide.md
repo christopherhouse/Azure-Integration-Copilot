@@ -300,7 +300,7 @@ The dev server starts at `http://localhost:3000`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend API base URL |
+| `API_BASE_URL` | `http://localhost:8000` | Backend API base URL (read at **runtime**, not build time) |
 | `NEXTAUTH_URL` | `http://localhost:3000` | Frontend URL for NextAuth.js callbacks |
 | `NEXTAUTH_SECRET` | *(required)* | Secret used to encrypt session tokens |
 | `ENTRA_CIAM_TENANT_SUBDOMAIN` | *(empty)* | Entra External ID tenant subdomain — leave blank to use the dev-credentials provider |
@@ -359,7 +359,7 @@ The frontend uses [NextAuth.js](https://next-auth.js.org/) for authentication wi
 
 **API Client** — `lib/api.ts` exports `apiClient<T>(path, options?)`, a typed fetch wrapper that:
 
-- Prepends `NEXT_PUBLIC_API_URL` to the path
+- Prepends the runtime API base URL to the path
 - Attaches the session's `accessToken` as a Bearer token
 - Parses JSON into `ResponseEnvelope<T>`
 - Throws a typed `ApiError` on non-OK responses

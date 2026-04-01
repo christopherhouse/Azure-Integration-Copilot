@@ -187,6 +187,7 @@ jobs:
         env:
           FRONTEND_ENV_VARS: >-
             PORT=3000
+            API_BASE_URL=${{ vars.API_BASE_URL }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
@@ -509,6 +510,7 @@ jobs:
         env:
           FRONTEND_ENV_VARS: >-
             PORT=3000
+            API_BASE_URL=${{ vars.API_BASE_URL }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
