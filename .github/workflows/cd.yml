@@ -47,6 +47,8 @@ jobs:
       web_pubsub_endpoint: ${{ steps.bicep-outputs.outputs.web_pubsub_endpoint }}
       appinsights_connection_string: ${{ steps.bicep-outputs.outputs.appinsights_connection_string }}
       backend_identity_client_id: ${{ steps.bicep-outputs.outputs.backend_identity_client_id }}
+      frontend_custom_domain: ${{ steps.bicep-outputs.outputs.frontend_custom_domain }}
+      backend_custom_domain: ${{ steps.bicep-outputs.outputs.backend_custom_domain }}
 
     steps:
       - name: Checkout code
@@ -93,6 +95,8 @@ jobs:
           echo "web_pubsub_endpoint=$(echo "$OUTPUTS" | jq -r '.webPubSubEndpoint.value')" >> "$GITHUB_OUTPUT"
           echo "appinsights_connection_string=$(echo "$OUTPUTS" | jq -r '.applicationInsightsConnectionString.value')" >> "$GITHUB_OUTPUT"
           echo "backend_identity_client_id=$(echo "$OUTPUTS" | jq -r '.backendIdentityClientId.value')" >> "$GITHUB_OUTPUT"
+          echo "frontend_custom_domain=$(echo "$OUTPUTS" | jq -r '.frontendCustomDomain.value')" >> "$GITHUB_OUTPUT"
+          echo "backend_custom_domain=$(echo "$OUTPUTS" | jq -r '.backendCustomDomain.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Dev — Promote Containers (GHCR → ACR)
@@ -197,7 +201,7 @@ jobs:
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
-            CORS_ALLOWED_ORIGINS=https://${{ vars.FRONTEND_CUSTOM_DOMAIN }}
+            CORS_ALLOWED_ORIGINS=https://${{ needs.deploy-infra-dev.outputs.frontend_custom_domain }}
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
@@ -218,7 +222,7 @@ jobs:
         env:
           FRONTEND_ENV_VARS: >-
             PORT=3000
-            API_BASE_URL=https://${{ vars.BACKEND_CUSTOM_DOMAIN }}
+            API_BASE_URL=https://${{ needs.deploy-infra-dev.outputs.backend_custom_domain }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
@@ -371,6 +375,8 @@ jobs:
       web_pubsub_endpoint: ${{ steps.bicep-outputs.outputs.web_pubsub_endpoint }}
       appinsights_connection_string: ${{ steps.bicep-outputs.outputs.appinsights_connection_string }}
       backend_identity_client_id: ${{ steps.bicep-outputs.outputs.backend_identity_client_id }}
+      frontend_custom_domain: ${{ steps.bicep-outputs.outputs.frontend_custom_domain }}
+      backend_custom_domain: ${{ steps.bicep-outputs.outputs.backend_custom_domain }}
 
     steps:
       - name: Checkout code
@@ -417,6 +423,8 @@ jobs:
           echo "web_pubsub_endpoint=$(echo "$OUTPUTS" | jq -r '.webPubSubEndpoint.value')" >> "$GITHUB_OUTPUT"
           echo "appinsights_connection_string=$(echo "$OUTPUTS" | jq -r '.applicationInsightsConnectionString.value')" >> "$GITHUB_OUTPUT"
           echo "backend_identity_client_id=$(echo "$OUTPUTS" | jq -r '.backendIdentityClientId.value')" >> "$GITHUB_OUTPUT"
+          echo "frontend_custom_domain=$(echo "$OUTPUTS" | jq -r '.frontendCustomDomain.value')" >> "$GITHUB_OUTPUT"
+          echo "backend_custom_domain=$(echo "$OUTPUTS" | jq -r '.backendCustomDomain.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Prod — Promote Containers (GHCR → ACR)
@@ -521,7 +529,7 @@ jobs:
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
-            CORS_ALLOWED_ORIGINS=https://${{ vars.FRONTEND_CUSTOM_DOMAIN }}
+            CORS_ALLOWED_ORIGINS=https://${{ needs.deploy-infra-prod.outputs.frontend_custom_domain }}
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
@@ -542,7 +550,7 @@ jobs:
         env:
           FRONTEND_ENV_VARS: >-
             PORT=3000
-            API_BASE_URL=https://${{ vars.BACKEND_CUSTOM_DOMAIN }}
+            API_BASE_URL=https://${{ needs.deploy-infra-prod.outputs.backend_custom_domain }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}

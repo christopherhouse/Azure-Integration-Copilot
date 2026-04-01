@@ -524,3 +524,9 @@ output frontDoorBackendEndpoint string = deployFrontDoor ? frontDoor!.outputs.ba
 
 @description('PubSub endpoint hostname (*.azurefd.net)')
 output frontDoorPubsubEndpoint string = deployFrontDoor ? frontDoor!.outputs.pubsubEndpointHostname : ''
+
+@description('Custom domain hostname for the frontend (e.g. dev.integrisight.ai)')
+output frontendCustomDomain string = frontendHostname
+
+@description('Custom domain hostname for the backend API (e.g. dev.api.integrisight.ai)')
+output backendCustomDomain string = backendHostname
