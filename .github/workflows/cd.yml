@@ -61,30 +61,39 @@ jobs:
 
       - name: Deploy Bicep infrastructure
         id: deploy
-        uses: azure/arm-deploy@v2
-        with:
-          resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
-          template: infra/bicep/main.bicep
-          parameters: infra/bicep/environments/dev.bicepparam vmAdminUsername=${{ secrets.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
-          deploymentName: "aic-dev-${{ github.run_number }}"
-          failOnStdErr: false
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          DEPLOYMENT_OUTPUT=$(az deployment group create \
+            --name "aic-dev-${{ github.run_number }}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --template-file infra/bicep/main.bicep \
+            --parameters infra/bicep/environments/dev.bicepparam \
+            --parameters vmAdminUsername='${{ secrets.JUMPBOX_USER }}' vmAdminPassword='${{ secrets.JUMPBOX_PASSWORD }}' \
+            --query 'properties.outputs' \
+            --output json)
+
+          echo "deployment_output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${DEPLOYMENT_OUTPUT}" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Capture deployment outputs
         id: bicep-outputs
         run: |
-          echo "acr_login_server=${{ steps.deploy.outputs.containerRegistryLoginServer }}" >> "$GITHUB_OUTPUT"
-          echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
-          echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
-          echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
-          echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "cosmos_db_endpoint=${{ steps.deploy.outputs.cosmosDbEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "blob_storage_endpoint=${{ steps.deploy.outputs.blobStorageEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "event_grid_endpoint=${{ steps.deploy.outputs.eventGridEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "event_grid_topic_name=${{ steps.deploy.outputs.eventGridTopicName }}" >> "$GITHUB_OUTPUT"
-          echo "web_pubsub_endpoint=${{ steps.deploy.outputs.webPubSubEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "appinsights_connection_string=${{ steps.deploy.outputs.applicationInsightsConnectionString }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_client_id=${{ steps.deploy.outputs.backendIdentityClientId }}" >> "$GITHUB_OUTPUT"
+          OUTPUTS='${{ steps.deploy.outputs.deployment_output }}'
+          echo "acr_login_server=$(echo "$OUTPUTS" | jq -r '.containerRegistryLoginServer.value')" >> "$GITHUB_OUTPUT"
+          echo "acr_name=$(echo "$OUTPUTS" | jq -r '.containerRegistryName.value')" >> "$GITHUB_OUTPUT"
+          echo "resource_group=$(echo "$OUTPUTS" | jq -r '.resourceGroupName.value')" >> "$GITHUB_OUTPUT"
+          echo "cae_name=$(echo "$OUTPUTS" | jq -r '.containerAppsEnvironmentName.value')" >> "$GITHUB_OUTPUT"
+          echo "frontend_identity_name=$(echo "$OUTPUTS" | jq -r '.frontendIdentityName.value')" >> "$GITHUB_OUTPUT"
+          echo "backend_identity_name=$(echo "$OUTPUTS" | jq -r '.backendIdentityName.value')" >> "$GITHUB_OUTPUT"
+          echo "cosmos_db_endpoint=$(echo "$OUTPUTS" | jq -r '.cosmosDbEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "blob_storage_endpoint=$(echo "$OUTPUTS" | jq -r '.blobStorageEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "event_grid_endpoint=$(echo "$OUTPUTS" | jq -r '.eventGridEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "event_grid_topic_name=$(echo "$OUTPUTS" | jq -r '.eventGridTopicName.value')" >> "$GITHUB_OUTPUT"
+          echo "web_pubsub_endpoint=$(echo "$OUTPUTS" | jq -r '.webPubSubEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "appinsights_connection_string=$(echo "$OUTPUTS" | jq -r '.applicationInsightsConnectionString.value')" >> "$GITHUB_OUTPUT"
+          echo "backend_identity_client_id=$(echo "$OUTPUTS" | jq -r '.backendIdentityClientId.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Dev — Promote Containers (GHCR → ACR)
@@ -375,30 +384,39 @@ jobs:
 
       - name: Deploy Bicep infrastructure
         id: deploy
-        uses: azure/arm-deploy@v2
-        with:
-          resourceGroupName: ${{ vars.AZURE_RESOURCE_GROUP }}
-          template: infra/bicep/main.bicep
-          parameters: infra/bicep/environments/prod.bicepparam vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}
-          deploymentName: "aic-prod-${{ github.run_number }}"
-          failOnStdErr: false
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          DEPLOYMENT_OUTPUT=$(az deployment group create \
+            --name "aic-prod-${{ github.run_number }}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --template-file infra/bicep/main.bicep \
+            --parameters infra/bicep/environments/prod.bicepparam \
+            --parameters vmAdminUsername='${{ vars.JUMPBOX_USER }}' vmAdminPassword='${{ secrets.JUMPBOX_PASSWORD }}' \
+            --query 'properties.outputs' \
+            --output json)
+
+          echo "deployment_output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${DEPLOYMENT_OUTPUT}" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Capture deployment outputs
         id: bicep-outputs
         run: |
-          echo "acr_login_server=${{ steps.deploy.outputs.containerRegistryLoginServer }}" >> "$GITHUB_OUTPUT"
-          echo "acr_name=${{ steps.deploy.outputs.containerRegistryName }}" >> "$GITHUB_OUTPUT"
-          echo "resource_group=${{ steps.deploy.outputs.resourceGroupName }}" >> "$GITHUB_OUTPUT"
-          echo "cae_name=${{ steps.deploy.outputs.containerAppsEnvironmentName }}" >> "$GITHUB_OUTPUT"
-          echo "frontend_identity_name=${{ steps.deploy.outputs.frontendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_name=${{ steps.deploy.outputs.backendIdentityName }}" >> "$GITHUB_OUTPUT"
-          echo "cosmos_db_endpoint=${{ steps.deploy.outputs.cosmosDbEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "blob_storage_endpoint=${{ steps.deploy.outputs.blobStorageEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "event_grid_endpoint=${{ steps.deploy.outputs.eventGridEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "event_grid_topic_name=${{ steps.deploy.outputs.eventGridTopicName }}" >> "$GITHUB_OUTPUT"
-          echo "web_pubsub_endpoint=${{ steps.deploy.outputs.webPubSubEndpoint }}" >> "$GITHUB_OUTPUT"
-          echo "appinsights_connection_string=${{ steps.deploy.outputs.applicationInsightsConnectionString }}" >> "$GITHUB_OUTPUT"
-          echo "backend_identity_client_id=${{ steps.deploy.outputs.backendIdentityClientId }}" >> "$GITHUB_OUTPUT"
+          OUTPUTS='${{ steps.deploy.outputs.deployment_output }}'
+          echo "acr_login_server=$(echo "$OUTPUTS" | jq -r '.containerRegistryLoginServer.value')" >> "$GITHUB_OUTPUT"
+          echo "acr_name=$(echo "$OUTPUTS" | jq -r '.containerRegistryName.value')" >> "$GITHUB_OUTPUT"
+          echo "resource_group=$(echo "$OUTPUTS" | jq -r '.resourceGroupName.value')" >> "$GITHUB_OUTPUT"
+          echo "cae_name=$(echo "$OUTPUTS" | jq -r '.containerAppsEnvironmentName.value')" >> "$GITHUB_OUTPUT"
+          echo "frontend_identity_name=$(echo "$OUTPUTS" | jq -r '.frontendIdentityName.value')" >> "$GITHUB_OUTPUT"
+          echo "backend_identity_name=$(echo "$OUTPUTS" | jq -r '.backendIdentityName.value')" >> "$GITHUB_OUTPUT"
+          echo "cosmos_db_endpoint=$(echo "$OUTPUTS" | jq -r '.cosmosDbEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "blob_storage_endpoint=$(echo "$OUTPUTS" | jq -r '.blobStorageEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "event_grid_endpoint=$(echo "$OUTPUTS" | jq -r '.eventGridEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "event_grid_topic_name=$(echo "$OUTPUTS" | jq -r '.eventGridTopicName.value')" >> "$GITHUB_OUTPUT"
+          echo "web_pubsub_endpoint=$(echo "$OUTPUTS" | jq -r '.webPubSubEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "appinsights_connection_string=$(echo "$OUTPUTS" | jq -r '.applicationInsightsConnectionString.value')" >> "$GITHUB_OUTPUT"
+          echo "backend_identity_client_id=$(echo "$OUTPUTS" | jq -r '.backendIdentityClientId.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Prod — Promote Containers (GHCR → ACR)
