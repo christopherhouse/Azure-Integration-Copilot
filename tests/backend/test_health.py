@@ -145,6 +145,18 @@ async def test_health_get_all_resources_unavailable_when_not_configured(client):
         )
 
 
+@pytest.mark.asyncio
+async def test_health_get_includes_duration(client):
+    """GET /api/v1/health returns data.duration matching 'X.X ms' format."""
+    response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    body = response.json()
+    assert "duration" in body["data"], "Expected 'duration' key in data"
+    assert re.match(r"^\d+\.\d+ ms$", body["data"]["duration"]), (
+        f"Duration format unexpected: {body['data']['duration']}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # Resource-level health checks (HEAD)
 # ---------------------------------------------------------------------------
@@ -177,6 +189,18 @@ async def test_health_head_no_latency_header_when_unavailable(client):
     assert latency_headers == [], (
         f"Expected no latency headers when all resources are unavailable, "
         f"but found: {latency_headers}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_health_head_includes_duration_header(client):
+    """HEAD /api/v1/health returns X-Health-Duration header matching 'X.X ms' format."""
+    response = await client.head("/api/v1/health")
+    assert response.status_code == 200
+    assert "x-health-duration" in response.headers, "Missing X-Health-Duration header"
+    duration_value = response.headers["x-health-duration"]
+    assert re.match(r"^\d+\.\d+ ms$", duration_value), (
+        f"X-Health-Duration header format unexpected: {duration_value}"
     )
 
 

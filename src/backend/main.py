@@ -158,15 +158,22 @@ async def _check_messaging() -> ResourceStatus:
     return ResourceStatus(type="messaging", available=False)
 
 
-async def _check_all_resources() -> list[ResourceStatus]:
-    """Run all dependency checks in parallel."""
+async def _check_all_resources() -> tuple[list[ResourceStatus], str]:
+    """Run all dependency checks in parallel.
+
+    Returns a tuple of (resource_statuses, aggregate_duration) where
+    aggregate_duration is the wall-clock time of the parallel execution
+    formatted as ``"<value> ms"``.
+    """
+    start = time.perf_counter()
     results = await asyncio.gather(
         _check_database(),
         _check_object_storage(),
         _check_broker(),
         _check_messaging(),
     )
-    return list(results)
+    elapsed_ms = (time.perf_counter() - start) * 1000
+    return list(results), f"{elapsed_ms:.1f} ms"
 
 
 def _compute_health_status(resources: list[ResourceStatus]) -> str:
@@ -200,10 +207,10 @@ def _resource_header_prefix(resource_type: str) -> str:
 async def health(request: Request):
     """Health probe – checks downstream dependencies and returns their status."""
     req_id = _request_id(request)
-    resources = await _check_all_resources()
+    resources, duration = await _check_all_resources()
 
     if request.method == "HEAD":
-        resource_headers: dict[str, str] = {}
+        resource_headers: dict[str, str] = {"X-Health-Duration": duration}
         for r in resources:
             prefix = _resource_header_prefix(r.type)
             resource_headers[f"X-Resource-{prefix}-Available"] = str(r.available).lower()
@@ -215,6 +222,7 @@ async def health(request: Request):
     envelope = ResponseEnvelope(
         data={
             "status": status,
+            "duration": duration,
             "resources": [
                 r.model_dump(exclude_none=True) for r in resources
             ],
