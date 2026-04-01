@@ -183,33 +183,6 @@ jobs:
           echo "frontend_id=${FRONTEND_ID}" >> "$GITHUB_OUTPUT"
           echo "backend_id=${BACKEND_ID}" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy frontend Container App
-        env:
-          FRONTEND_ENV_VARS: >-
-            PORT=3000
-            API_BASE_URL=${{ vars.API_BASE_URL }}
-            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
-            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
-            ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
-            ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
-            ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
-        run: |
-          chmod +x infra/scripts/deploy-container-app.sh
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-frontend" \
-            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/azintcp-frontend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
-            --target-port 3000 \
-            --identity "${{ steps.identities.outputs.frontend_id }}" \
-            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 0 \
-            --max-replicas 10 \
-            --env-vars "${FRONTEND_ENV_VARS}"
-
       - name: Deploy backend Container App
         env:
           BACKEND_ENV_VARS: >-
@@ -225,6 +198,7 @@ jobs:
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
         run: |
+          chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-backend" \
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
@@ -238,6 +212,45 @@ jobs:
             --min-replicas 0 \
             --max-replicas 10 \
             --env-vars "${BACKEND_ENV_VARS}"
+
+      - name: Get backend Container App FQDN
+        id: backend-fqdn
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
+        run: |
+          BACKEND_FQDN=$(az containerapp show \
+            --name "ca-backend" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv)
+          echo "Backend FQDN: https://${BACKEND_FQDN}"
+          echo "fqdn=https://${BACKEND_FQDN}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy frontend Container App
+        env:
+          FRONTEND_ENV_VARS: >-
+            PORT=3000
+            API_BASE_URL=${{ steps.backend-fqdn.outputs.fqdn }}
+            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
+            ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
+            ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
+            ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-frontend" \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/azintcp-frontend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --target-port 3000 \
+            --identity "${{ steps.identities.outputs.frontend_id }}" \
+            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 0 \
+            --max-replicas 10 \
+            --env-vars "${FRONTEND_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
   # Dev — Deploy Azure Front Door (after Container Apps exist)
@@ -506,33 +519,6 @@ jobs:
           echo "frontend_id=${FRONTEND_ID}" >> "$GITHUB_OUTPUT"
           echo "backend_id=${BACKEND_ID}" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy frontend Container App
-        env:
-          FRONTEND_ENV_VARS: >-
-            PORT=3000
-            API_BASE_URL=${{ vars.API_BASE_URL }}
-            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
-            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
-            ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
-            ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
-            ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
-        run: |
-          chmod +x infra/scripts/deploy-container-app.sh
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-frontend" \
-            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/azintcp-frontend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
-            --target-port 3000 \
-            --identity "${{ steps.identities.outputs.frontend_id }}" \
-            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 10 \
-            --env-vars "${FRONTEND_ENV_VARS}"
-
       - name: Deploy backend Container App
         env:
           BACKEND_ENV_VARS: >-
@@ -548,6 +534,7 @@ jobs:
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
         run: |
+          chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-backend" \
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
@@ -561,6 +548,45 @@ jobs:
             --min-replicas 1 \
             --max-replicas 10 \
             --env-vars "${BACKEND_ENV_VARS}"
+
+      - name: Get backend Container App FQDN
+        id: backend-fqdn
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
+        run: |
+          BACKEND_FQDN=$(az containerapp show \
+            --name "ca-backend" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --query "properties.configuration.ingress.fqdn" \
+            --output tsv)
+          echo "Backend FQDN: https://${BACKEND_FQDN}"
+          echo "fqdn=https://${BACKEND_FQDN}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy frontend Container App
+        env:
+          FRONTEND_ENV_VARS: >-
+            PORT=3000
+            API_BASE_URL=${{ steps.backend-fqdn.outputs.fqdn }}
+            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL || vars.NEXTAUTH_URL }}
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
+            ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
+            ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
+            ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-frontend" \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/azintcp-frontend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --target-port 3000 \
+            --identity "${{ steps.identities.outputs.frontend_id }}" \
+            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 10 \
+            --env-vars "${FRONTEND_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
   # Prod — Deploy Azure Front Door (after Container Apps exist)
