@@ -69,7 +69,6 @@ jobs:
             --resource-group "${RESOURCE_GROUP}" \
             --template-file infra/bicep/main.bicep \
             --parameters infra/bicep/environments/dev.bicepparam \
-            --parameters vmAdminUsername='${{ secrets.JUMPBOX_USER }}' vmAdminPassword='${{ secrets.JUMPBOX_PASSWORD }}' \
             --query 'properties.outputs' \
             --output json)
 
@@ -392,7 +391,6 @@ jobs:
             --resource-group "${RESOURCE_GROUP}" \
             --template-file infra/bicep/main.bicep \
             --parameters infra/bicep/environments/prod.bicepparam \
-            --parameters vmAdminUsername='${{ vars.JUMPBOX_USER }}' vmAdminPassword='${{ secrets.JUMPBOX_PASSWORD }}' \
             --query 'properties.outputs' \
             --output json)
 

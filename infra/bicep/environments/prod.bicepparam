@@ -12,8 +12,6 @@ param vnetAddressSpace = ['10.1.0.0/16']
 param subnetContainerAppsPrefix = '10.1.0.0/23'
 param subnetPrivateEndpointsPrefix = '10.1.3.0/26'
 param subnetIntegrationPrefix = '10.1.3.64/26'
-param subnetBastionPrefix = '10.1.4.0/26'
-param subnetJumpboxPrefix = '10.1.4.64/27'
 
 // Service tiers — production grade
 param containerRegistrySku = 'Standard'
@@ -53,13 +51,6 @@ param cosmosAllowedIpAddresses = [
   '13.91.105.215'
   '40.91.218.243'
 ]
-
-// Jumpbox VM credentials — placeholders overridden by the CD workflow via
-// the 'parameters' field in azure/arm-deploy@v2. The workflow appends
-// 'vmAdminUsername=${{ vars.JUMPBOX_USER }} vmAdminPassword=${{ secrets.JUMPBOX_PASSWORD }}'
-// to the parameters field, which overrides these placeholder values.
-param vmAdminUsername = 'azureadmin'
-param vmAdminPassword = 'OVERRIDE_IN_PIPELINE'
 
 param tags = {
   project: 'azure-integration-copilot'
