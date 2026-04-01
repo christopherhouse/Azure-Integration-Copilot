@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
+import { useTenantContext } from "@/components/providers/tenant-provider";
 
 export default function DashboardLayout({
   children,
@@ -13,6 +14,7 @@ export default function DashboardLayout({
 }) {
   const { status } = useSession();
   const router = useRouter();
+  const { isLoading: tenantLoading, error: tenantError } = useTenantContext();
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -30,6 +32,30 @@ export default function DashboardLayout({
 
   if (status === "unauthenticated") {
     return null;
+  }
+
+  if (tenantLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <p className="text-muted-foreground">Setting up your workspace…</p>
+      </div>
+    );
+  }
+
+  if (tenantError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <p className="text-destructive font-medium">
+            Unable to load your workspace.
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Please try refreshing the page. If the problem persists, contact
+            support.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
