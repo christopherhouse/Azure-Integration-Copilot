@@ -109,7 +109,6 @@ class TenantRepository:
         items = container.query_items(
             query=query,
             parameters=parameters,
-            enable_cross_partition_query=True,
         )
         async for item in items:
             return User.model_validate(item)
