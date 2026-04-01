@@ -25,7 +25,7 @@ class TenantRepository:
     async def create_tenant(self, tenant: Tenant) -> Tenant:
         """Create a new tenant document."""
         container = await self._get_container()
-        doc = tenant.model_dump(by_alias=True)
+        doc = tenant.model_dump(by_alias=True, mode="json")
         result = await container.create_item(body=doc)
         logger.info("tenant_created", tenant_id=tenant.id)
         return Tenant.model_validate(result)
@@ -45,7 +45,7 @@ class TenantRepository:
         """Update an existing tenant document with ETag-based optimistic concurrency."""
         container = await self._get_container()
         tenant.updated_at = datetime.now(UTC)
-        doc = tenant.model_dump(by_alias=True)
+        doc = tenant.model_dump(by_alias=True, mode="json")
 
         kwargs: dict = {}
         if tenant.etag:
@@ -65,7 +65,7 @@ class TenantRepository:
     async def create_user(self, user: User) -> User:
         """Create a new user document in the tenants container."""
         container = await self._get_container()
-        doc = user.model_dump(by_alias=True)
+        doc = user.model_dump(by_alias=True, mode="json")
         result = await container.create_item(body=doc)
         logger.info("user_created", user_id=user.id, tenant_id=user.tenant_id)
         return User.model_validate(result)
@@ -78,8 +78,8 @@ class TenantRepository:
         operation fails the entire batch is rolled back.
         """
         container = await self._get_container()
-        tenant_doc = tenant.model_dump(by_alias=True)
-        user_doc = user.model_dump(by_alias=True)
+        tenant_doc = tenant.model_dump(by_alias=True, mode="json")
+        user_doc = user.model_dump(by_alias=True, mode="json")
         batch_operations = [
             ("create", (tenant_doc,), {}),
             ("create", (user_doc,), {}),

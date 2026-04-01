@@ -25,7 +25,7 @@ class ProjectRepository:
     async def create(self, project: Project) -> Project:
         """Create a new project document."""
         container = await self._get_container()
-        doc = project.model_dump(by_alias=True)
+        doc = project.model_dump(by_alias=True, mode="json")
         result = await container.create_item(body=doc)
         logger.info("project_created", project_id=project.id, tenant_id=project.tenant_id)
         return Project.model_validate(result)
@@ -82,7 +82,7 @@ class ProjectRepository:
         """Update an existing project document with ETag-based optimistic concurrency."""
         container = await self._get_container()
         project.updated_at = datetime.now(UTC)
-        doc = project.model_dump(by_alias=True)
+        doc = project.model_dump(by_alias=True, mode="json")
 
         kwargs: dict = {}
         if project.etag:
