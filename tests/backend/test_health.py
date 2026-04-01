@@ -3,17 +3,20 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from main import _compute_health_status
+from shared.models import ResourceStatus as RS
+
 # Expected resource types returned by the health endpoint
 EXPECTED_RESOURCE_TYPES = {"database", "object_storage", "broker", "messaging"}
 
 
 @pytest.mark.asyncio
-async def test_health_returns_ok(client):
-    """GET /api/v1/health returns 200 with enveloped status ok."""
+async def test_health_returns_failed_when_all_unavailable(client):
+    """GET /api/v1/health returns status 'failed' when all dependencies are unavailable."""
     response = await client.get("/api/v1/health")
     assert response.status_code == 200
     body = response.json()
-    assert body["data"]["status"] == "ok"
+    assert body["data"]["status"] == "failed"
     assert "meta" in body
     assert "request_id" in body["meta"]
     assert "timestamp" in body["meta"]
@@ -375,6 +378,14 @@ async def test_health_get_all_resources_available(client, mock_all_resources_ava
 
 
 @pytest.mark.asyncio
+async def test_health_status_ok_when_all_available(client, mock_all_resources_available):
+    """GET /api/v1/health returns status 'ok' when all dependencies are available."""
+    response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "ok"
+
+
+@pytest.mark.asyncio
 async def test_health_head_all_latency_headers_when_all_available(client, mock_all_resources_available):
     """When all resources are available, HEAD returns latency headers for all four."""
     response = await client.head("/api/v1/health")
@@ -388,3 +399,44 @@ async def test_health_head_all_latency_headers_when_all_available(client, mock_a
     for header in expected_latency_headers:
         assert header in response.headers, f"Missing latency header: {header}"
         assert re.match(r"^\d+\.\d+ ms$", response.headers[header])
+
+
+# ---------------------------------------------------------------------------
+# Degraded status (some dependencies available)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_health_status_degraded_when_some_available(client, mock_cosmos_available):
+    """GET /api/v1/health returns status 'degraded' when only some dependencies are available."""
+    response = await client.get("/api/v1/health")
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "degraded"
+
+
+# ---------------------------------------------------------------------------
+# _compute_health_status unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_compute_health_status_ok():
+    """Returns 'ok' when all resources are available."""
+    resources = [RS(type="database", available=True), RS(type="broker", available=True)]
+    assert _compute_health_status(resources) == "ok"
+
+
+def test_compute_health_status_failed():
+    """Returns 'failed' when no resources are available."""
+    resources = [RS(type="database", available=False), RS(type="broker", available=False)]
+    assert _compute_health_status(resources) == "failed"
+
+
+def test_compute_health_status_degraded():
+    """Returns 'degraded' when some but not all resources are available."""
+    resources = [RS(type="database", available=True), RS(type="broker", available=False)]
+    assert _compute_health_status(resources) == "degraded"
+
+
+def test_compute_health_status_empty():
+    """Returns 'failed' when resource list is empty."""
+    assert _compute_health_status([]) == "failed"
