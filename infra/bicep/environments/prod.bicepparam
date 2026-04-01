@@ -54,9 +54,11 @@ param cosmosAllowedIpAddresses = [
   '40.91.218.243'
 ]
 
-// Jumpbox VM credentials are passed via additionalArguments in the CD workflow
-// (azure/arm-deploy@v2) because readEnvironmentVariable() is only supported by
-// the Bicep CLI and is not reliably available through the ARM deploy action.
+// Jumpbox VM credentials — placeholders overridden by the CD workflow via
+// additionalArguments in azure/arm-deploy@v2.  Do NOT use readEnvironmentVariable()
+// here; it is only evaluated by the Bicep CLI, not by the ARM deploy action.
+param vmAdminUsername = 'azureadmin'
+param vmAdminPassword = 'OVERRIDE_IN_PIPELINE'
 
 param tags = {
   project: 'azure-integration-copilot'
