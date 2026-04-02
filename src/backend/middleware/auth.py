@@ -113,7 +113,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
 
             request.state.external_id = payload.get("oid", payload.get("sub", ""))
-            request.state.email = payload.get("email", "")
+
+            # CIAM tokens may carry the email in the singular "email" claim,
+            # the "emails" array claim, or "preferred_username".
+            raw_emails = payload.get("emails")
+            emails_claim = raw_emails if isinstance(raw_emails, list) else []
+            request.state.email = (
+                payload.get("email")
+                or (emails_claim[0] if len(emails_claim) > 0 else None)
+                or payload.get("preferred_username")
+                or ""
+            )
+
             request.state.display_name = payload.get(
                 "name", payload.get("preferred_username", "")
             )
