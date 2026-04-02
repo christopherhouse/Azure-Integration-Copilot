@@ -1,0 +1,25 @@
+FROM python:3.13.12-slim-trixie@sha256:739e7213785e88c0f702dcdc12c0973afcbd606dbf021a589cab77d6b00b579d
+
+# Install UV
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+
+WORKDIR /app
+
+# Copy dependency files first for layer caching
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies (production only)
+RUN uv sync --frozen --no-dev --no-install-project
+
+# Copy application code
+COPY . .
+
+# Install the project itself
+RUN uv sync --frozen --no-dev
+
+# The worker entry-point module is set via the WORKER_MODULE environment
+# variable at deploy time.  For example:
+#   WORKER_MODULE=workers.scan_gate.main
+ENV WORKER_MODULE=workers.scan_gate.main
+
+CMD ["sh", "-c", "uv run python -m ${WORKER_MODULE}"]
