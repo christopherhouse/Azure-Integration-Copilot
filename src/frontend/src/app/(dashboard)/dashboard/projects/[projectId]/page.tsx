@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
+import { ApiRequestError } from "@/lib/api";
 import {
   FileText,
   FolderKanban,
@@ -51,6 +52,21 @@ export default function ProjectDetailPage() {
         toast.success(`Uploaded ${file.name}`);
       },
       onError: (err) => {
+        if (err instanceof ApiRequestError) {
+          if (err.status === 429) {
+            const max = err.detail?.max;
+            toast.error(
+              max
+                ? `Artifact limit reached (${max} per project). Delete an existing artifact to upload more.`
+                : "Artifact limit reached for this project.",
+            );
+            return;
+          }
+          if (err.status === 413) {
+            toast.error("File is too large. Please upload a smaller file.");
+            return;
+          }
+        }
         toast.error(err instanceof Error ? err.message : "Upload failed");
       },
     });
@@ -176,7 +192,10 @@ export default function ProjectDetailPage() {
 
           {artifactData && (
             <div className="mt-4">
-              <ArtifactList artifacts={artifactData.data} />
+              <ArtifactList
+                artifacts={artifactData.data}
+                projectId={projectId}
+              />
             </div>
           )}
         </TabsContent>

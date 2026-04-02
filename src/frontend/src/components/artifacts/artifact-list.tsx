@@ -1,7 +1,9 @@
 "use client";
 
+import { Download } from "lucide-react";
 import { ArtifactStatusBadge } from "./artifact-status-badge";
 import type { Artifact } from "@/hooks/use-artifacts";
+import { getApiBaseUrl } from "@/lib/api";
 
 function formatBytes(bytes: number | null): string {
   if (bytes === null || bytes === undefined) return "—";
@@ -33,7 +35,12 @@ function artifactTypeLabel(type: string | null): string {
   return labels[type] ?? type;
 }
 
-export function ArtifactList({ artifacts }: { artifacts: Artifact[] }) {
+interface ArtifactListProps {
+  artifacts: Artifact[];
+  projectId?: string;
+}
+
+export function ArtifactList({ artifacts, projectId }: ArtifactListProps) {
   if (artifacts.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
@@ -52,6 +59,11 @@ export function ArtifactList({ artifacts }: { artifacts: Artifact[] }) {
             <th className="px-4 py-2 text-left font-medium">Status</th>
             <th className="px-4 py-2 text-right font-medium">Size</th>
             <th className="px-4 py-2 text-left font-medium">Uploaded</th>
+            {projectId && (
+              <th className="px-4 py-2 text-right font-medium">
+                <span className="sr-only">Actions</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -70,6 +82,20 @@ export function ArtifactList({ artifacts }: { artifacts: Artifact[] }) {
               <td className="px-4 py-2 text-muted-foreground">
                 {formatDate(a.createdAt)}
               </td>
+              {projectId && a.status !== "uploading" && (
+                <td className="px-4 py-2 text-right">
+                  <a
+                    href={`${getApiBaseUrl()}/api/v1/projects/${projectId}/artifacts/${a.id}/download`}
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                    title={`Download ${a.name}`}
+                  >
+                    <Download className="size-3.5" />
+                  </a>
+                </td>
+              )}
+              {projectId && a.status === "uploading" && (
+                <td className="px-4 py-2" />
+              )}
             </tr>
           ))}
         </tbody>
