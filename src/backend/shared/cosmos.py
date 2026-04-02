@@ -1,3 +1,5 @@
+from typing import Any
+
 import structlog
 from azure.cosmos.aio import ContainerProxy, CosmosClient
 from azure.identity.aio import DefaultAzureCredential
@@ -9,7 +11,7 @@ from shared.credential import create_credential
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
-def _enrich_span_with_request_charge(response) -> None:  # noqa: ANN001
+def _enrich_span_with_request_charge(response: Any) -> None:
     """Capture Cosmos DB RU cost from response headers and add to the current OTel span.
 
     The ``x-ms-request-charge`` header is present on every Cosmos DB response
