@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 
 import structlog
 
+from domains.tenants.repository import tenant_repository
+
 from .models import CreateProjectRequest, Project, ProjectStatus, UpdateProjectRequest
 from .repository import project_repository
 
@@ -31,7 +33,9 @@ class ProjectService:
             createdAt=now,
             updatedAt=now,
         )
-        return await project_repository.create(project)
+        created = await project_repository.create(project)
+        await tenant_repository.increment_usage(tenant_id, "project_count")
+        return created
 
     async def get_project(self, tenant_id: str, project_id: str) -> Project | None:
         """Get a project by ID, scoped to tenant. Returns None for deleted projects."""
@@ -63,7 +67,10 @@ class ProjectService:
 
     async def delete_project(self, tenant_id: str, project_id: str) -> Project | None:
         """Soft-delete a project."""
-        return await project_repository.soft_delete(tenant_id, project_id)
+        deleted = await project_repository.soft_delete(tenant_id, project_id)
+        if deleted is not None:
+            await tenant_repository.increment_usage(tenant_id, "project_count", amount=-1)
+        return deleted
 
 
 project_service = ProjectService()

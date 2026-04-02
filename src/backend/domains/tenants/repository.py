@@ -127,7 +127,8 @@ class TenantRepository:
             logger.warning("unknown_usage_field", field=field)
             return tenant
 
-        setattr(tenant.usage, field, current_value + amount)
+        new_value = max(0, current_value + amount)
+        setattr(tenant.usage, field, new_value)
         return await self.update_tenant(tenant)
 
     async def reset_daily_analysis_count(self, tenant_id: str) -> Tenant | None:
