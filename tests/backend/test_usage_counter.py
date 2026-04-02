@@ -140,7 +140,8 @@ async def test_increment_usage_retries_on_etag_conflict():
             "get_tenant",
             new=AsyncMock(side_effect=[
                 _make_tenant(tenant_id=tenant_id, project_count=2),
-                _make_tenant(tenant_id=tenant_id, project_count=2),
+                # Retry reads fresh state — another request bumped the count
+                _make_tenant(tenant_id=tenant_id, project_count=3),
             ]),
         ),
         patch.object(
@@ -148,14 +149,14 @@ async def test_increment_usage_retries_on_etag_conflict():
             "update_tenant",
             new=AsyncMock(side_effect=[
                 cosmos_exceptions.CosmosAccessConditionFailedError(),
-                _make_tenant(tenant_id=tenant_id, project_count=3),
+                _make_tenant(tenant_id=tenant_id, project_count=4),
             ]),
         ) as mock_update,
     ):
         result = await repo.increment_usage(tenant_id, "project_count", amount=1)
 
         assert result is not None
-        assert result.usage.project_count == 3
+        assert result.usage.project_count == 4
         assert mock_update.call_count == 2
 
 

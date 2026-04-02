@@ -46,6 +46,8 @@ class ProjectService:
             await tenant_repository.increment_usage(
                 tenant_id, "project_count", amount=-1
             )
+            # Report the pre-increment count (subtract the +1 reservation) so
+            # the client sees how many projects the tenant actually has.
             raise QuotaExceededError(
                 message="Quota exceeded for max_projects.",
                 detail={

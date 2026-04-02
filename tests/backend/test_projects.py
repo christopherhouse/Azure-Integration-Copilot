@@ -454,6 +454,7 @@ async def test_create_project_raises_quota_exceeded_when_at_limit():
             await project_service.create_project(request, tenant_id, user_id)
 
         assert exc_info.value.status_code == 429
+        mock_tier_svc.get_tier.assert_called_once_with(FREE_TIER.id)
         # Verify rollback was called
         calls = mock_tenant_repo.increment_usage.call_args_list
         assert len(calls) == 2
