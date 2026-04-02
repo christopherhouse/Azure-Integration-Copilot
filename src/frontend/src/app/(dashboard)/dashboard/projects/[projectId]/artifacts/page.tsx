@@ -101,7 +101,9 @@ export default function ArtifactsPage() {
         <p className="text-sm text-muted-foreground">Loading artifacts…</p>
       )}
 
-      {artifactData && <ArtifactList artifacts={artifactData.data} />}
+      {artifactData && (
+        <ArtifactList artifacts={artifactData.data} projectId={projectId} />
+      )}
     </div>
   );
 }
