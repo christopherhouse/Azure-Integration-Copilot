@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 import structlog
+from azure.core import MatchConditions
 from azure.cosmos import exceptions as cosmos_exceptions
 from azure.cosmos.aio import ContainerProxy
 
@@ -87,7 +88,7 @@ class ProjectRepository:
         kwargs: dict = {}
         if project.etag:
             kwargs["etag"] = project.etag
-            kwargs["match_condition"] = "IfMatch"
+            kwargs["match_condition"] = MatchConditions.IfNotModified
 
         result = await container.replace_item(item=project.id, body=doc, **kwargs)
         logger.info("project_updated", project_id=project.id)
