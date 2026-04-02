@@ -107,6 +107,7 @@ var resourceNames = {
   webPubSub: 'wps-${namePrefix}'
   idFrontend: 'id-frontend-${namePrefix}'
   idBackend: 'id-backend-${namePrefix}'
+  idWorker: 'id-worker-${namePrefix}'
   bastion: 'bas-${namePrefix}'
 }
 
@@ -262,6 +263,16 @@ module identityBackend 'br/public:avm/res/managed-identity/user-assigned-identit
   }
 }
 
+module identityWorker 'br/public:avm/res/managed-identity/user-assigned-identity:0.4.1' = {
+  name: 'identity-worker'
+  params: {
+    name: resourceNames.idWorker
+    location: location
+    tags: commonTags
+    enableTelemetry: false
+  }
+}
+
 // ---------------------------------------------------------------------------
 // RBAC Role Assignments
 // ---------------------------------------------------------------------------
@@ -348,6 +359,72 @@ resource backendWebPubSubOwner 'Microsoft.Authorization/roleAssignments@2022-04-
   properties: {
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12cf5a90-567b-43ae-8102-96cf46c7d9b4')
     principalId: identityBackend.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// AcrPull for worker identity
+resource workerAcrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.containerRegistry, resourceNames.idWorker, 'AcrPull')
+  scope: acrResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+    principalId: identityWorker.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Key Vault Secrets User for worker identity
+resource workerKvSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.keyVault, resourceNames.idWorker, 'KVSecretsUser')
+  scope: kvResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
+    principalId: identityWorker.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Cosmos DB Built-in Data Contributor for worker identity
+resource workerCosmosDataContributor 'Microsoft.DocumentDB/databaseAccounts/sqlRoleAssignments@2024-05-15' = {
+  parent: cosmosResource
+  name: guid(resourceGroup().id, resourceNames.cosmosDb, resourceNames.idWorker, 'CosmosDataContributor')
+  properties: {
+    roleDefinitionId: '${cosmosDb.outputs.accountId}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002'
+    principalId: identityWorker.outputs.principalId
+    scope: cosmosDb.outputs.accountId
+  }
+}
+
+// Storage Blob Data Contributor for worker identity
+resource workerStorageBlobContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.storageAccount, resourceNames.idWorker, 'StorageBlobDataContributor')
+  scope: storageResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalId: identityWorker.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// EventGrid Data Sender for worker identity (publishes downstream events)
+resource workerEventGridDataSender 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.eventGrid, resourceNames.idWorker, 'EventGridDataSender')
+  scope: eventGridResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'd5a91429-5739-47e2-a06b-3470a27159e7')
+    principalId: identityWorker.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// EventGrid Data Receiver for worker identity (receives and acknowledges events)
+resource workerEventGridDataReceiver 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.eventGrid, resourceNames.idWorker, 'EventGridDataReceiver')
+  scope: eventGridResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '78cbd9e7-9798-4e2e-9b5a-547d9ebb31fb')
+    principalId: identityWorker.outputs.principalId
     principalType: 'ServicePrincipal'
   }
 }
@@ -512,6 +589,15 @@ output backendIdentityName string = identityBackend.outputs.name
 
 @description('Client ID of the backend managed identity')
 output backendIdentityClientId string = identityBackend.outputs.clientId
+
+@description('Resource ID of the worker managed identity')
+output workerIdentityResourceId string = identityWorker.outputs.resourceId
+
+@description('Name of the worker managed identity')
+output workerIdentityName string = identityWorker.outputs.name
+
+@description('Client ID of the worker managed identity')
+output workerIdentityClientId string = identityWorker.outputs.clientId
 
 @description('Resource ID of the Front Door profile')
 output frontDoorId string = deployFrontDoor ? frontDoor!.outputs.id : ''
