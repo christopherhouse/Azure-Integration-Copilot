@@ -573,3 +573,76 @@ def test_project_routes_registered():
     routes = [route.path for route in app.routes if hasattr(route, "path")]
     assert "/api/v1/projects" in routes
     assert "/api/v1/projects/{project_id}" in routes
+
+
+# ---------------------------------------------------------------------------
+# ProjectRepository.increment_artifact_count unit tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_project_repository_increment_artifact_count():
+    """ProjectRepository.increment_artifact_count reads, increments, and writes back."""
+    from domains.projects.repository import ProjectRepository
+
+    project = Project(
+        id="prj-001",
+        partitionKey="t-001",
+        tenantId="t-001",
+        name="Test",
+        createdBy="u-001",
+        artifactCount=5,
+    )
+    project.etag = "etag-1"
+
+    updated_project = project.model_copy()
+    updated_project.artifact_count = 6
+    updated_project.etag = "etag-2"
+
+    repo = ProjectRepository()
+
+    with (
+        patch.object(repo, "get_by_id", new_callable=AsyncMock, return_value=project),
+        patch.object(repo, "update", new_callable=AsyncMock, return_value=updated_project),
+    ):
+        result = await repo.increment_artifact_count("t-001", "prj-001")
+
+        assert result is not None
+        repo.get_by_id.assert_called_once_with("t-001", "prj-001")
+        repo.update.assert_called_once()
+        # The project passed to update should have artifact_count=6
+        updated_arg = repo.update.call_args[0][0]
+        assert updated_arg.artifact_count == 6
+
+
+@pytest.mark.asyncio
+async def test_project_repository_increment_artifact_count_floors_at_zero():
+    """Decrementing artifact_count below zero floors at 0."""
+    from domains.projects.repository import ProjectRepository
+
+    project = Project(
+        id="prj-001",
+        partitionKey="t-001",
+        tenantId="t-001",
+        name="Test",
+        createdBy="u-001",
+        artifactCount=0,
+    )
+    project.etag = "etag-1"
+
+    updated_project = project.model_copy()
+    updated_project.artifact_count = 0
+    updated_project.etag = "etag-2"
+
+    repo = ProjectRepository()
+
+    with (
+        patch.object(repo, "get_by_id", new_callable=AsyncMock, return_value=project),
+        patch.object(repo, "update", new_callable=AsyncMock, return_value=updated_project),
+    ):
+        result = await repo.increment_artifact_count("t-001", "prj-001", amount=-1)
+
+        assert result is not None
+        # The project passed to update should have artifact_count=0, not -1
+        updated_arg = repo.update.call_args[0][0]
+        assert updated_arg.artifact_count == 0
