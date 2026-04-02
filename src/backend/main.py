@@ -251,7 +251,7 @@ def _compute_health_status(resources: list[ResourceStatus]) -> str:
 
 @app.api_route("/api/v1/health", methods=["GET", "HEAD"])
 async def health(request: Request):
-    """Health probe -- checks downstream dependencies and returns their status.
+    """Health probe – checks downstream dependencies and returns their status.
 
     HEAD requests return a simple ``200 OK`` without calling downstream
     dependencies.  Container orchestrators (Azure Container Apps, Kubernetes)

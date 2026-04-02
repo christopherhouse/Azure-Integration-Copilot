@@ -217,8 +217,8 @@ async def test_unhandled_exception_handler_records_exception_on_span():
     mock_span = MagicMock()
     # The structlog processor _add_opentelemetry_context calls
     # format(ctx.trace_id, "032x"), so provide real int values.
-    mock_span.get_span_context.return_value.trace_id = 0
-    mock_span.get_span_context.return_value.span_id = 0
+    mock_span.get_span_context.return_value.trace_id = 0x1234567890ABCDEF
+    mock_span.get_span_context.return_value.span_id = 0xFEDCBA09
 
     with patch("main.trace.get_current_span", return_value=mock_span):
         response = await unhandled_exception_handler(mock_request, err)
