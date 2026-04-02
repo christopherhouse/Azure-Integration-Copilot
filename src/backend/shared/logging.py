@@ -1,14 +1,89 @@
 import logging
 import sys
+import threading
+from collections import OrderedDict
 
 import structlog
 from opentelemetry import trace
+from opentelemetry.context import Context
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor, TracerProvider
+from opentelemetry.trace import SpanKind
 
 from config import settings
 
 _configured = False
+
+
+# ---------------------------------------------------------------------------
+# Span filtering — suppress HEAD health-check noise
+# ---------------------------------------------------------------------------
+
+
+class HealthCheckHeadFilter(SpanProcessor):
+    """Drop all telemetry for HEAD requests to health-check endpoints.
+
+    Container orchestrators (Azure Container Apps, Kubernetes) issue frequent
+    HEAD probes to ``/api/v1/health``.  These create significant noise in
+    Application Insights without adding diagnostic value.  GET requests to the
+    same endpoints are still traced normally.
+
+    The filter works in two phases:
+
+    1. **on_start** — when a ``SERVER`` span starts with
+       ``http.request.method == HEAD`` and a health-check path, its
+       ``trace_id`` is recorded in a bounded set.
+    2. **on_end** — any span whose ``trace_id`` is in that set is silently
+       dropped (not forwarded to the wrapped processor), which prevents both
+       the request span *and* its child dependency spans from being exported.
+    """
+
+    _MAX_TRACKED: int = 1_000
+
+    def __init__(self, next_processor: SpanProcessor) -> None:
+        self._next = next_processor
+        self._suppressed_traces: OrderedDict[int, bool] = OrderedDict()
+        self._lock = threading.Lock()
+
+    # -- SpanProcessor interface ---------------------------------------------
+
+    def on_start(self, span: Span, parent_context: Context | None = None) -> None:
+        if self._is_head_health_check(span):
+            with self._lock:
+                self._suppressed_traces[span.context.trace_id] = True
+                # Evict oldest entries to bound memory usage.
+                while len(self._suppressed_traces) > self._MAX_TRACKED:
+                    self._suppressed_traces.popitem(last=False)
+        self._next.on_start(span, parent_context)
+
+    def on_end(self, span: ReadableSpan) -> None:
+        with self._lock:
+            if span.context.trace_id in self._suppressed_traces:
+                return  # silently drop — don't forward to exporter
+        self._next.on_end(span)
+
+    def shutdown(self) -> None:
+        self._next.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30_000) -> bool:
+        return self._next.force_flush(timeout_millis)
+
+    # -- helpers -------------------------------------------------------------
+
+    @staticmethod
+    def _is_head_health_check(span: Span) -> bool:
+        """Return *True* for SERVER spans created by HEAD /api/v1/health* requests."""
+        if span.kind != SpanKind.SERVER:
+            return False
+        attrs = span.attributes or {}
+        method = attrs.get("http.request.method") or attrs.get("http.method", "")
+        path = attrs.get("url.path") or attrs.get("http.target", "")
+        return method == "HEAD" and path.startswith("/api/v1/health")
+
+
+# ---------------------------------------------------------------------------
+# OpenTelemetry context injection for structured logging
+# ---------------------------------------------------------------------------
 
 
 def _add_opentelemetry_context(
@@ -23,8 +98,21 @@ def _add_opentelemetry_context(
     return event_dict
 
 
-def setup_telemetry() -> None:
+# ---------------------------------------------------------------------------
+# Telemetry bootstrap
+# ---------------------------------------------------------------------------
+
+
+def setup_telemetry(app=None) -> None:
     """Configure OpenTelemetry with Azure Monitor export.
+
+    Args:
+        app: The FastAPI application instance.  When provided the app is
+            explicitly instrumented with ``FastAPIInstrumentor.instrument_app``
+            so that incoming requests produce server spans.  This is required
+            because ``configure_azure_monitor`` only patches the FastAPI
+            *class* — it does **not** retroactively instrument app instances
+            that were created before it was called.
 
     When ``APPLICATIONINSIGHTS_CONNECTION_STRING`` is set, the Azure Monitor
     OpenTelemetry distro is used to configure:
@@ -47,7 +135,7 @@ def setup_telemetry() -> None:
     if connection_string:
         # Use the Azure Monitor OpenTelemetry distro. This single call:
         # - Exports traces, metrics, and logs to Azure Monitor Application Insights
-        # - Auto-instruments FastAPI (requests), Azure SDK calls (Azure.* span
+        # - Auto-instruments the FastAPI *class*, Azure SDK calls (Azure.* span
         #   sources), and Python stdlib logging
         # - Applies BatchSpanProcessor so export is non-blocking
         from azure.monitor.opentelemetry import configure_azure_monitor
@@ -68,10 +156,47 @@ def setup_telemetry() -> None:
         provider = TracerProvider(resource=resource)
         trace.set_tracer_provider(provider)
 
+    # Explicitly instrument the *existing* app instance so that incoming
+    # requests produce server spans.  configure_azure_monitor() only patches
+    # the FastAPI class; instances created before that call are missed.
+    # Without this, dependency spans (Azure SDK, httpx, aiohttp) have no
+    # parent request span and appear uncorrelated in Application Insights.
+    if app is not None:
+        _instrument_app(app)
+
     # Instrument httpx (used in auth middleware for JWKS fetching) and aiohttp
     # (used in shared/events.py for Event Grid ping) so outbound HTTP calls
     # are tracked as dependency spans.
     _instrument_http_clients()
+
+    # Install the HEAD health-check filter so container probes don't flood
+    # Application Insights with noise.
+    _install_health_head_filter()
+
+
+def _instrument_app(app) -> None:  # noqa: ANN001
+    """Explicitly instrument an existing FastAPI app instance.
+
+    ``configure_azure_monitor()`` calls ``FastAPIInstrumentor.instrument()``
+    which replaces the ``FastAPI`` *class* with an instrumented subclass.
+    Instances that already exist are **not** affected.  This helper calls
+    ``instrument_app()`` which patches the specific instance's
+    ``build_middleware_stack`` so that the ``OpenTelemetryMiddleware`` is
+    inserted into the ASGI pipeline.  The middleware creates server spans for
+    every incoming HTTP request, providing the parent context that dependency
+    spans need for end-to-end correlation in Application Insights.
+    """
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+        FastAPIInstrumentor.instrument_app(app)
+    except Exception:  # noqa: BLE001
+        # If instrumentation fails (e.g. unexpected version mismatch), log and
+        # continue — the app should still work, just without request spans.
+        structlog.get_logger(__name__).warning(
+            "fastapi_instrument_app_failed",
+            msg="Could not instrument FastAPI app instance; request-dependency correlation may be degraded.",
+        )
 
 
 def _instrument_http_clients() -> None:
@@ -89,6 +214,25 @@ def _instrument_http_clients() -> None:
         AioHttpClientInstrumentor().instrument()
     except ImportError:
         pass
+
+
+def _install_health_head_filter() -> None:
+    """Wrap the active span processor with :class:`HealthCheckHeadFilter`.
+
+    The filter intercepts ``on_end`` calls and silently drops spans that
+    belong to HEAD health-check requests, preventing them from being exported
+    to Application Insights.
+
+    This function accesses the ``_active_span_processor`` private attribute of
+    the SDK ``TracerProvider``.  While private, this is the standard community
+    pattern for injecting span-level filtering into an existing OTel pipeline.
+    """
+    from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
+
+    provider = trace.get_tracer_provider()
+    if isinstance(provider, SdkTracerProvider) and hasattr(provider, "_active_span_processor"):
+        original = provider._active_span_processor
+        provider._active_span_processor = HealthCheckHeadFilter(original)
 
 
 def setup_logging() -> None:
