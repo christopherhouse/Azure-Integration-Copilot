@@ -50,11 +50,15 @@ function buildEntraCiamProvider(): OAuthConfig<Record<string, unknown>>[] {
       },
       checks: ["pkce", "state"],
       profile(profile: Record<string, unknown>) {
+        const emailsArr = Array.isArray(profile.emails)
+          ? (profile.emails as string[])
+          : [];
         return {
           id: (profile.oid as string) || (profile.sub as string),
           name: profile.name as string,
           email:
             (profile.email as string) ||
+            emailsArr[0] ||
             (profile.preferred_username as string),
         };
       },
