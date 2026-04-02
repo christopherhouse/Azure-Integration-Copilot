@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 
 import aiohttp
@@ -5,17 +6,15 @@ import structlog
 from azure.core.messaging import CloudEvent
 from azure.eventgrid.aio import EventGridPublisherClient
 from azure.identity.aio import DefaultAzureCredential
+from ulid import ULID
 
 from config import settings
 from shared.credential import create_credential
 
+# Re-export the canonical event type constant for backward compatibility.
+from shared.event_types import EVENT_ARTIFACT_UPLOADED as ARTIFACT_UPLOADED  # noqa: F401
+
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
-
-# ---------------------------------------------------------------------------
-# Event type constants
-# ---------------------------------------------------------------------------
-
-ARTIFACT_UPLOADED = "com.integration-copilot.artifact.uploaded.v1"
 
 
 def build_cloud_event(
@@ -25,12 +24,18 @@ def build_cloud_event(
     data: dict[str, Any],
     source: str = "/integration-copilot/api",
 ) -> CloudEvent:
-    """Build an Azure SDK ``CloudEvent`` instance in CloudEvents v1.0 format."""
+    """Build an Azure SDK ``CloudEvent`` instance in CloudEvents v1.0 format.
+
+    Each event receives a unique ``evt_``-prefixed ULID as its ``id`` and the
+    current UTC timestamp as ``time``.
+    """
     return CloudEvent(
+        id=f"evt_{ULID()}",
         type=event_type,
         source=source,
         subject=subject,
         data=data,
+        time=datetime.now(UTC),
     )
 
 
