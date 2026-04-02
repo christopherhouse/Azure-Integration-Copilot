@@ -46,7 +46,8 @@ export function Sidebar() {
         {navItems.map(({ label, href, icon: Icon }) => {
           const active =
             href === "/dashboard"
-              ? pathname === "/dashboard"
+              ? pathname === "/dashboard" ||
+                pathname.startsWith("/dashboard/projects")
               : pathname.startsWith(href);
           return (
             <Link
