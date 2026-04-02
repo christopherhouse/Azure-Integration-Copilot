@@ -33,7 +33,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 async def lifespan(_app: FastAPI):
     """Application lifespan: startup and shutdown tasks."""
     setup_logging()
-    setup_telemetry()
+    setup_telemetry(_app)
     logger.info("app_started", environment=settings.environment)
     yield
     await cosmos_service.close()
