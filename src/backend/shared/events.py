@@ -47,6 +47,7 @@ class EventGridPublisher:
             self._client = EventGridPublisherClient(
                 endpoint=settings.event_grid_namespace_endpoint,
                 credential=self._credential,
+                namespace_topic=settings.event_grid_topic,
             )
         return self._client
 
@@ -62,7 +63,7 @@ class EventGridPublisher:
 
         try:
             client = await self._get_client()
-            await client.send(event, namespace_topic=settings.event_grid_topic)
+            await client.send(event)
             logger.info("event_published", event_type=event.type, subject=event.subject)
         except Exception:
             logger.warning("event_publish_failed", event_type=event.type, exc_info=True)
