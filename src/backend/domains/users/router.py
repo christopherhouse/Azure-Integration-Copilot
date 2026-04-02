@@ -77,7 +77,7 @@ async def update_current_user(body: UpdateUserRequest, request: Request):
             },
         )
 
-    updated = await user_service.update_user_gravatar_email(
+    updated = await user_service.update_user_profile(
         user_id=user.id,
         tenant_id=tenant.id,
         gravatar_email=body.gravatar_email,

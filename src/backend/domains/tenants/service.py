@@ -178,8 +178,8 @@ class UserService:
         """Get a user by ID within a tenant."""
         return await tenant_repository.get_user(user_id, tenant_id)
 
-    async def update_user_gravatar_email(self, user_id: str, tenant_id: str, gravatar_email: str | None) -> User | None:
-        """Update a user's Gravatar email."""
+    async def update_user_profile(self, user_id: str, tenant_id: str, gravatar_email: str | None) -> User | None:
+        """Update a user's profile fields."""
         user = await tenant_repository.get_user(user_id, tenant_id)
         if user is None:
             return None
