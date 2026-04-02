@@ -13,6 +13,7 @@ from opentelemetry.trace import SpanKind
 from config import settings
 
 _configured = False
+_telemetry_configured = False
 
 
 # ---------------------------------------------------------------------------
@@ -106,6 +107,12 @@ def _add_opentelemetry_context(
 def setup_telemetry(app=None) -> None:
     """Configure OpenTelemetry with Azure Monitor export.
 
+    **Must be called at module level** — before any ASGI events are processed.
+    Starlette builds the middleware stack on the first ASGI scope (the lifespan
+    event), so calling this inside a lifespan handler is too late:
+    ``instrument_app`` replaces ``build_middleware_stack`` but the original has
+    already been called and cached.
+
     Args:
         app: The FastAPI application instance.  When provided the app is
             explicitly instrumented with ``FastAPIInstrumentor.instrument_app``
@@ -124,6 +131,11 @@ def setup_telemetry(app=None) -> None:
     In local development (no connection string) a no-op tracer provider is
     configured so trace/span IDs still flow into structlog entries.
     """
+    global _telemetry_configured  # noqa: PLW0603
+    if _telemetry_configured:
+        return
+    _telemetry_configured = True
+
     resource = Resource.create(
         {
             "service.name": "integration-copilot-api",
@@ -156,6 +168,15 @@ def setup_telemetry(app=None) -> None:
         provider = TracerProvider(resource=resource)
         trace.set_tracer_provider(provider)
 
+    # Install the HEAD health-check filter BEFORE instrumenting the app or
+    # HTTP clients.  ``instrument_app`` and the HTTP-client instrumentors
+    # obtain a tracer whose ``_span_processor`` is captured from
+    # ``provider._active_span_processor`` at creation time.  By installing
+    # the filter first, every tracer created afterwards already routes spans
+    # through the filter, ensuring both request *and* dependency spans for
+    # HEAD health-check probes are suppressed.
+    _install_health_head_filter()
+
     # Explicitly instrument the *existing* app instance so that incoming
     # requests produce server spans.  configure_azure_monitor() only patches
     # the FastAPI class; instances created before that call are missed.
@@ -168,10 +189,6 @@ def setup_telemetry(app=None) -> None:
     # (used in shared/events.py for Event Grid ping) so outbound HTTP calls
     # are tracked as dependency spans.
     _instrument_http_clients()
-
-    # Install the HEAD health-check filter so container probes don't flood
-    # Application Insights with noise.
-    _install_health_head_filter()
 
 
 def _instrument_app(app) -> None:  # noqa: ANN001

@@ -30,6 +30,7 @@ def test_setup_telemetry_no_connection_string_sets_provider():
 
     # Reset module-level state so we can call setup_telemetry() cleanly.
     app_logging._configured = False
+    app_logging._telemetry_configured = False
 
     with patch.dict(os.environ, {"APPLICATIONINSIGHTS_CONNECTION_STRING": ""}):
         # Re-import settings with the patched environment
@@ -62,6 +63,7 @@ def test_setup_telemetry_with_connection_string_calls_configure_azure_monitor():
     ):
         importlib.reload(config)
         app_logging.settings = config.settings
+        app_logging._telemetry_configured = False
 
         app_logging.setup_telemetry()
 
@@ -89,6 +91,7 @@ def test_setup_telemetry_instruments_app_instance():
     ):
         importlib.reload(config)
         app_logging.settings = config.settings
+        app_logging._telemetry_configured = False
 
         app_logging.setup_telemetry(app=mock_app)
 
@@ -113,6 +116,7 @@ def test_setup_telemetry_without_app_skips_instrument_app():
     ):
         importlib.reload(config)
         app_logging.settings = config.settings
+        app_logging._telemetry_configured = False
 
         app_logging.setup_telemetry()
 
@@ -211,6 +215,10 @@ async def test_unhandled_exception_handler_records_exception_on_span():
     mock_request.url.path = "/api/v1/test"
 
     mock_span = MagicMock()
+    # The structlog processor _add_opentelemetry_context calls
+    # format(ctx.trace_id, "032x"), so provide real int values.
+    mock_span.get_span_context.return_value.trace_id = 0x1234567890ABCDEF
+    mock_span.get_span_context.return_value.span_id = 0xFEDCBA09
 
     with patch("main.trace.get_current_span", return_value=mock_span):
         response = await unhandled_exception_handler(mock_request, err)
