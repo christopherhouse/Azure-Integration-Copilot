@@ -8,7 +8,8 @@ import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode
 
 from config import settings
 from domains.artifacts.router import router as artifact_router
@@ -43,9 +44,6 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Integration Copilot API", version="0.1.0", lifespan=lifespan)
-
-# Instrument FastAPI with OpenTelemetry
-FastAPIInstrumentor.instrument_app(app)
 
 # Register middleware (execution order is reversed from registration order in Starlette)
 # Desired request flow: cors → auth → tenant_context → quota → handler
@@ -86,6 +84,15 @@ def _request_id(request: Request) -> str:
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
     """Convert AppError subclasses into the standard ErrorResponse format."""
     req_id = _request_id(request)
+
+    # Record server-side errors on the active span so they appear in Azure Monitor
+    # as failed operations. Client errors (4xx) are expected outcomes and are not
+    # marked as span errors to avoid inflating the error rate.
+    if exc.status_code >= 500:
+        span = trace.get_current_span()
+        span.record_exception(exc)
+        span.set_status(StatusCode.ERROR, exc.message)
+
     error_response = ErrorResponse(
         error=ErrorDetail(
             code=exc.code,
@@ -95,6 +102,29 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
         )
     )
     return JSONResponse(status_code=exc.status_code, content=error_response.model_dump())
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all handler for unexpected exceptions.
+
+    Records the exception on the active OpenTelemetry span so that it appears
+    in Azure Monitor Application Insights as a failed operation with full
+    stack-trace details.
+    """
+    req_id = _request_id(request)
+    span = trace.get_current_span()
+    span.record_exception(exc)
+    span.set_status(StatusCode.ERROR, str(exc))
+    logger.exception("unhandled_exception", request_id=req_id, path=request.url.path)
+    error_response = ErrorResponse(
+        error=ErrorDetail(
+            code="INTERNAL_SERVER_ERROR",
+            message="An unexpected error occurred.",
+            request_id=req_id,
+        )
+    )
+    return JSONResponse(status_code=500, content=error_response.model_dump())
 
 
 @app.exception_handler(404)

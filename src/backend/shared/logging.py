@@ -5,7 +5,6 @@ import structlog
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from config import settings
 
@@ -25,19 +24,71 @@ def _add_opentelemetry_context(
 
 
 def setup_telemetry() -> None:
-    """Configure OpenTelemetry tracing with Azure Monitor export when a connection string is available."""
-    resource = Resource.create({"service.name": "integration-copilot-api", "service.version": "0.1.0"})
-    provider = TracerProvider(resource=resource)
+    """Configure OpenTelemetry with Azure Monitor export.
+
+    When ``APPLICATIONINSIGHTS_CONNECTION_STRING`` is set, the Azure Monitor
+    OpenTelemetry distro is used to configure:
+    - Distributed tracing (requests, dependencies via FastAPI + httpx + aiohttp + Azure SDK)
+    - Metrics (request counts, latency histograms)
+    - Log export (Python stdlib logging → Azure Monitor)
+    - Automatic exception recording on spans
+
+    In local development (no connection string) a no-op tracer provider is
+    configured so trace/span IDs still flow into structlog entries.
+    """
+    resource = Resource.create(
+        {
+            "service.name": "integration-copilot-api",
+            "service.version": "0.1.0",
+        }
+    )
 
     connection_string = settings.applicationinsights_connection_string
     if connection_string:
-        # Use Azure Monitor exporter when connection string is configured
-        from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
+        # Use the Azure Monitor OpenTelemetry distro. This single call:
+        # - Exports traces, metrics, and logs to Azure Monitor Application Insights
+        # - Auto-instruments FastAPI (requests), Azure SDK calls (Azure.* span
+        #   sources), and Python stdlib logging
+        # - Applies BatchSpanProcessor so export is non-blocking
+        from azure.monitor.opentelemetry import configure_azure_monitor
 
-        azure_exporter = AzureMonitorTraceExporter(connection_string=connection_string)
-        provider.add_span_processor(BatchSpanProcessor(azure_exporter))
+        configure_azure_monitor(
+            connection_string=connection_string,
+            resource=resource,
+            # logger_name="" attaches log export to the root stdlib logger so
+            # all application log records are forwarded to Azure Monitor.
+            # The "azure", "opentelemetry", and "urllib3" loggers are clamped
+            # to WARNING in setup_logging() before this is called, preventing
+            # the recursive-export loop described in the Azure Monitor docs.
+            logger_name="",
+        )
+    else:
+        # No connection string — local dev / test.  Set up a minimal provider
+        # so that trace/span IDs are still injected into structlog entries.
+        provider = TracerProvider(resource=resource)
+        trace.set_tracer_provider(provider)
 
-    trace.set_tracer_provider(provider)
+    # Instrument httpx (used in auth middleware for JWKS fetching) and aiohttp
+    # (used in shared/events.py for Event Grid ping) so outbound HTTP calls
+    # are tracked as dependency spans.
+    _instrument_http_clients()
+
+
+def _instrument_http_clients() -> None:
+    """Instrument httpx and aiohttp clients for outbound dependency tracking."""
+    try:
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+        HTTPXClientInstrumentor().instrument()
+    except ImportError:
+        pass
+
+    try:
+        from opentelemetry.instrumentation.aiohttp_client import AioHttpClientInstrumentor
+
+        AioHttpClientInstrumentor().instrument()
+    except ImportError:
+        pass
 
 
 def setup_logging() -> None:
