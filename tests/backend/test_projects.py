@@ -4,7 +4,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, call, patch
 
 import pytest
 import pytest_asyncio
@@ -27,10 +27,11 @@ with patch.dict(os.environ, _test_env):
     from main import app  # noqa: E402
 
 from domains.projects.models import Project, ProjectStatus
-from domains.tenants.models import Tenant, TenantStatus, Usage, User, UserRole, UserStatus
+from domains.tenants.models import FREE_TIER, Tenant, TenantStatus, Usage, User, UserRole, UserStatus
+from shared.exceptions import QuotaExceededError
 
 
-def _make_tenant(tenant_id: str = "t-001", display_name: str = "Test Tenant") -> Tenant:
+def _make_tenant(tenant_id: str = "t-001", display_name: str = "Test Tenant", project_count: int = 0) -> Tenant:
     now = datetime.now(UTC)
     return Tenant(
         id=tenant_id,
@@ -39,7 +40,7 @@ def _make_tenant(tenant_id: str = "t-001", display_name: str = "Test Tenant") ->
         ownerId="u-001",
         tierId="tier_free",
         status=TenantStatus.ACTIVE,
-        usage=Usage(daily_analysis_reset_at=now),
+        usage=Usage(project_count=project_count, daily_analysis_reset_at=now),
         createdAt=now,
         updatedAt=now,
     )
@@ -407,15 +408,117 @@ async def test_create_project_increments_usage_counter():
     with (
         patch("domains.projects.service.project_repository") as mock_proj_repo,
         patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+        patch("domains.projects.service.tier_service") as mock_tier_svc,
     ):
+        mock_tenant_repo.increment_usage = AsyncMock(
+            return_value=_make_tenant(project_count=1)
+        )
+        mock_tier_svc.get_tier.return_value = FREE_TIER
         mock_proj_repo.create = AsyncMock(return_value=project)
-        mock_tenant_repo.increment_usage = AsyncMock(return_value=_make_tenant())
 
         from domains.projects.service import project_service
 
-        await project_service.create_project(request, tenant_id, user_id)
+        result = await project_service.create_project(request, tenant_id, user_id)
 
         mock_tenant_repo.increment_usage.assert_called_once_with(tenant_id, "project_count")
+        mock_proj_repo.create.assert_called_once()
+        assert result == project
+
+
+@pytest.mark.asyncio
+async def test_create_project_raises_quota_exceeded_when_at_limit():
+    """ProjectService.create_project raises QuotaExceededError when project_count exceeds max."""
+    from domains.projects.models import CreateProjectRequest
+
+    tenant_id = "t-001"
+    user_id = "u-001"
+    request = CreateProjectRequest(name="Over Limit")
+
+    with (
+        patch("domains.projects.service.project_repository"),
+        patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+        patch("domains.projects.service.tier_service") as mock_tier_svc,
+    ):
+        # increment returns a tenant with count exceeding the limit (4 > 3)
+        mock_tenant_repo.increment_usage = AsyncMock(
+            side_effect=[
+                _make_tenant(project_count=4),  # after increment — over limit
+                _make_tenant(project_count=3),  # after rollback
+            ]
+        )
+        mock_tier_svc.get_tier.return_value = FREE_TIER
+
+        from domains.projects.service import project_service
+
+        with pytest.raises(QuotaExceededError) as exc_info:
+            await project_service.create_project(request, tenant_id, user_id)
+
+        assert exc_info.value.status_code == 429
+        mock_tier_svc.get_tier.assert_called_once_with(FREE_TIER.id)
+        # Verify rollback was called
+        calls = mock_tenant_repo.increment_usage.call_args_list
+        assert len(calls) == 2
+        assert calls[0] == call(tenant_id, "project_count")
+        assert calls[1] == call(tenant_id, "project_count", amount=-1)
+
+
+@pytest.mark.asyncio
+async def test_create_project_rolls_back_counter_on_creation_failure():
+    """ProjectService.create_project rolls back counter when project creation fails."""
+    from domains.projects.models import CreateProjectRequest
+
+    tenant_id = "t-001"
+    user_id = "u-001"
+    request = CreateProjectRequest(name="Fails to Create")
+
+    with (
+        patch("domains.projects.service.project_repository") as mock_proj_repo,
+        patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+        patch("domains.projects.service.tier_service") as mock_tier_svc,
+    ):
+        mock_tenant_repo.increment_usage = AsyncMock(
+            side_effect=[
+                _make_tenant(project_count=1),  # after increment — under limit
+                _make_tenant(project_count=0),  # after rollback
+            ]
+        )
+        mock_tier_svc.get_tier.return_value = FREE_TIER
+        mock_proj_repo.create = AsyncMock(side_effect=RuntimeError("DB write failed"))
+
+        from domains.projects.service import project_service
+
+        with pytest.raises(RuntimeError, match="DB write failed"):
+            await project_service.create_project(request, tenant_id, user_id)
+
+        # Verify rollback was called
+        calls = mock_tenant_repo.increment_usage.call_args_list
+        assert len(calls) == 2
+        assert calls[0] == call(tenant_id, "project_count")
+        assert calls[1] == call(tenant_id, "project_count", amount=-1)
+
+
+@pytest.mark.asyncio
+async def test_create_project_raises_quota_exceeded_when_tenant_not_found():
+    """ProjectService.create_project raises QuotaExceededError when tenant is not found."""
+    from domains.projects.models import CreateProjectRequest
+
+    tenant_id = "t-nonexistent"
+    user_id = "u-001"
+    request = CreateProjectRequest(name="No Tenant")
+
+    with (
+        patch("domains.projects.service.project_repository"),
+        patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+        patch("domains.projects.service.tier_service"),
+    ):
+        mock_tenant_repo.increment_usage = AsyncMock(return_value=None)
+
+        from domains.projects.service import project_service
+
+        with pytest.raises(QuotaExceededError) as exc_info:
+            await project_service.create_project(request, tenant_id, user_id)
+
+        assert exc_info.value.status_code == 429
 
 
 @pytest.mark.asyncio

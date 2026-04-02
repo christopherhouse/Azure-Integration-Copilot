@@ -2,6 +2,32 @@ import { getSession } from "next-auth/react";
 import type { ApiError, ResponseEnvelope } from "@/types/api";
 
 /**
+ * Error thrown by API helpers when the backend returns a non-OK response.
+ *
+ * Extends {@link Error} so `instanceof` checks work in React Query `onError`
+ * callbacks.  Carries the HTTP status and optional structured detail from the
+ * backend error response.
+ */
+export class ApiRequestError extends Error {
+  status: number;
+  code: string | undefined;
+  detail: Record<string, unknown> | undefined;
+
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    detail?: Record<string, unknown>,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+    this.code = code;
+    this.detail = detail;
+  }
+}
+
+/**
  * Return the API base URL.
  *
  * On the **client** the value is read from `window.__RUNTIME_CONFIG__`

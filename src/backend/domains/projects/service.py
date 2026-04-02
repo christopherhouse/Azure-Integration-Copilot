@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 import structlog
 
 from domains.tenants.repository import tenant_repository
+from domains.tenants.service import tier_service
+from shared.exceptions import QuotaExceededError
 
 from .models import CreateProjectRequest, Project, ProjectStatus, UpdateProjectRequest
 from .repository import project_repository
@@ -19,7 +21,43 @@ class ProjectService:
     async def create_project(
         self, request: CreateProjectRequest, tenant_id: str, user_id: str
     ) -> Project:
-        """Create a new project for a tenant."""
+        """Create a new project for a tenant.
+
+        Uses an increment-first reservation pattern:
+        1. Increment the usage counter (reserves a slot).
+        2. Verify the new count does not exceed the tier limit.
+        3. Create the project document.
+        If step 2 or 3 fails the reservation is rolled back.
+        """
+        # Step 1 — reserve a slot by incrementing the counter first.
+        updated_tenant = await tenant_repository.increment_usage(
+            tenant_id, "project_count"
+        )
+        if updated_tenant is None:
+            raise QuotaExceededError(
+                message="Tenant not found.",
+                detail={"limit": "max_projects"},
+            )
+
+        # Step 2 — verify the new count is within limits.
+        tier = tier_service.get_tier(updated_tenant.tier_id)
+        if updated_tenant.usage.project_count > tier.limits.max_projects:
+            # Over limit — release the reservation.
+            await tenant_repository.increment_usage(
+                tenant_id, "project_count", amount=-1
+            )
+            # Report the pre-increment count (subtract the +1 reservation) so
+            # the client sees how many projects the tenant actually has.
+            raise QuotaExceededError(
+                message="Quota exceeded for max_projects.",
+                detail={
+                    "limit": "max_projects",
+                    "current": updated_tenant.usage.project_count - 1,
+                    "max": tier.limits.max_projects,
+                },
+            )
+
+        # Step 3 — create the project document.
         project_id = str(uuid.uuid4())
         now = datetime.now(UTC)
 
@@ -33,9 +71,14 @@ class ProjectService:
             createdAt=now,
             updatedAt=now,
         )
-        created = await project_repository.create(project)
-        await tenant_repository.increment_usage(tenant_id, "project_count")
-        return created
+        try:
+            return await project_repository.create(project)
+        except Exception:
+            # Roll back the reservation on creation failure.
+            await tenant_repository.increment_usage(
+                tenant_id, "project_count", amount=-1
+            )
+            raise
 
     async def get_project(self, tenant_id: str, project_id: str) -> Project | None:
         """Get a project by ID, scoped to tenant. Returns None for deleted projects."""
