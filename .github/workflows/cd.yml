@@ -21,6 +21,9 @@ permissions:
   packages: read           # Pull from GHCR
   actions: read            # Download artifacts from triggering workflow
 
+env:
+  LOCK_NAME: aic-rg-cannotdelete
+
 # =============================================================================
 # DEV ENVIRONMENT
 # =============================================================================
@@ -66,7 +69,7 @@ jobs:
           RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
           az lock delete \
-            --name "aic-rg-cannotdelete" \
+            --name "${LOCK_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
             2>/dev/null || true
 
@@ -395,7 +398,7 @@ jobs:
           RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
           az lock create \
-            --name "aic-rg-cannotdelete" \
+            --name "${LOCK_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
             --lock-type CanNotDelete \
             --notes "Prevents accidental deletion of resources. Managed by CI/CD pipeline."
@@ -441,7 +444,7 @@ jobs:
           RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
           az lock delete \
-            --name "aic-rg-cannotdelete" \
+            --name "${LOCK_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
             2>/dev/null || true
 
@@ -770,7 +773,7 @@ jobs:
           RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
           az lock create \
-            --name "aic-rg-cannotdelete" \
+            --name "${LOCK_NAME}" \
             --resource-group "${RESOURCE_GROUP}" \
             --lock-type CanNotDelete \
             --notes "Prevents accidental deletion of resources. Managed by CI/CD pipeline."
