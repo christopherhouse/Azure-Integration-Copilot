@@ -5,8 +5,9 @@ from collections import OrderedDict
 
 import structlog
 from opentelemetry import trace
+from opentelemetry.context import Context
 from opentelemetry.sdk.resources import Resource
-from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
+from opentelemetry.sdk.trace import ReadableSpan, Span, SpanProcessor, TracerProvider
 from opentelemetry.trace import SpanKind
 
 from config import settings
@@ -46,7 +47,7 @@ class HealthCheckHeadFilter(SpanProcessor):
 
     # -- SpanProcessor interface ---------------------------------------------
 
-    def on_start(self, span, parent_context=None) -> None:  # noqa: ANN001
+    def on_start(self, span: Span, parent_context: Context | None = None) -> None:
         if self._is_head_health_check(span):
             with self._lock:
                 self._suppressed_traces[span.context.trace_id] = True
@@ -55,7 +56,7 @@ class HealthCheckHeadFilter(SpanProcessor):
                     self._suppressed_traces.popitem(last=False)
         self._next.on_start(span, parent_context)
 
-    def on_end(self, span) -> None:  # noqa: ANN001
+    def on_end(self, span: ReadableSpan) -> None:
         with self._lock:
             if span.context.trace_id in self._suppressed_traces:
                 return  # silently drop — don't forward to exporter
@@ -70,7 +71,7 @@ class HealthCheckHeadFilter(SpanProcessor):
     # -- helpers -------------------------------------------------------------
 
     @staticmethod
-    def _is_head_health_check(span) -> bool:  # noqa: ANN001
+    def _is_head_health_check(span: Span) -> bool:
         """Return *True* for SERVER spans created by HEAD /api/v1/health* requests."""
         if span.kind != SpanKind.SERVER:
             return False

@@ -391,8 +391,11 @@ def test_child_spans_of_filtered_trace_are_also_filtered():
     parent = _make_mock_span(kind=SpanKind.SERVER, method="HEAD", path="/api/v1/health", trace_id=42)
     f.on_start(parent)
 
-    # Child dependency span (e.g. Cosmos DB ping) — same trace_id
-    child = _make_mock_span(kind=SpanKind.CLIENT, method="GET", path="https://cosmos.documents.azure.com", trace_id=42)
+    # Child dependency span (e.g. Cosmos DB ping) — same trace_id, different attributes
+    child = MagicMock()
+    child.kind = SpanKind.CLIENT
+    child.context.trace_id = 42
+    child.attributes = {"db.system": "cosmosdb", "db.operation.name": "ReadItem"}
     f.on_start(child)
     f.on_end(child)  # child ends before parent
 
