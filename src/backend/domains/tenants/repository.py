@@ -13,6 +13,8 @@ from .models import Tenant, User
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
+_MAX_RETRIES = 3
+
 DATABASE_NAME = "integration-copilot"
 CONTAINER_NAME = "tenants"
 
@@ -118,19 +120,35 @@ class TenantRepository:
         return None
 
     async def increment_usage(self, tenant_id: str, field: str, amount: int = 1) -> Tenant | None:
-        """Increment a usage counter on a tenant with optimistic concurrency."""
-        tenant = await self.get_tenant(tenant_id)
-        if tenant is None:
-            return None
+        """Increment a usage counter on a tenant with optimistic concurrency.
 
-        current_value = getattr(tenant.usage, field, None)
-        if current_value is None:
-            logger.warning("unknown_usage_field", field=field)
-            return tenant
+        Retries up to ``_MAX_RETRIES`` times on ETag conflicts so that
+        concurrent requests don't silently lose counter updates.
+        """
+        for attempt in range(_MAX_RETRIES):
+            tenant = await self.get_tenant(tenant_id)
+            if tenant is None:
+                return None
 
-        new_value = max(0, current_value + amount)
-        setattr(tenant.usage, field, new_value)
-        return await self.update_tenant(tenant)
+            current_value = getattr(tenant.usage, field, None)
+            if current_value is None:
+                logger.warning("unknown_usage_field", field=field)
+                return tenant
+
+            new_value = max(0, current_value + amount)
+            setattr(tenant.usage, field, new_value)
+            try:
+                return await self.update_tenant(tenant)
+            except cosmos_exceptions.CosmosAccessConditionFailedError:
+                if attempt < _MAX_RETRIES - 1:
+                    logger.info(
+                        "increment_usage_retry",
+                        field=field,
+                        tenant_id=tenant_id,
+                        attempt=attempt + 1,
+                    )
+                    continue
+                raise
 
     async def reset_daily_analysis_count(self, tenant_id: str) -> Tenant | None:
         """Reset daily analysis count and update the reset timestamp."""
