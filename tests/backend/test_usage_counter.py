@@ -124,3 +124,70 @@ async def test_increment_usage_large_negative_clamps_to_zero():
 
         assert result is not None
         assert result.usage.project_count == 0
+
+
+@pytest.mark.asyncio
+async def test_increment_usage_retries_on_etag_conflict():
+    """increment_usage retries on CosmosAccessConditionFailedError and succeeds."""
+    from azure.cosmos import exceptions as cosmos_exceptions
+
+    tenant_id = "t-001"
+    repo = TenantRepository()
+
+    with (
+        patch.object(
+            repo,
+            "get_tenant",
+            new=AsyncMock(side_effect=[
+                _make_tenant(tenant_id=tenant_id, project_count=2),
+                _make_tenant(tenant_id=tenant_id, project_count=2),
+            ]),
+        ),
+        patch.object(
+            repo,
+            "update_tenant",
+            new=AsyncMock(side_effect=[
+                cosmos_exceptions.CosmosAccessConditionFailedError(),
+                _make_tenant(tenant_id=tenant_id, project_count=3),
+            ]),
+        ) as mock_update,
+    ):
+        result = await repo.increment_usage(tenant_id, "project_count", amount=1)
+
+        assert result is not None
+        assert result.usage.project_count == 3
+        assert mock_update.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_increment_usage_raises_after_max_retries():
+    """increment_usage raises CosmosAccessConditionFailedError after 3 failed attempts."""
+    from azure.cosmos import exceptions as cosmos_exceptions
+
+    tenant_id = "t-001"
+    repo = TenantRepository()
+
+    with (
+        patch.object(
+            repo,
+            "get_tenant",
+            new=AsyncMock(side_effect=[
+                _make_tenant(tenant_id=tenant_id, project_count=2),
+                _make_tenant(tenant_id=tenant_id, project_count=2),
+                _make_tenant(tenant_id=tenant_id, project_count=2),
+            ]),
+        ),
+        patch.object(
+            repo,
+            "update_tenant",
+            new=AsyncMock(side_effect=[
+                cosmos_exceptions.CosmosAccessConditionFailedError(),
+                cosmos_exceptions.CosmosAccessConditionFailedError(),
+                cosmos_exceptions.CosmosAccessConditionFailedError(),
+            ]),
+        ) as mock_update,
+    ):
+        with pytest.raises(cosmos_exceptions.CosmosAccessConditionFailedError):
+            await repo.increment_usage(tenant_id, "project_count", amount=1)
+
+        assert mock_update.call_count == 3

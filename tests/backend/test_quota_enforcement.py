@@ -28,6 +28,7 @@ with patch.dict(os.environ, _test_env):
     from main import app  # noqa: E402
 
 from domains.tenants.models import FREE_TIER, QuotaResult, Tenant, TenantStatus, Usage, User, UserRole, UserStatus
+from domains.tenants.service import QuotaService
 
 
 def _make_tenant(
@@ -216,3 +217,36 @@ async def test_quota_response_body_structure(client):
             assert "limit" in error["detail"]
             assert "current" in error["detail"]
             assert "max" in error["detail"]
+
+
+# ---------------------------------------------------------------------------
+# QuotaService unit tests — real (unmocked) check logic
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_quota_service_check_blocks_at_limit():
+    """QuotaService.check returns allowed=False when project_count equals max_projects."""
+    tenant = _make_tenant(project_count=3)  # FREE_TIER max_projects = 3
+    quota_svc = QuotaService()
+
+    result = await quota_svc.check(tenant, FREE_TIER, "max_projects")
+
+    assert result.allowed is False
+    assert result.limit_name == "max_projects"
+    assert result.current == 3
+    assert result.maximum == 3
+
+
+@pytest.mark.asyncio
+async def test_quota_service_check_allows_under_limit():
+    """QuotaService.check returns allowed=True when project_count is under max_projects."""
+    tenant = _make_tenant(project_count=2)  # Under FREE_TIER max_projects = 3
+    quota_svc = QuotaService()
+
+    result = await quota_svc.check(tenant, FREE_TIER, "max_projects")
+
+    assert result.allowed is True
+    assert result.limit_name == "max_projects"
+    assert result.current == 2
+    assert result.maximum == 3
