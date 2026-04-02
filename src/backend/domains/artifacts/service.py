@@ -5,10 +5,12 @@ import uuid
 import structlog
 from fastapi import UploadFile
 
+from domains.projects.repository import project_repository
 from domains.tenants.models import Tenant, TierDefinition
 from domains.tenants.repository import tenant_repository
 from shared.blob import blob_service
 from shared.events import ARTIFACT_UPLOADED, build_cloud_event, event_grid_publisher
+from shared.exceptions import QuotaExceededError
 
 from .content_hash import compute_hash
 from .models import Artifact, ArtifactStatus, transition_status
@@ -45,6 +47,19 @@ class ArtifactService:
                 f"File size {file_size} exceeds maximum {max_size} bytes "
                 f"({tier.limits.max_file_size_mb} MB)."
             )
+
+        # --- Per-project artifact quota check ---
+        project = await project_repository.get_by_id(tenant.id, project_id)
+        if project is not None:
+            if project.artifact_count >= tier.limits.max_artifacts_per_project:
+                raise QuotaExceededError(
+                    message="Artifact limit per project exceeded.",
+                    detail={
+                        "limit": "max_artifacts_per_project",
+                        "current": project.artifact_count,
+                        "max": tier.limits.max_artifacts_per_project,
+                    },
+                )
 
         # --- Generate artifact ID ---
         artifact_id = f"art_{uuid.uuid4().hex[:12]}"
@@ -84,8 +99,9 @@ class ArtifactService:
         artifact.content_hash = content_hash
         artifact = await artifact_repository.update(artifact)
 
-        # --- Increment tenant usage ---
+        # --- Increment tenant and project usage ---
         await tenant_repository.increment_usage(tenant.id, "total_artifact_count")
+        await project_repository.increment_artifact_count(tenant.id, project_id)
 
         # --- Publish ArtifactUploaded event ---
         if target_status == ArtifactStatus.UPLOADED:
@@ -149,11 +165,15 @@ class ArtifactService:
     async def delete_artifact(
         self, tenant_id: str, project_id: str, artifact_id: str
     ) -> Artifact | None:
-        """Soft-delete an artifact."""
+        """Soft-delete an artifact and decrement usage counters."""
         artifact = await artifact_repository.get_by_id(tenant_id, artifact_id)
         if artifact is None or artifact.project_id != project_id:
             return None
-        return await artifact_repository.soft_delete(tenant_id, artifact_id)
+        deleted = await artifact_repository.soft_delete(tenant_id, artifact_id)
+        if deleted is not None:
+            await tenant_repository.increment_usage(tenant_id, "total_artifact_count", amount=-1)
+            await project_repository.increment_artifact_count(tenant_id, project_id, amount=-1)
+        return deleted
 
 
 artifact_service = ArtifactService()

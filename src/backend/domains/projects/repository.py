@@ -96,6 +96,32 @@ class ProjectRepository:
         updated.etag = result.get("_etag")
         return updated
 
+    async def increment_artifact_count(
+        self, tenant_id: str, project_id: str, amount: int = 1
+    ) -> Project | None:
+        """Atomically increment (or decrement) a project's artifact_count.
+
+        Uses optimistic concurrency with ETag.  Retries up to 3 times on
+        ETag conflicts.  The count is floored at zero.
+        """
+        max_retries = 3
+        for attempt in range(max_retries):
+            project = await self.get_by_id(tenant_id, project_id)
+            if project is None:
+                return None
+            project.artifact_count = max(0, project.artifact_count + amount)
+            try:
+                return await self.update(project)
+            except cosmos_exceptions.CosmosAccessConditionFailedError:
+                if attempt == max_retries - 1:
+                    raise
+                logger.warning(
+                    "artifact_count_etag_conflict_retry",
+                    project_id=project_id,
+                    attempt=attempt + 1,
+                )
+        return None  # pragma: no cover
+
     async def soft_delete(self, tenant_id: str, project_id: str) -> Project | None:
         """Soft-delete a project by setting status to deleted."""
         project = await self.get_by_id(tenant_id, project_id)
