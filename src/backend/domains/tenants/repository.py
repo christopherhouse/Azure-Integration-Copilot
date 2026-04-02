@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 import structlog
+from azure.core import MatchConditions
 from azure.cosmos import exceptions as cosmos_exceptions
 from azure.cosmos.aio import ContainerProxy
 
@@ -50,7 +51,7 @@ class TenantRepository:
         kwargs: dict = {}
         if tenant.etag:
             kwargs["etag"] = tenant.etag
-            kwargs["match_condition"] = "IfMatch"
+            kwargs["match_condition"] = MatchConditions.IfNotModified
 
         result = await container.replace_item(
             item=tenant.id,

@@ -3,6 +3,7 @@
 from datetime import UTC, datetime
 
 import structlog
+from azure.core import MatchConditions
 from azure.cosmos import exceptions as cosmos_exceptions
 from azure.cosmos.aio import ContainerProxy
 
@@ -113,7 +114,7 @@ class ArtifactRepository:
         kwargs: dict = {}
         if artifact.etag:
             kwargs["etag"] = artifact.etag
-            kwargs["match_condition"] = "IfMatch"
+            kwargs["match_condition"] = MatchConditions.IfNotModified
         result = await container.replace_item(item=artifact.id, body=doc, **kwargs)
         logger.info("artifact_status_updated", artifact_id=artifact_id, new_status=target_status)
         updated = Artifact.model_validate(result)
@@ -128,7 +129,7 @@ class ArtifactRepository:
         kwargs: dict = {}
         if artifact.etag:
             kwargs["etag"] = artifact.etag
-            kwargs["match_condition"] = "IfMatch"
+            kwargs["match_condition"] = MatchConditions.IfNotModified
         result = await container.replace_item(item=artifact.id, body=doc, **kwargs)
         logger.info("artifact_updated", artifact_id=artifact.id)
         updated = Artifact.model_validate(result)
@@ -148,7 +149,7 @@ class ArtifactRepository:
         kwargs: dict = {}
         if artifact.etag:
             kwargs["etag"] = artifact.etag
-            kwargs["match_condition"] = "IfMatch"
+            kwargs["match_condition"] = MatchConditions.IfNotModified
         result = await container.replace_item(item=artifact.id, body=doc, **kwargs)
         logger.info("artifact_soft_deleted", artifact_id=artifact_id)
         return Artifact.model_validate(result)
