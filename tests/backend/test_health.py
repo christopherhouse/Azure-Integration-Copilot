@@ -78,9 +78,14 @@ async def test_health_sets_request_id(client):
 
 @pytest.mark.asyncio
 async def test_health_head_returns_200(client):
-    """HEAD /api/v1/health returns 200 (used by AFD health probes)."""
+    """HEAD /api/v1/health returns 200 without calling downstream dependencies."""
     response = await client.head("/api/v1/health")
     assert response.status_code == 200
+    # HEAD should return a simple 200 with no resource headers — container
+    # orchestrators only need a status code, and skipping dependency checks
+    # avoids telemetry noise and unnecessary load.
+    assert "x-resource-database-available" not in response.headers
+    assert "x-health-duration" not in response.headers
 
 
 # ---------------------------------------------------------------------------
@@ -158,54 +163,7 @@ async def test_health_get_includes_duration(client):
 
 
 # ---------------------------------------------------------------------------
-# Resource-level health checks (HEAD)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_health_head_returns_resource_headers(client):
-    """HEAD returns X-Resource-*-Available headers for all 4 resource types."""
-    response = await client.head("/api/v1/health")
-    assert response.status_code == 200
-    expected_headers = [
-        "x-resource-database-available",
-        "x-resource-object-storage-available",
-        "x-resource-broker-available",
-        "x-resource-messaging-available",
-    ]
-    for header in expected_headers:
-        assert header in response.headers, f"Missing header: {header}"
-        assert response.headers[header] in ("true", "false")
-
-
-@pytest.mark.asyncio
-async def test_health_head_no_latency_header_when_unavailable(client):
-    """HEAD does not include X-Resource-*-Latency headers when resource is unavailable."""
-    response = await client.head("/api/v1/health")
-    assert response.status_code == 200
-    latency_headers = [
-        key for key in response.headers if key.lower().endswith("-latency")
-    ]
-    assert latency_headers == [], (
-        f"Expected no latency headers when all resources are unavailable, "
-        f"but found: {latency_headers}"
-    )
-
-
-@pytest.mark.asyncio
-async def test_health_head_includes_duration_header(client):
-    """HEAD /api/v1/health returns X-Health-Duration header matching 'X.X ms' format."""
-    response = await client.head("/api/v1/health")
-    assert response.status_code == 200
-    assert "x-health-duration" in response.headers, "Missing X-Health-Duration header"
-    duration_value = response.headers["x-health-duration"]
-    assert re.match(r"^\d+\.\d+ ms$", duration_value), (
-        f"X-Health-Duration header format unexpected: {duration_value}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Mocked Cosmos DB available (GET and HEAD)
+# Mocked Cosmos DB available (GET)
 # ---------------------------------------------------------------------------
 
 _FAKE_COSMOS_ENDPOINT = "https://fake-cosmos.documents.azure.com:443/"
@@ -235,22 +193,8 @@ async def test_health_get_database_available_with_latency(client, mock_cosmos_av
     )
 
 
-@pytest.mark.asyncio
-async def test_health_head_database_latency_header_when_available(client, mock_cosmos_available):
-    """When Cosmos DB is reachable, HEAD includes X-Resource-Database-Latency header."""
-    response = await client.head("/api/v1/health")
-    assert response.status_code == 200
-    assert "x-resource-database-available" in response.headers
-    assert response.headers["x-resource-database-available"] == "true"
-    assert "x-resource-database-latency" in response.headers
-    latency_value = response.headers["x-resource-database-latency"]
-    assert re.match(r"^\d+\.\d+ ms$", latency_value), (
-        f"Latency header format unexpected: {latency_value}"
-    )
-
-
 # ---------------------------------------------------------------------------
-# Mocked Blob Storage available (GET and HEAD)
+# Mocked Blob Storage available (GET)
 # ---------------------------------------------------------------------------
 
 _FAKE_BLOB_ENDPOINT = "https://fakestorage.blob.core.windows.net/"
@@ -278,19 +222,8 @@ async def test_health_get_blob_available_with_latency(client, mock_blob_availabl
     assert re.match(r"^\d+\.\d+ ms$", blob_resource["latency"])
 
 
-@pytest.mark.asyncio
-async def test_health_head_blob_latency_header_when_available(client, mock_blob_available):
-    """When Blob Storage is reachable, HEAD includes X-Resource-Object-Storage-Latency header."""
-    response = await client.head("/api/v1/health")
-    assert response.status_code == 200
-    assert response.headers["x-resource-object-storage-available"] == "true"
-    assert "x-resource-object-storage-latency" in response.headers
-    latency_value = response.headers["x-resource-object-storage-latency"]
-    assert re.match(r"^\d+\.\d+ ms$", latency_value)
-
-
 # ---------------------------------------------------------------------------
-# Mocked Event Grid available (GET and HEAD)
+# Mocked Event Grid available (GET)
 # ---------------------------------------------------------------------------
 
 _FAKE_EVENT_GRID_ENDPOINT = "https://fake-eventgrid.westus2-1.eventgrid.azure.net/"
@@ -318,19 +251,8 @@ async def test_health_get_event_grid_available_with_latency(client, mock_event_g
     assert re.match(r"^\d+\.\d+ ms$", eg_resource["latency"])
 
 
-@pytest.mark.asyncio
-async def test_health_head_event_grid_latency_header_when_available(client, mock_event_grid_available):
-    """When Event Grid is reachable, HEAD includes X-Resource-Broker-Latency header."""
-    response = await client.head("/api/v1/health")
-    assert response.status_code == 200
-    assert response.headers["x-resource-broker-available"] == "true"
-    assert "x-resource-broker-latency" in response.headers
-    latency_value = response.headers["x-resource-broker-latency"]
-    assert re.match(r"^\d+\.\d+ ms$", latency_value)
-
-
 # ---------------------------------------------------------------------------
-# Mocked Web PubSub available (GET and HEAD)
+# Mocked Web PubSub available (GET)
 # ---------------------------------------------------------------------------
 
 _FAKE_WEB_PUBSUB_ENDPOINT = "https://fake-webpubsub.webpubsub.azure.com/"
@@ -356,17 +278,6 @@ async def test_health_get_web_pubsub_available_with_latency(client, mock_web_pub
     assert wps_resource["available"] is True
     assert "latency" in wps_resource
     assert re.match(r"^\d+\.\d+ ms$", wps_resource["latency"])
-
-
-@pytest.mark.asyncio
-async def test_health_head_web_pubsub_latency_header_when_available(client, mock_web_pubsub_available):
-    """When Web PubSub is reachable, HEAD includes X-Resource-Messaging-Latency header."""
-    response = await client.head("/api/v1/health")
-    assert response.status_code == 200
-    assert response.headers["x-resource-messaging-available"] == "true"
-    assert "x-resource-messaging-latency" in response.headers
-    latency_value = response.headers["x-resource-messaging-latency"]
-    assert re.match(r"^\d+\.\d+ ms$", latency_value)
 
 
 # ---------------------------------------------------------------------------
@@ -407,22 +318,6 @@ async def test_health_status_ok_when_all_available(client, mock_all_resources_av
     response = await client.get("/api/v1/health")
     assert response.status_code == 200
     assert response.json()["data"]["status"] == "ok"
-
-
-@pytest.mark.asyncio
-async def test_health_head_all_latency_headers_when_all_available(client, mock_all_resources_available):
-    """When all resources are available, HEAD returns latency headers for all four."""
-    response = await client.head("/api/v1/health")
-    assert response.status_code == 200
-    expected_latency_headers = [
-        "x-resource-database-latency",
-        "x-resource-object-storage-latency",
-        "x-resource-broker-latency",
-        "x-resource-messaging-latency",
-    ]
-    for header in expected_latency_headers:
-        assert header in response.headers, f"Missing latency header: {header}"
-        assert re.match(r"^\d+\.\d+ ms$", response.headers[header])
 
 
 # ---------------------------------------------------------------------------

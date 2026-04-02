@@ -32,8 +32,6 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Application lifespan: startup and shutdown tasks."""
-    setup_logging()
-    setup_telemetry(_app)
     logger.info("app_started", environment=settings.environment)
     yield
     await cosmos_service.close()
@@ -63,6 +61,16 @@ if settings.cors_allowed_origins:
         allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
         allow_credentials=True,
     )
+
+# ---------------------------------------------------------------------------
+# Logging & telemetry — must be initialised at module level
+# ---------------------------------------------------------------------------
+# Starlette builds the middleware stack on the first ASGI scope (the lifespan
+# startup event).  ``setup_telemetry`` calls ``instrument_app`` which replaces
+# ``build_middleware_stack`` — so it must run *before* the first ASGI scope
+# arrives.  Module-level initialisation guarantees this.
+setup_logging()
+setup_telemetry(app)
 
 # Register routers
 app.include_router(tenant_router)
@@ -237,29 +245,24 @@ def _compute_health_status(resources: list[ResourceStatus]) -> str:
     return "degraded"
 
 
-def _resource_header_prefix(resource_type: str) -> str:
-    """Convert a resource type like 'object_storage' to 'Object-Storage'."""
-    return resource_type.replace("_", "-").title()
-
-
 # ---------------------------------------------------------------------------
 # Health endpoints
 # ---------------------------------------------------------------------------
 
 @app.api_route("/api/v1/health", methods=["GET", "HEAD"])
 async def health(request: Request):
-    """Health probe – checks downstream dependencies and returns their status."""
+    """Health probe -- checks downstream dependencies and returns their status.
+
+    HEAD requests return a simple ``200 OK`` without calling downstream
+    dependencies.  Container orchestrators (Azure Container Apps, Kubernetes)
+    issue frequent HEAD probes; executing full dependency checks for each one
+    would create unnecessary load and telemetry noise.
+    """
+    if request.method == "HEAD":
+        return Response(status_code=200)
+
     req_id = _request_id(request)
     resources, duration = await _check_all_resources()
-
-    if request.method == "HEAD":
-        resource_headers: dict[str, str] = {"X-Health-Duration": duration}
-        for r in resources:
-            prefix = _resource_header_prefix(r.type)
-            resource_headers[f"X-Resource-{prefix}-Available"] = str(r.available).lower()
-            if r.latency is not None:
-                resource_headers[f"X-Resource-{prefix}-Latency"] = r.latency
-        return Response(status_code=200, headers=resource_headers)
 
     status = _compute_health_status(resources)
     envelope = ResponseEnvelope(
