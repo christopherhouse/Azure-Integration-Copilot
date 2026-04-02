@@ -174,6 +174,18 @@ class UserService:
         """Look up a user by their external identity provider ID."""
         return await tenant_repository.get_user_by_external_id(external_id)
 
+    async def get_user(self, user_id: str, tenant_id: str) -> User | None:
+        """Get a user by ID within a tenant."""
+        return await tenant_repository.get_user(user_id, tenant_id)
+
+    async def update_user_profile(self, user_id: str, tenant_id: str, gravatar_email: str | None) -> User | None:
+        """Update a user's profile fields."""
+        user = await tenant_repository.get_user(user_id, tenant_id)
+        if user is None:
+            return None
+        user.gravatar_email = gravatar_email
+        return await tenant_repository.update_user(user)
+
 
 # ---------------------------------------------------------------------------
 # TierService

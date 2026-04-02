@@ -36,7 +36,7 @@ export function ProjectList({ projects }: { projects: Project[] }) {
       {projects.map((project) => (
         <Link
           key={project.id}
-          href={`/dashboard/projects/${project.id}/artifacts`}
+          href={`/dashboard/projects/${project.id}`}
         >
           <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardHeader>

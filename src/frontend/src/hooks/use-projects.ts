@@ -74,3 +74,19 @@ export function useCreateProject() {
     },
   });
 }
+
+async function fetchProject(projectId: string): Promise<Project> {
+  const res = await apiFetch(`/api/v1/projects/${projectId}`);
+  if (!res.ok) throw new Error("Failed to fetch project");
+  const json = await res.json();
+  return json.data;
+}
+
+/** Hook to fetch a single project by ID. */
+export function useProject(projectId: string) {
+  return useQuery({
+    queryKey: ["project", projectId],
+    queryFn: () => fetchProject(projectId),
+    enabled: !!projectId,
+  });
+}

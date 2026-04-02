@@ -15,6 +15,7 @@ from config import settings
 from domains.artifacts.router import router as artifact_router
 from domains.projects.router import router as project_router
 from domains.tenants.router import router as tenant_router
+from domains.users.router import router as user_router
 from middleware.auth import AuthMiddleware
 from middleware.quota import QuotaMiddleware
 from middleware.tenant_context import TenantContextMiddleware
@@ -74,6 +75,7 @@ setup_telemetry(app)
 
 # Register routers
 app.include_router(tenant_router)
+app.include_router(user_router)
 app.include_router(project_router)
 app.include_router(artifact_router)
 

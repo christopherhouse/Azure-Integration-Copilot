@@ -122,6 +122,7 @@ class User(BaseModel):
     external_id: str = Field(alias="externalId")
     email: str = ""
     display_name: str = Field(default="", alias="displayName")
+    gravatar_email: str | None = Field(default=None, alias="gravatarEmail")
     role: UserRole = UserRole.OWNER
     status: UserStatus = UserStatus.ACTIVE
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), alias="createdAt")
@@ -200,5 +201,40 @@ class QuotaResult(BaseModel):
     limit_name: str = Field(alias="limitName")
     current: int
     maximum: int
+
+    model_config = {"populate_by_name": True}
+
+
+class UserResponse(BaseModel):
+    """User data returned in API responses."""
+
+    id: str
+    email: str
+    display_name: str = Field(alias="displayName")
+    gravatar_email: str | None = Field(default=None, alias="gravatarEmail")
+    role: UserRole
+    status: UserStatus
+    created_at: datetime = Field(alias="createdAt")
+
+    model_config = {"populate_by_name": True}
+
+    @classmethod
+    def from_user(cls, user: User) -> "UserResponse":
+        """Build a response from a User domain model."""
+        return cls(
+            id=user.id,
+            email=user.email,
+            displayName=user.display_name,
+            gravatarEmail=user.gravatar_email,
+            role=user.role,
+            status=user.status,
+            createdAt=user.created_at,
+        )
+
+
+class UpdateUserRequest(BaseModel):
+    """Request body for updating a user profile."""
+
+    gravatar_email: str | None = Field(default=None, alias="gravatarEmail", max_length=320)
 
     model_config = {"populate_by_name": True}
