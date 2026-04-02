@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
+import { ApiRequestError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,9 +37,20 @@ export function CreateProjectDialog() {
           setDescription("");
         },
         onError: (err) => {
-          toast.error(
-            err instanceof Error ? err.message : "Failed to create project",
-          );
+          if (err instanceof ApiRequestError && err.status === 429) {
+            const max = err.detail?.max;
+            toast.error(
+              max
+                ? `You've reached the maximum of ${max} projects on the Free plan. Delete an existing project to make room.`
+                : "You've reached the project limit for your plan. Delete an existing project to make room.",
+            );
+          } else {
+            toast.error(
+              err instanceof Error
+                ? err.message
+                : "Failed to create project",
+            );
+          }
         },
       },
     );

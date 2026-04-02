@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ApiRequestError } from "@/lib/api";
 
 /** Project data returned from the API. */
 export interface Project {
@@ -49,7 +49,12 @@ async function createProject(data: {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error?.message ?? "Failed to create project");
+    throw new ApiRequestError(
+      res.status,
+      body?.error?.message ?? "Failed to create project",
+      body?.error?.code,
+      body?.error?.detail,
+    );
   }
   const json = await res.json();
   return json.data;
