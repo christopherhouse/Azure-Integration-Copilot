@@ -117,6 +117,28 @@ class TenantRepository:
             return User.model_validate(item)
         return None
 
+    async def get_user(self, user_id: str, tenant_id: str) -> User | None:
+        """Get a user by ID within a tenant partition."""
+        container = await self._get_container()
+        try:
+            doc = await container.read_item(item=user_id, partition_key=tenant_id)
+            if doc.get("type") != "user":
+                return None
+            return User.model_validate(doc)
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            return None
+
+    async def update_user(self, user: User) -> User:
+        """Update an existing user document."""
+        container = await self._get_container()
+        doc = user.model_dump(by_alias=True, mode="json")
+        result = await container.replace_item(
+            item=user.id,
+            body=doc,
+        )
+        logger.info("user_updated", user_id=user.id, tenant_id=user.tenant_id)
+        return User.model_validate(result)
+
     async def increment_usage(self, tenant_id: str, field: str, amount: int = 1) -> Tenant | None:
         """Increment a usage counter on a tenant with optimistic concurrency."""
         tenant = await self.get_tenant(tenant_id)

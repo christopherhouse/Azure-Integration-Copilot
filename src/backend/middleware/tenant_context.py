@@ -27,18 +27,21 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
         if request.url.path.startswith("/api/v1/health"):
             request.state.tenant = None
             request.state.tier = FREE_TIER
+            request.state.user = None
             return await call_next(request)
 
         external_id = getattr(request.state, "external_id", None)
         if not external_id or external_id == "anonymous":
             request.state.tenant = None
             request.state.tier = FREE_TIER
+            request.state.user = None
             return await call_next(request)
 
         # Dev mode without Cosmos: set stub values
         if settings.skip_auth and not settings.cosmos_db_endpoint:
             request.state.tenant = None
             request.state.tier = FREE_TIER
+            request.state.user = None
             return await call_next(request)
 
         # Look up user by external ID
@@ -61,13 +64,14 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             tier = tier_service.get_tier(tenant.tier_id)
             request.state.tenant = tenant
             request.state.tier = tier
+            request.state.user = user
             structlog.contextvars.bind_contextvars(tenant_id=tenant.id)
         else:
             # Auto-provision tenant on first authenticated request
             try:
                 email = getattr(request.state, "email", "")
                 display_name = getattr(request.state, "display_name", "")
-                tenant, _user = await tenant_service.get_or_create_tenant_for_external_user(
+                tenant, new_user = await tenant_service.get_or_create_tenant_for_external_user(
                     external_id=external_id,
                     email=email,
                     display_name=display_name,
@@ -75,6 +79,7 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
                 tier = tier_service.get_tier(tenant.tier_id)
                 request.state.tenant = tenant
                 request.state.tier = tier
+                request.state.user = new_user
                 structlog.contextvars.bind_contextvars(tenant_id=tenant.id)
                 logger.info("tenant_auto_provisioned_via_middleware", tenant_id=tenant.id)
             except Exception:
