@@ -389,6 +389,82 @@ async def test_delete_project_returns_404_when_not_found(client):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Service-level tests — usage counter integration
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_project_increments_usage_counter():
+    """ProjectService.create_project increments the tenant's project_count."""
+    from domains.projects.models import CreateProjectRequest
+
+    tenant_id = "t-001"
+    user_id = "u-001"
+    project = _make_project(name="New Project")
+    request = CreateProjectRequest(name="New Project")
+
+    with (
+        patch("domains.projects.service.project_repository") as mock_proj_repo,
+        patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+    ):
+        mock_proj_repo.create = AsyncMock(return_value=project)
+        mock_tenant_repo.increment_usage = AsyncMock(return_value=_make_tenant())
+
+        from domains.projects.service import project_service
+
+        await project_service.create_project(request, tenant_id, user_id)
+
+        mock_tenant_repo.increment_usage.assert_called_once_with(tenant_id, "project_count")
+
+
+@pytest.mark.asyncio
+async def test_delete_project_decrements_usage_counter():
+    """ProjectService.delete_project decrements the tenant's project_count."""
+    tenant_id = "t-001"
+    deleted_project = _make_project(status=ProjectStatus.DELETED)
+
+    with (
+        patch("domains.projects.service.project_repository") as mock_proj_repo,
+        patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+    ):
+        mock_proj_repo.soft_delete = AsyncMock(return_value=deleted_project)
+        mock_tenant_repo.increment_usage = AsyncMock(return_value=_make_tenant())
+
+        from domains.projects.service import project_service
+
+        await project_service.delete_project(tenant_id, "prj-001")
+
+        mock_tenant_repo.increment_usage.assert_called_once_with(
+            tenant_id, "project_count", amount=-1
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_project_not_found_does_not_decrement():
+    """ProjectService.delete_project does not decrement when project is not found."""
+    tenant_id = "t-001"
+
+    with (
+        patch("domains.projects.service.project_repository") as mock_proj_repo,
+        patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+    ):
+        mock_proj_repo.soft_delete = AsyncMock(return_value=None)
+        mock_tenant_repo.increment_usage = AsyncMock()
+
+        from domains.projects.service import project_service
+
+        result = await project_service.delete_project(tenant_id, "prj-nonexistent")
+
+        assert result is None
+        mock_tenant_repo.increment_usage.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Route registration
+# ---------------------------------------------------------------------------
+
+
 def test_project_routes_registered():
     """Project routes are registered in the app."""
     routes = [route.path for route in app.routes if hasattr(route, "path")]
