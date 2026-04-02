@@ -14,6 +14,11 @@ from httpx import ASGITransport, AsyncClient
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "backend"))
 
+from domains.artifacts.service import ArtifactService
+from domains.projects.models import Project, ProjectStatus
+from domains.tenants.models import FREE_TIER, TierDefinition, TierFeatures, TierLimits
+from shared.exceptions import QuotaExceededError
+
 _test_env = {
     "ENVIRONMENT": "test",
     "COSMOS_DB_ENDPOINT": "https://fake-cosmos.documents.azure.com:443/",
@@ -226,3 +231,174 @@ def test_upload_and_download_routes_registered():
     routes = [route.path for route in app.routes if hasattr(route, "path")]
     assert "/api/v1/projects/{project_id}/artifacts" in routes
     assert "/api/v1/projects/{project_id}/artifacts/{artifact_id}/download" in routes
+
+
+# ---------------------------------------------------------------------------
+# Per-project artifact quota enforcement
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upload_artifact_returns_429_per_project_quota(client):
+    """POST upload returns 429 when per-project artifact quota is exceeded."""
+    tenant = _make_tenant()
+
+    mock1, mock2, mock3 = _setup_context_mocks(tenant)
+    with mock1, mock2, mock3:
+        with patch("domains.artifacts.router.artifact_service") as mock_svc:
+            mock_svc.upload_artifact = AsyncMock(
+                side_effect=QuotaExceededError(
+                    message="Artifact limit per project exceeded.",
+                    detail={
+                        "limit": "max_artifacts_per_project",
+                        "current": 25,
+                        "max": 25,
+                    },
+                )
+            )
+
+            response = await client.post(
+                "/api/v1/projects/prj-001/artifacts",
+                files={"file": ("workflow.json", b'{"definition": {}}', "application/json")},
+            )
+            assert response.status_code == 429
+            body = response.json()
+            assert body["error"]["code"] == "QUOTA_EXCEEDED"
+
+
+# ---------------------------------------------------------------------------
+# ArtifactService unit tests — quota & counter logic
+# ---------------------------------------------------------------------------
+
+
+def _make_project(
+    project_id: str = "prj-001",
+    tenant_id: str = "t-001",
+    artifact_count: int = 0,
+) -> Project:
+    return Project(
+        id=project_id,
+        partitionKey=tenant_id,
+        tenantId=tenant_id,
+        name="Test",
+        createdBy="u-001",
+        artifactCount=artifact_count,
+    )
+
+
+@pytest.mark.asyncio
+async def test_upload_artifact_service_checks_project_quota():
+    """ArtifactService.upload_artifact raises QuotaExceededError when project quota is reached."""
+    tenant = _make_tenant()
+    tier = TierDefinition(
+        id="tier_free",
+        name="Free",
+        slug="free",
+        limits=TierLimits(max_artifacts_per_project=25),
+    )
+    project = _make_project(artifact_count=25)
+
+    file = MagicMock()
+    file.read = AsyncMock(return_value=b"small content")
+    file.seek = AsyncMock()
+    file.filename = "workflow.json"
+    file.content_type = "application/json"
+
+    with (
+        patch("domains.artifacts.service.project_repository") as mock_proj_repo,
+        patch("domains.artifacts.service.artifact_repository"),
+        patch("domains.artifacts.service.tenant_repository"),
+        patch("domains.artifacts.service.blob_service"),
+        patch("domains.artifacts.service.event_grid_publisher"),
+    ):
+        mock_proj_repo.get_by_id = AsyncMock(return_value=project)
+
+        svc = ArtifactService()
+        with pytest.raises(QuotaExceededError) as exc_info:
+            await svc.upload_artifact(
+                tenant=tenant,
+                tier=tier,
+                project_id="prj-001",
+                file=file,
+            )
+
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.detail["limit"] == "max_artifacts_per_project"
+        assert exc_info.value.detail["current"] == 25
+        assert exc_info.value.detail["max"] == 25
+
+
+@pytest.mark.asyncio
+async def test_upload_artifact_increments_project_artifact_count():
+    """ArtifactService.upload_artifact increments project artifact_count on success."""
+    tenant = _make_tenant()
+    tier = FREE_TIER
+    project = _make_project(artifact_count=5)
+    artifact = _make_artifact()
+
+    file = MagicMock()
+    file.read = AsyncMock(return_value=b"small content")
+    file.seek = AsyncMock()
+    file.filename = "workflow.json"
+    file.content_type = "application/json"
+
+    with (
+        patch("domains.artifacts.service.project_repository") as mock_proj_repo,
+        patch("domains.artifacts.service.artifact_repository") as mock_art_repo,
+        patch("domains.artifacts.service.tenant_repository") as mock_tenant_repo,
+        patch("domains.artifacts.service.blob_service") as mock_blob,
+        patch("domains.artifacts.service.event_grid_publisher") as mock_events,
+        patch("domains.artifacts.service.detect_artifact_type", new_callable=AsyncMock, return_value="logic_app_workflow"),
+        patch("domains.artifacts.service.compute_hash", new_callable=AsyncMock, return_value="sha256:abc123"),
+    ):
+        mock_proj_repo.get_by_id = AsyncMock(return_value=project)
+        mock_proj_repo.increment_artifact_count = AsyncMock()
+        uploading_artifact = _make_artifact(status=ArtifactStatus.UPLOADING)
+        mock_art_repo.create = AsyncMock(return_value=uploading_artifact)
+        mock_art_repo.update = AsyncMock(return_value=artifact)
+        mock_blob.upload_blob = AsyncMock()
+        mock_tenant_repo.increment_usage = AsyncMock()
+        mock_events.publish_event = AsyncMock()
+
+        svc = ArtifactService()
+        result = await svc.upload_artifact(
+            tenant=tenant,
+            tier=tier,
+            project_id="prj-001",
+            file=file,
+        )
+
+        assert result is not None
+        mock_proj_repo.increment_artifact_count.assert_called_once_with(
+            tenant.id, "prj-001"
+        )
+        mock_tenant_repo.increment_usage.assert_called_once_with(
+            tenant.id, "total_artifact_count"
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_artifact_decrements_counters():
+    """ArtifactService.delete_artifact decrements both tenant and project counters."""
+    artifact = _make_artifact()
+
+    with (
+        patch("domains.artifacts.service.artifact_repository") as mock_art_repo,
+        patch("domains.artifacts.service.tenant_repository") as mock_tenant_repo,
+        patch("domains.artifacts.service.project_repository") as mock_proj_repo,
+    ):
+        mock_art_repo.get_by_id = AsyncMock(return_value=artifact)
+        mock_art_repo.soft_delete = AsyncMock(return_value=artifact)
+        mock_tenant_repo.increment_usage = AsyncMock()
+        mock_proj_repo.increment_artifact_count = AsyncMock()
+
+        svc = ArtifactService()
+        result = await svc.delete_artifact("t-001", "prj-001", "art_abc123")
+
+        assert result is not None
+        mock_tenant_repo.increment_usage.assert_called_once_with(
+            "t-001", "total_artifact_count", amount=-1
+        )
+        mock_proj_repo.increment_artifact_count.assert_called_once_with(
+            "t-001", "prj-001", amount=-1
+        )

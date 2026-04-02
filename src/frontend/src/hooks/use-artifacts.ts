@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ApiRequestError } from "@/lib/api";
 import type { ArtifactStatus } from "@/types/api";
 
 /** Artifact data returned from the API. */
@@ -51,10 +51,34 @@ async function uploadArtifact(
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new Error(body?.error?.message ?? "Upload failed");
+    throw new ApiRequestError(
+      res.status,
+      body?.error?.message ?? "Upload failed",
+      body?.error?.code,
+      body?.error?.detail,
+    );
   }
   const json = await res.json();
   return json.data;
+}
+
+async function deleteArtifact(
+  projectId: string,
+  artifactId: string,
+): Promise<void> {
+  const res = await apiFetch(
+    `/api/v1/projects/${projectId}/artifacts/${artifactId}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiRequestError(
+      res.status,
+      body?.error?.message ?? "Delete failed",
+      body?.error?.code,
+      body?.error?.detail,
+    );
+  }
 }
 
 /** Hook to list artifacts for a project. */
@@ -74,6 +98,20 @@ export function useUploadArtifact(projectId: string) {
     mutationFn: (file: File) => uploadArtifact(projectId, file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["artifacts", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
+    },
+  });
+}
+
+/** Hook to delete an artifact. */
+export function useDeleteArtifact(projectId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (artifactId: string) => deleteArtifact(projectId, artifactId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["artifacts", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["project", projectId] });
     },
   });
 }
