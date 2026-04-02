@@ -61,6 +61,15 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      - name: Remove resource lock (if exists)
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          az lock delete \
+            --name "aic-rg-cannotdelete" \
+            --resource-group "${RESOURCE_GROUP}" \
+            2>/dev/null || true
+
       - name: Deploy Bicep infrastructure
         id: deploy
         env:
@@ -364,6 +373,34 @@ jobs:
             ${DEBUG_FLAG}
 
   # ---------------------------------------------------------------------------
+  # Dev — Restore Resource Lock (always runs after deployment completes)
+  # ---------------------------------------------------------------------------
+  restore-lock-dev:
+    name: "Dev — Restore Resource Lock"
+    needs: [deploy-infra-dev, deploy-afd-dev]
+    if: ${{ always() && needs.deploy-infra-dev.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Add resource lock
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          az lock create \
+            --name "aic-rg-cannotdelete" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --lock-type CanNotDelete \
+            --notes "Prevents accidental deletion of resources. Managed by CI/CD pipeline."
+
+  # ---------------------------------------------------------------------------
   # Prod — Deploy Infrastructure (Bicep)
   # ---------------------------------------------------------------------------
   deploy-infra-prod:
@@ -398,6 +435,15 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Remove resource lock (if exists)
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          az lock delete \
+            --name "aic-rg-cannotdelete" \
+            --resource-group "${RESOURCE_GROUP}" \
+            2>/dev/null || true
 
       - name: Deploy Bicep infrastructure
         id: deploy
@@ -700,3 +746,31 @@ jobs:
             --domains "cd-frontend,cd-backend,cd-pubsub" \
             --endpoints "${FRONTEND_ENDPOINT},${BACKEND_ENDPOINT},${PUBSUB_ENDPOINT}" \
             ${DEBUG_FLAG}
+
+  # ---------------------------------------------------------------------------
+  # Prod — Restore Resource Lock (always runs after deployment completes)
+  # ---------------------------------------------------------------------------
+  restore-lock-prod:
+    name: "Prod — Restore Resource Lock"
+    needs: [deploy-infra-prod, deploy-afd-prod]
+    if: ${{ always() && needs.deploy-infra-prod.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    environment: prod
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Add resource lock
+        env:
+          RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          az lock create \
+            --name "aic-rg-cannotdelete" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --lock-type CanNotDelete \
+            --notes "Prevents accidental deletion of resources. Managed by CI/CD pipeline."
