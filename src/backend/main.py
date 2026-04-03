@@ -13,6 +13,7 @@ from opentelemetry.trace import StatusCode
 
 from config import settings
 from domains.artifacts.router import router as artifact_router
+from domains.graph.router import router as graph_router
 from domains.projects.router import router as project_router
 from domains.tenants.router import router as tenant_router
 from domains.users.router import router as user_router
@@ -67,6 +68,10 @@ app = FastAPI(
             "name": "artifacts",
             "description": "Artifact upload, download, and metadata.",
         },
+        {
+            "name": "graph",
+            "description": "Dependency graph query operations.",
+        },
     ],
 )
 
@@ -104,6 +109,7 @@ app.include_router(tenant_router)
 app.include_router(user_router)
 app.include_router(project_router)
 app.include_router(artifact_router)
+app.include_router(graph_router)
 
 
 
