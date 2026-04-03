@@ -154,6 +154,19 @@ fi
 if [[ "${APP_EXISTS}" == "true" ]]; then
   log_step "Updating Container App '${APP_NAME}'..."
 
+  # Ensure the user-assigned managed identity is (still) attached to the app.
+  # `az containerapp update` does not accept --user-assigned, so we use the
+  # dedicated identity command before updating the container image/config.
+  log_detail "Ensuring managed identity is assigned..."
+  if ! az containerapp identity assign \
+    --name "${APP_NAME}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --user-assigned "${IDENTITY}" \
+    --output none; then
+    log_error "Failed to assign managed identity to '${APP_NAME}'"
+    exit 1
+  fi
+
   # Build update command
   UPDATE_CMD=(
     az containerapp update
@@ -164,6 +177,8 @@ if [[ "${APP_EXISTS}" == "true" ]]; then
     --max-replicas "${MAX_REPLICAS}"
     --cpu "${CPU}"
     --memory "${MEMORY}"
+    --registry-server "${REGISTRY_SERVER}"
+    --registry-identity "${IDENTITY}"
   )
 
   if [[ -n "${ENV_VARS}" ]]; then
