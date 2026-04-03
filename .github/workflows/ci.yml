@@ -2,8 +2,8 @@
 # CI Workflow — Integrisight.ai  (reusable child workflow)
 # =============================================================================
 # Called by the parent cicd.yml workflow.
-# Jobs: frontend build/test, backend build/test, Bicep lint/build, container
-#        build/scan/push.
+# Jobs: frontend build/test, backend build/test, Rust build/test, Bicep
+#        lint/build, container build/scan/push.
 # =============================================================================
 
 name: CI
@@ -107,7 +107,47 @@ jobs:
           fail-on-error: true
 
   # -------------------------------------------------------------------------
-  # Job 3 — Bicep: lint, build, publish artifacts
+  # Job 3 — Rust parser worker: build, lint, test
+  # -------------------------------------------------------------------------
+  build-and-test-rust:
+    name: "Rust Parser — Build & Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src/worker-parser-rust/target
+          key: rust-${{ runner.os }}-${{ hashFiles('src/worker-parser-rust/Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: Lint (clippy)
+        working-directory: src/worker-parser-rust
+        run: cargo clippy -- -D warnings
+
+      - name: Build
+        working-directory: src/worker-parser-rust
+        run: cargo build --release
+
+      - name: Run tests
+        working-directory: src/worker-parser-rust
+        run: |
+          mkdir -p ../../test-results
+          cargo test -- --format=pretty 2>&1 | tee ../../test-results/rust-results.txt
+
+  # -------------------------------------------------------------------------
+  # Job 4 — Bicep: lint, build, publish artifacts
   # -------------------------------------------------------------------------
   bicep-build:
     name: "Bicep — Lint & Build"
@@ -152,12 +192,12 @@ jobs:
           retention-days: 7
 
   # -------------------------------------------------------------------------
-  # Job 4 — Container build matrix: build, scan, push (parallel per image)
+  # Job 5 — Container build matrix: build, scan, push (parallel per image)
   # -------------------------------------------------------------------------
   container-build:
     name: "Container — ${{ matrix.image_name }}"
     runs-on: ubuntu-latest
-    needs: [build-and-test-frontend, build-and-test-backend]
+    needs: [build-and-test-frontend, build-and-test-backend, build-and-test-rust]
 
     strategy:
       fail-fast: false
@@ -188,6 +228,11 @@ jobs:
             context: src/backend
             dockerfile: Dockerfile.worker
             cache_scope: worker             # shared — same context & Dockerfile
+          - name: worker-parser-rust
+            image_name: integrisight-worker-parser-rust
+            context: src/worker-parser-rust
+            dockerfile: Dockerfile
+            cache_scope: worker-parser-rust
 
     env:
       REGISTRY: ghcr.io
@@ -298,7 +343,7 @@ jobs:
           retention-days: 1
 
   # -------------------------------------------------------------------------
-  # Job 5 — Aggregate container metadata for CD consumption
+  # Job 6 — Aggregate container metadata for CD consumption
   # -------------------------------------------------------------------------
   container-metadata:
     name: "Container Metadata — Aggregate"
