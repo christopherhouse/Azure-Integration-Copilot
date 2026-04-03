@@ -297,6 +297,9 @@ jobs:
             EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
             AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
+        # min-replicas=1: CPU scaler cannot activate from 0 replicas (no CPU to
+        # measure). A native KEDA scaler for Event Grid Namespace pull delivery
+        # does not exist yet; switch to min=0 if one ships.
         run: |
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-worker-scan-gate" \
@@ -308,8 +311,11 @@ jobs:
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
-            --min-replicas 0 \
+            --min-replicas 1 \
             --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
             --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
@@ -718,6 +724,9 @@ jobs:
             EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
             AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
+        # min-replicas=1: CPU scaler cannot activate from 0 replicas (no CPU to
+        # measure). A native KEDA scaler for Event Grid Namespace pull delivery
+        # does not exist yet; switch to min=0 if one ships.
         run: |
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-worker-scan-gate" \
@@ -729,8 +738,11 @@ jobs:
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
-            --min-replicas 0 \
+            --min-replicas 1 \
             --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
             --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
 
   # ---------------------------------------------------------------------------

@@ -19,7 +19,10 @@
 #     --max-replicas <max> \
 #     [--env-vars "KEY=value KEY2=value2"] \
 #     [--ingress-external true|false] \
-#     [--no-ingress]
+#     [--no-ingress] \
+#     [--scale-rule-name <rule-name>] \
+#     [--scale-rule-type <keda-scaler-type>] \
+#     [--scale-rule-metadata "key1=val1 key2=val2"]
 # =============================================================================
 
 set -euo pipefail
@@ -68,6 +71,9 @@ print_summary() {
   echo -e "  ${BLUE}${BOLD}⚙️  Resources${NC}"
   echo -e "  ${CYAN}├─${NC} ${BOLD}CPU / Memory${NC}    ${GREEN}${CPU} cores · ${MEMORY}${NC}"
   echo -e "  ${CYAN}├─${NC} ${BOLD}Replicas${NC}        ${GREEN}${MIN_REPLICAS} → ${MAX_REPLICAS}${NC}"
+  if [[ -n "${SCALE_RULE_NAME}" ]]; then
+    echo -e "  ${CYAN}├─${NC} ${BOLD}Scale Rule${NC}      ${GREEN}${SCALE_RULE_NAME} (${SCALE_RULE_TYPE})${NC}"
+  fi
   echo -e "  ${CYAN}└─${NC} ${BOLD}Ingress${NC}         ${GREEN}${INGRESS_LABEL}${NC}"
   echo -e ""
 }
@@ -89,6 +95,9 @@ MAX_REPLICAS="10"
 ENV_VARS=""
 INGRESS_EXTERNAL="true"
 NO_INGRESS="false"
+SCALE_RULE_NAME=""
+SCALE_RULE_TYPE=""
+SCALE_RULE_METADATA=""
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -109,6 +118,9 @@ while [[ $# -gt 0 ]]; do
     --env-vars)         ENV_VARS="$2";          shift 2 ;;
     --ingress-external) INGRESS_EXTERNAL="$2";  shift 2 ;;
     --no-ingress)       NO_INGRESS="true";      shift   ;;
+    --scale-rule-name)     SCALE_RULE_NAME="$2";     shift 2 ;;
+    --scale-rule-type)     SCALE_RULE_TYPE="$2";     shift 2 ;;
+    --scale-rule-metadata) SCALE_RULE_METADATA="$2"; shift 2 ;;
     *)
       log_error "Unknown option: $1"
       exit 1
@@ -214,6 +226,17 @@ if [[ "${APP_EXISTS}" == "true" ]]; then
     UPDATE_CMD+=(--set-env-vars ${ENV_VARS})
   fi
 
+  # Append KEDA scale rule if provided
+  if [[ -n "${SCALE_RULE_NAME}" && -n "${SCALE_RULE_TYPE}" ]]; then
+    UPDATE_CMD+=(
+      --scale-rule-name "${SCALE_RULE_NAME}"
+      --scale-rule-type "${SCALE_RULE_TYPE}"
+    )
+    if [[ -n "${SCALE_RULE_METADATA}" ]]; then
+      UPDATE_CMD+=(--scale-rule-metadata ${SCALE_RULE_METADATA})
+    fi
+  fi
+
   log_detail "Running: ${UPDATE_CMD[*]}"
   "${UPDATE_CMD[@]}" --output none
 
@@ -256,6 +279,17 @@ else
 
   if [[ -n "${ENV_VARS}" ]]; then
     CREATE_CMD+=(--env-vars ${ENV_VARS})
+  fi
+
+  # Append KEDA scale rule if provided
+  if [[ -n "${SCALE_RULE_NAME}" && -n "${SCALE_RULE_TYPE}" ]]; then
+    CREATE_CMD+=(
+      --scale-rule-name "${SCALE_RULE_NAME}"
+      --scale-rule-type "${SCALE_RULE_TYPE}"
+    )
+    if [[ -n "${SCALE_RULE_METADATA}" ]]; then
+      CREATE_CMD+=(--scale-rule-metadata ${SCALE_RULE_METADATA})
+    fi
   fi
 
   log_detail "Running: ${CREATE_CMD[*]}"
