@@ -92,14 +92,14 @@ impl Parser for LogicAppParser {
             let mut props: HashMap<String, Value> =
                 HashMap::from([("type".into(), action_type.into())]);
 
-            if action_type.eq_ignore_ascii_case("http") {
-                if let Some(inputs) = obj.and_then(|o| o.get("inputs")).and_then(Value::as_object) {
-                    if let Some(method) = inputs.get("method").and_then(Value::as_str) {
-                        props.insert("method".into(), method.into());
-                    }
-                    if let Some(uri) = inputs.get("uri").and_then(Value::as_str) {
-                        props.insert("uri".into(), uri.into());
-                    }
+            if action_type.eq_ignore_ascii_case("http")
+                && let Some(inputs) = obj.and_then(|o| o.get("inputs")).and_then(Value::as_object)
+            {
+                if let Some(method) = inputs.get("method").and_then(Value::as_str) {
+                    props.insert("method".into(), method.into());
+                }
+                if let Some(uri) = inputs.get("uri").and_then(Value::as_str) {
+                    props.insert("uri".into(), uri.into());
                 }
             }
 
@@ -151,24 +151,23 @@ impl Parser for LogicAppParser {
                 .get("type")
                 .and_then(Value::as_str)
                 .unwrap_or("");
-            if action_type.eq_ignore_ascii_case("http") {
-                if let Some(uri) = obj
+            if action_type.eq_ignore_ascii_case("http")
+                && let Some(uri) = obj
                     .get("inputs")
                     .and_then(Value::as_object)
                     .and_then(|i| i.get("uri"))
                     .and_then(Value::as_str)
-                {
-                    let host = extract_host(uri);
-                    if !host.is_empty() {
-                        external_refs.push(ExternalReference {
-                            temp_id: format!("ext_{ext_idx}"),
-                            component_type: "external_service".into(),
-                            name: host.clone(),
-                            display_name: host,
-                            inferred_from: format!("action:{action_name}:uri"),
-                        });
-                        ext_idx += 1;
-                    }
+            {
+                let host = extract_host(uri);
+                if !host.is_empty() {
+                    external_refs.push(ExternalReference {
+                        temp_id: format!("ext_{ext_idx}"),
+                        component_type: "external_service".into(),
+                        name: host.clone(),
+                        display_name: host,
+                        inferred_from: format!("action:{action_name}:uri"),
+                    });
+                    ext_idx += 1;
                 }
             }
         }

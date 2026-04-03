@@ -3,9 +3,13 @@
 //! Mirrors the Python `parsers/__init__.py` registry that maps artifact types
 //! to concrete parser implementations.
 
+mod apim_policy;
 mod logic_app;
+mod openapi;
 
+pub use apim_policy::ApimPolicyParser;
 pub use logic_app::LogicAppParser;
+pub use openapi::OpenApiParser;
 
 use crate::models::ParseResult;
 
@@ -37,6 +41,8 @@ pub trait Parser: Send + Sync {
 pub fn get_parser(artifact_type: &str) -> Option<Box<dyn Parser>> {
     match artifact_type {
         "logic_app_workflow" => Some(Box::new(LogicAppParser)),
+        "openapi_spec" => Some(Box::new(OpenApiParser)),
+        "apim_policy" => Some(Box::new(ApimPolicyParser)),
         _ => None,
     }
 }
@@ -48,6 +54,16 @@ mod tests {
     #[test]
     fn get_parser_returns_logic_app_parser() {
         assert!(get_parser("logic_app_workflow").is_some());
+    }
+
+    #[test]
+    fn get_parser_returns_openapi_parser() {
+        assert!(get_parser("openapi_spec").is_some());
+    }
+
+    #[test]
+    fn get_parser_returns_apim_policy_parser() {
+        assert!(get_parser("apim_policy").is_some());
     }
 
     #[test]
