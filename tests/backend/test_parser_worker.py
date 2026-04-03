@@ -262,12 +262,12 @@ class TestParserHandleFailure:
 
     @pytest.mark.asyncio
     async def test_transitions_to_parse_failed(self):
-        handler, repo, *_ = _make_handler()
+        repo = AsyncMock()
         repo.get_by_id = AsyncMock(return_value=_make_artifact(status=ArtifactStatus.PARSING))
         repo.update_status = AsyncMock(return_value=_make_artifact(status=ArtifactStatus.PARSE_FAILED))
+        publisher = AsyncMock()
 
-        _, _, _, _, publisher = _make_handler()
-        handler._publisher = publisher
+        handler, _, _, _, _ = _make_handler(repo=repo, publisher=publisher)
 
         await handler.handle_failure(_make_event_data(), PermanentError("bad data"))
 
