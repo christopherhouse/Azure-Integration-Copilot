@@ -1,5 +1,5 @@
 # =============================================================================
-# CI/CD Workflow — Azure Integration Copilot
+# CI/CD Workflow — Integrisight.ai
 # =============================================================================
 # Unified pipeline that runs CI on every PR and push to main, and additionally
 # runs CD on push to main and manual dispatch.

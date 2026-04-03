@@ -1,5 +1,5 @@
 # =============================================================================
-# CI Workflow — Azure Integration Copilot  (reusable child workflow)
+# CI Workflow — Integrisight.ai  (reusable child workflow)
 # =============================================================================
 # Called by the parent cicd.yml workflow.
 # Jobs: frontend build/test, backend build/test, Bicep lint/build, container
@@ -188,10 +188,10 @@ jobs:
           # Ensure image names are lowercase
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
 
-          FRONTEND_IMAGE="ghcr.io/${REPO_LOWER}/azintcp-frontend"
-          BACKEND_IMAGE="ghcr.io/${REPO_LOWER}/azintcp-backend"
-          WORKER_SCAN_GATE_IMAGE="ghcr.io/${REPO_LOWER}/azintcp-worker-scan-gate"
-          WORKER_PARSER_IMAGE="ghcr.io/${REPO_LOWER}/azintcp-worker-parser"
+          FRONTEND_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-frontend"
+          BACKEND_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-backend"
+          WORKER_SCAN_GATE_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-worker-scan-gate"
+          WORKER_PARSER_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-worker-parser"
 
           # Build tag list — always include the short-SHA tag
           FRONTEND_TAGS="${FRONTEND_IMAGE}:${SHORT_SHA}"
@@ -407,35 +407,35 @@ jobs:
             },
             "containers": [
               {
-                "name": "azintcp-frontend",
+                "name": "integrisight-frontend",
                 "registry": "ghcr.io",
-                "repository": "${REPO_LOWER}/azintcp-frontend",
+                "repository": "${REPO_LOWER}/integrisight-frontend",
                 "tag": "${SHORT_SHA}",
-                "full_image": "ghcr.io/${REPO_LOWER}/azintcp-frontend:${SHORT_SHA}",
+                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-frontend:${SHORT_SHA}",
                 "digest": "${FRONTEND_DIGEST}"
               },
               {
-                "name": "azintcp-backend",
+                "name": "integrisight-backend",
                 "registry": "ghcr.io",
-                "repository": "${REPO_LOWER}/azintcp-backend",
+                "repository": "${REPO_LOWER}/integrisight-backend",
                 "tag": "${SHORT_SHA}",
-                "full_image": "ghcr.io/${REPO_LOWER}/azintcp-backend:${SHORT_SHA}",
+                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-backend:${SHORT_SHA}",
                 "digest": "${BACKEND_DIGEST}"
               },
               {
-                "name": "azintcp-worker-scan-gate",
+                "name": "integrisight-worker-scan-gate",
                 "registry": "ghcr.io",
-                "repository": "${REPO_LOWER}/azintcp-worker-scan-gate",
+                "repository": "${REPO_LOWER}/integrisight-worker-scan-gate",
                 "tag": "${SHORT_SHA}",
-                "full_image": "ghcr.io/${REPO_LOWER}/azintcp-worker-scan-gate:${SHORT_SHA}",
+                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-worker-scan-gate:${SHORT_SHA}",
                 "digest": "${WORKER_SCAN_GATE_DIGEST}"
               },
               {
-                "name": "azintcp-worker-parser",
+                "name": "integrisight-worker-parser",
                 "registry": "ghcr.io",
-                "repository": "${REPO_LOWER}/azintcp-worker-parser",
+                "repository": "${REPO_LOWER}/integrisight-worker-parser",
                 "tag": "${SHORT_SHA}",
-                "full_image": "ghcr.io/${REPO_LOWER}/azintcp-worker-parser:${SHORT_SHA}",
+                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-worker-parser:${SHORT_SHA}",
                 "digest": "${WORKER_PARSER_DIGEST}"
               }
             ]

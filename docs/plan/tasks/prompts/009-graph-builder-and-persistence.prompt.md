@@ -1,6 +1,6 @@
 # Prompt — Execute Task 009: Graph Builder and Persistence
 
-You are an expert Python backend and frontend engineer. Execute the following task to implement the graph builder worker and graph visualization for Integration Copilot.
+You are an expert Python backend and frontend engineer. Execute the following task to implement the graph builder worker and graph visualization for Integrisight.ai.
 
 ## Context
 

@@ -1,4 +1,4 @@
-# Azure Integration Copilot
+# Integrisight.ai
 
 <!-- Badges -->
 [![CI/CD](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/cicd.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/cicd.yml)
@@ -34,7 +34,7 @@
 
 ## Overview
 
-Azure Integration Copilot is a **multi-tenant SaaS application** running on Azure. Built as a multi-agent solution using the [Microsoft Foundry](https://learn.microsoft.com/en-us/azure/ai-services/) agent framework, it assists Azure Integration Services developers throughout the full lifecycle of their solutions — from planning and understanding system dependencies to day-to-day operations and future evolution.
+Integrisight.ai is a **multi-tenant SaaS application** running on Azure. Built as a multi-agent solution using the [Microsoft Foundry](https://learn.microsoft.com/en-us/azure/ai-services/) agent framework, it assists Azure Integration Services developers throughout the full lifecycle of their solutions — from planning and understanding system dependencies to day-to-day operations and future evolution.
 
 The application consists of a **Next.js frontend**, a **Python backend API**, and **async worker services**, all hosted on Azure Container Apps with real-time updates delivered via Azure Web PubSub and event-driven processing via Azure Event Grid.
 
@@ -329,9 +329,9 @@ Three container images are built and published to GHCR:
 
 | Image | Source | Description |
 |---|---|---|
-| `ghcr.io/<owner>/<repo>/azintcp-frontend` | `src/frontend/Dockerfile` | Next.js frontend |
-| `ghcr.io/<owner>/<repo>/azintcp-backend` | `src/backend/Dockerfile` | FastAPI backend API |
-| `ghcr.io/<owner>/<repo>/azintcp-worker-scan-gate` | `src/backend/Dockerfile.worker` | Malware scan gate worker |
+| `ghcr.io/<owner>/<repo>/integrisight-frontend` | `src/frontend/Dockerfile` | Next.js frontend |
+| `ghcr.io/<owner>/<repo>/integrisight-backend` | `src/backend/Dockerfile` | FastAPI backend API |
+| `ghcr.io/<owner>/<repo>/integrisight-worker-scan-gate` | `src/backend/Dockerfile.worker` | Malware scan gate worker |
 
 All images are tagged with the 7-character commit SHA and `latest` on pushes to `main`.
 
@@ -514,7 +514,7 @@ Once complete, the CI/CD workflow (`.github/workflows/cicd.yml`) will authentica
      --name ca-frontend \
      --resource-group rg-aic-dev-centralus \
      --environment cae-aic-dev-centralus \
-     --image <acr-login-server>/azintcp-frontend:<tag> \
+     --image <acr-login-server>/integrisight-frontend:<tag> \
      --target-port 3000 \
      --identity <frontend-identity-resource-id> \
      --registry-server <acr-login-server>

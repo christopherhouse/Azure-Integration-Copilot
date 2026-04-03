@@ -1,6 +1,6 @@
 # Prompt — Execute Task 007: Eventing Foundation
 
-You are an expert Python backend engineer. Execute the following task to implement the eventing infrastructure and scan-gate worker for Integration Copilot.
+You are an expert Python backend engineer. Execute the following task to implement the eventing infrastructure and scan-gate worker for Integrisight.ai.
 
 ## Context
 

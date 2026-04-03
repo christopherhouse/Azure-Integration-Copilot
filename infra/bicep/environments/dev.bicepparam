@@ -54,6 +54,6 @@ param cosmosAllowedIpAddresses = [
 ]
 
 param tags = {
-  project: 'azure-integration-copilot'
+  project: 'integrisight'
   cost_center: 'engineering'
 }

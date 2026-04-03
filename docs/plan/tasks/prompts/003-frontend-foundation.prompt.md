@@ -1,6 +1,6 @@
 # Prompt — Execute Task 003: Frontend Foundation
 
-You are an expert frontend engineer specializing in Next.js and TypeScript. Execute the following task to build the frontend foundation for Integration Copilot.
+You are an expert frontend engineer specializing in Next.js and TypeScript. Execute the following task to build the frontend foundation for Integrisight.ai.
 
 ## Context
 
@@ -80,7 +80,7 @@ Create `src/frontend/src/app/(dashboard)/layout.tsx`:
 - Dashboard layout with sidebar and header.
 
 Create `src/frontend/src/app/(dashboard)/page.tsx`:
-- Dashboard home page with placeholder content ("Welcome to Integration Copilot").
+- Dashboard home page with placeholder content ("Welcome to Integrisight.ai").
 
 Create layout components:
 - `src/frontend/src/components/layout/sidebar.tsx` — collapsible sidebar with navigation links (Projects, Settings).
