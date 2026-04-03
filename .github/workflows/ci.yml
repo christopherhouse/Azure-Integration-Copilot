@@ -2,8 +2,8 @@
 # CI Workflow — Integrisight.ai  (reusable child workflow)
 # =============================================================================
 # Called by the parent cicd.yml workflow.
-# Jobs: frontend build/test, backend build/test, Bicep lint/build, container
-#        build/scan/push.
+# Jobs: frontend build/test, backend build/test, Rust build/test, Bicep
+#        lint/build, container build/scan/push.
 # =============================================================================
 
 name: CI
@@ -107,7 +107,47 @@ jobs:
           fail-on-error: true
 
   # -------------------------------------------------------------------------
-  # Job 3 — Bicep: lint, build, publish artifacts
+  # Job 3 — Rust parser worker: build, lint, test
+  # -------------------------------------------------------------------------
+  build-and-test-rust:
+    name: "Rust Parser — Build & Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src/worker-parser-rust/target
+          key: rust-${{ runner.os }}-${{ hashFiles('src/worker-parser-rust/Cargo.lock') }}
+          restore-keys: rust-${{ runner.os }}-
+
+      - name: Lint (clippy)
+        working-directory: src/worker-parser-rust
+        run: cargo clippy -- -D warnings
+
+      - name: Build
+        working-directory: src/worker-parser-rust
+        run: cargo build --release
+
+      - name: Run tests
+        working-directory: src/worker-parser-rust
+        run: |
+          mkdir -p ../../test-results
+          cargo test -- --format=pretty 2>&1 | tee ../../test-results/rust-results.txt
+
+  # -------------------------------------------------------------------------
+  # Job 4 — Bicep: lint, build, publish artifacts
   # -------------------------------------------------------------------------
   bicep-build:
     name: "Bicep — Lint & Build"
@@ -152,12 +192,12 @@ jobs:
           retention-days: 7
 
   # -------------------------------------------------------------------------
-  # Job 4 — Containers: build, scan, push (push to GHCR only on main)
+  # Job 5 — Containers: build, scan, push (push to GHCR only on main)
   # -------------------------------------------------------------------------
   containers:
     name: "Containers — Build, Scan & Push"
     runs-on: ubuntu-latest
-    needs: [build-and-test-frontend, build-and-test-backend]
+    needs: [build-and-test-frontend, build-and-test-backend, build-and-test-rust]
 
     env:
       REGISTRY: ghcr.io
@@ -192,12 +232,14 @@ jobs:
           BACKEND_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-backend"
           WORKER_SCAN_GATE_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-worker-scan-gate"
           WORKER_PARSER_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-worker-parser"
+          WORKER_PARSER_RUST_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-worker-parser-rust"
 
           # Build tag list — always include the short-SHA tag
           FRONTEND_TAGS="${FRONTEND_IMAGE}:${SHORT_SHA}"
           BACKEND_TAGS="${BACKEND_IMAGE}:${SHORT_SHA}"
           WORKER_SCAN_GATE_TAGS="${WORKER_SCAN_GATE_IMAGE}:${SHORT_SHA}"
           WORKER_PARSER_TAGS="${WORKER_PARSER_IMAGE}:${SHORT_SHA}"
+          WORKER_PARSER_RUST_TAGS="${WORKER_PARSER_RUST_IMAGE}:${SHORT_SHA}"
 
           # On pushes to main or workflow dispatch, also tag as latest
           if [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "workflow_dispatch") && "${{ github.ref }}" == "refs/heads/main" ]]; then
@@ -209,6 +251,8 @@ jobs:
           ${WORKER_SCAN_GATE_IMAGE}:latest"
             WORKER_PARSER_TAGS="${WORKER_PARSER_TAGS}
           ${WORKER_PARSER_IMAGE}:latest"
+            WORKER_PARSER_RUST_TAGS="${WORKER_PARSER_RUST_TAGS}
+          ${WORKER_PARSER_RUST_IMAGE}:latest"
           fi
 
           # Persist outputs
@@ -217,6 +261,7 @@ jobs:
             echo "backend_image=${BACKEND_IMAGE}"
             echo "worker_scan_gate_image=${WORKER_SCAN_GATE_IMAGE}"
             echo "worker_parser_image=${WORKER_PARSER_IMAGE}"
+            echo "worker_parser_rust_image=${WORKER_PARSER_RUST_IMAGE}"
             echo "frontend_tags<<EOF"
             echo "${FRONTEND_TAGS}"
             echo "EOF"
@@ -228,6 +273,9 @@ jobs:
             echo "EOF"
             echo "worker_parser_tags<<EOF"
             echo "${WORKER_PARSER_TAGS}"
+            echo "EOF"
+            echo "worker_parser_rust_tags<<EOF"
+            echo "${WORKER_PARSER_RUST_TAGS}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -274,6 +322,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build worker-parser-rust image
+        id: build-worker-parser-rust
+        uses: docker/build-push-action@v6
+        with:
+          context: src/worker-parser-rust
+          load: true
+          tags: ${{ steps.meta.outputs.worker_parser_rust_tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       # -- Scan images with Trivy ---------------------------------------------
       - name: Scan frontend image (Trivy)
         if: github.event_name != 'pull_request'
@@ -315,6 +373,16 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "0"
 
+      - name: Scan worker-parser-rust image (Trivy)
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: "${{ steps.meta.outputs.worker_parser_rust_image }}:${{ env.SHORT_SHA }}"
+          format: sarif
+          output: worker-parser-rust-trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+
       # -- Upload SARIF to GitHub Security ------------------------------------
       - name: Upload frontend SARIF
         if: always() && github.event_name != 'pull_request'
@@ -343,6 +411,13 @@ jobs:
         with:
           sarif_file: worker-parser-trivy-results.sarif
           category: trivy-worker-parser
+
+      - name: Upload worker-parser-rust SARIF
+        if: always() && github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: worker-parser-rust-trivy-results.sarif
+          category: trivy-worker-parser-rust
 
       # -- Push images to GHCR (push to main or workflow dispatch) --------------
       - name: Push frontend image
@@ -385,6 +460,16 @@ jobs:
           DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
+      - name: Push worker-parser-rust image
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        id: push-worker-parser-rust
+        run: |
+          WORKER_PARSER_RUST_IMAGE="${{ steps.meta.outputs.worker_parser_rust_image }}"
+          RESULT=$(docker push --all-tags "${WORKER_PARSER_RUST_IMAGE}" 2>&1)
+          echo "${RESULT}"
+          DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
       # -- Container metadata (push to main or workflow dispatch) --------------
       - name: Generate container metadata
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
@@ -393,6 +478,7 @@ jobs:
           BACKEND_DIGEST: ${{ steps.push-backend.outputs.digest }}
           WORKER_SCAN_GATE_DIGEST: ${{ steps.push-worker-scan-gate.outputs.digest }}
           WORKER_PARSER_DIGEST: ${{ steps.push-worker-parser.outputs.digest }}
+          WORKER_PARSER_RUST_DIGEST: ${{ steps.push-worker-parser-rust.outputs.digest }}
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           cat > container-metadata.json <<EOF
@@ -437,6 +523,14 @@ jobs:
                 "tag": "${SHORT_SHA}",
                 "full_image": "ghcr.io/${REPO_LOWER}/integrisight-worker-parser:${SHORT_SHA}",
                 "digest": "${WORKER_PARSER_DIGEST}"
+              },
+              {
+                "name": "integrisight-worker-parser-rust",
+                "registry": "ghcr.io",
+                "repository": "${REPO_LOWER}/integrisight-worker-parser-rust",
+                "tag": "${SHORT_SHA}",
+                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-worker-parser-rust:${SHORT_SHA}",
+                "digest": "${WORKER_PARSER_RUST_DIGEST}"
               }
             ]
           }

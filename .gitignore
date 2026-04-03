@@ -20,6 +20,9 @@ build/
 *.egg
 .ruff_cache/
 
+# Rust
+target/
+
 # Node / Next.js
 node_modules/
 .next/
