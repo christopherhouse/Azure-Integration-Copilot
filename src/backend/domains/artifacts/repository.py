@@ -154,5 +154,49 @@ class ArtifactRepository:
         logger.info("artifact_soft_deleted", artifact_id=artifact_id)
         return Artifact.model_validate(result)
 
+    async def soft_delete_all_by_project(
+        self, tenant_id: str, project_id: str
+    ) -> int:
+        """Soft-delete all active artifacts for a project.
+
+        Returns the number of artifacts that were soft-deleted.
+        """
+        container = await self._get_container()
+        now = datetime.now(UTC)
+
+        query = (
+            "SELECT * FROM c "
+            "WHERE c.partitionKey = @tenantId AND c.type = 'artifact' "
+            "AND c.projectId = @projectId "
+            "AND (NOT IS_DEFINED(c.deletedAt) OR IS_NULL(c.deletedAt))"
+        )
+        params = [
+            {"name": "@tenantId", "value": tenant_id},
+            {"name": "@projectId", "value": project_id},
+        ]
+
+        count = 0
+        async for item in container.query_items(query=query, parameters=params):
+            artifact = Artifact.model_validate(item)
+            artifact.deleted_at = now
+            artifact.updated_at = now
+            doc = artifact.model_dump(by_alias=True, mode="json")
+            try:
+                await container.replace_item(item=artifact.id, body=doc)
+                count += 1
+            except Exception:
+                logger.warning(
+                    "failed_to_soft_delete_artifact",
+                    artifact_id=artifact.id,
+                    project_id=project_id,
+                )
+
+        logger.info(
+            "artifacts_soft_deleted_for_project",
+            project_id=project_id,
+            count=count,
+        )
+        return count
+
 
 artifact_repository = ArtifactRepository()

@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ApiRequestError } from "@/lib/api";
@@ -11,6 +11,7 @@ import {
   Settings,
   Calendar,
   User,
+  Trash2,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -21,12 +22,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { ArtifactUpload } from "@/components/artifacts/artifact-upload";
 import { ArtifactList } from "@/components/artifacts/artifact-list";
 import { GraphCanvas } from "@/components/graph/graph-canvas";
 import { ComponentPanel } from "@/components/graph/component-panel";
 import { GraphSummary } from "@/components/graph/graph-summary";
-import { useProject } from "@/hooks/use-projects";
+import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
+import { useProject, useDeleteProject } from "@/hooks/use-projects";
 import { useArtifacts, useUploadArtifact } from "@/hooks/use-artifacts";
 import {
   useGraphSummary,
@@ -46,6 +59,7 @@ function formatDate(iso: string): string {
 export default function ProjectDetailPage() {
   const params = useParams<{ projectId: string }>();
   const projectId = params.projectId;
+  const router = useRouter();
 
   const {
     data: project,
@@ -55,6 +69,7 @@ export default function ProjectDetailPage() {
   const { data: artifactData, isLoading: artifactsLoading } =
     useArtifacts(projectId);
   const uploadMutation = useUploadArtifact(projectId);
+  const deleteMutation = useDeleteProject();
 
   // Graph data
   const { data: graphSummary } = useGraphSummary(projectId);
@@ -62,6 +77,7 @@ export default function ProjectDetailPage() {
   const { data: edgeData } = useGraphEdges(projectId);
   const [selectedComponent, setSelectedComponent] =
     useState<GraphComponent | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const graphComponents = componentData?.data ?? [];
   const graphEdges = edgeData?.data ?? [];
@@ -88,6 +104,21 @@ export default function ProjectDetailPage() {
           }
         }
         toast.error(err instanceof Error ? err.message : "Upload failed");
+      },
+    });
+  };
+
+  const handleDelete = () => {
+    deleteMutation.mutate(projectId, {
+      onSuccess: () => {
+        toast.success("Project deleted");
+        router.push("/dashboard");
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to delete project",
+        );
+        setDeleteDialogOpen(false);
       },
     });
   };
@@ -267,20 +298,78 @@ export default function ProjectDetailPage() {
         </TabsContent>
 
         {/* Settings Tab */}
-        <TabsContent value="settings" className="mt-4">
+        <TabsContent value="settings" className="mt-4 flex flex-col gap-4">
+          {/* Edit project */}
           <Card>
             <CardHeader>
-              <CardTitle>Project Settings</CardTitle>
+              <CardTitle>Project Details</CardTitle>
               <CardDescription>
-                Manage settings for this project.
+                Update the project name and description.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-border">
-                <p className="text-sm text-muted-foreground">
-                  Project settings will be available in a future release.
-                </p>
+              <div className="flex flex-col gap-1 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Name: </span>
+                  {project.name}
+                </div>
+                {project.description && (
+                  <div>
+                    <span className="text-muted-foreground">Description: </span>
+                    {project.description}
+                  </div>
+                )}
               </div>
+              <div className="mt-4">
+                <EditProjectDialog project={project} />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Danger zone */}
+          <Card className="border-destructive/40">
+            <CardHeader>
+              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              <CardDescription>
+                Permanently remove this project and all of its artifacts and
+                graph data. This action cannot be undone.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Dialog
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+              >
+                <DialogTrigger
+                  render={<Button variant="destructive" size="sm" />}
+                >
+                  <Trash2 className="size-4" data-icon="inline-start" />
+                  Delete Project
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Delete Project</DialogTitle>
+                    <DialogDescription>
+                      Are you sure you want to delete{" "}
+                      <strong>{project.name}</strong>? All artifacts, analysis
+                      results, and graph data will be permanently removed. This
+                      cannot be undone.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <DialogClose render={<Button variant="outline" />}>
+                      Cancel
+                    </DialogClose>
+                    <Button
+                      variant="destructive"
+                      onClick={handleDelete}
+                      disabled={deleteMutation.isPending}
+                    >
+                      {deleteMutation.isPending ? "Deleting…" : "Delete Project"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </TabsContent>
