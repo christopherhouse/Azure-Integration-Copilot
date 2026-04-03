@@ -167,6 +167,20 @@ if [[ "${APP_EXISTS}" == "true" ]]; then
     exit 1
   fi
 
+  # Ensure the registry is configured to use the managed identity for image pulls.
+  # `az containerapp update` does not accept --registry-server/--registry-identity,
+  # so we use the dedicated registry command.
+  log_detail "Ensuring registry identity is configured..."
+  if ! az containerapp registry set \
+    --name "${APP_NAME}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --server "${REGISTRY_SERVER}" \
+    --identity "${IDENTITY}" \
+    --output none; then
+    log_error "Failed to configure registry identity for '${APP_NAME}'"
+    exit 1
+  fi
+
   # Build update command
   UPDATE_CMD=(
     az containerapp update
@@ -177,8 +191,6 @@ if [[ "${APP_EXISTS}" == "true" ]]; then
     --max-replicas "${MAX_REPLICAS}"
     --cpu "${CPU}"
     --memory "${MEMORY}"
-    --registry-server "${REGISTRY_SERVER}"
-    --registry-identity "${IDENTITY}"
   )
 
   if [[ -n "${ENV_VARS}" ]]; then
