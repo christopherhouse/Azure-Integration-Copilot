@@ -1,6 +1,6 @@
 # Prompt — Execute Task 005: Project and Artifact Domain
 
-You are an expert Python backend engineer. Execute the following task to implement the project and artifact domain for Integration Copilot.
+You are an expert Python backend engineer. Execute the following task to implement the project and artifact domain for Integrisight.ai.
 
 ## Context
 

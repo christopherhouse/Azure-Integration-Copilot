@@ -1,6 +1,6 @@
 # Developer Guide
 
-This guide covers how to set up, develop, test, and run Integration Copilot locally.
+This guide covers how to set up, develop, test, and run Integrisight.ai locally.
 
 ## Prerequisites
 
@@ -568,9 +568,9 @@ The CI child workflow runs build, lint, test, and container operations.
 | **Containers** | **Skipped on PRs.** Builds Docker images with Buildx, scans with [Trivy](https://github.com/aquasecurity/trivy) (SARIF → GitHub Security), pushes to GHCR on `main`, uploads container metadata JSON |
 
 Three container images are published to:
-- `ghcr.io/<owner>/<repo>/azintcp-frontend:<sha>`
-- `ghcr.io/<owner>/<repo>/azintcp-backend:<sha>`
-- `ghcr.io/<owner>/<repo>/azintcp-worker-scan-gate:<sha>`
+- `ghcr.io/<owner>/<repo>/integrisight-frontend:<sha>`
+- `ghcr.io/<owner>/<repo>/integrisight-backend:<sha>`
+- `ghcr.io/<owner>/<repo>/integrisight-worker-scan-gate:<sha>`
 
 On pushes to `main`, images are also tagged as `latest`.
 

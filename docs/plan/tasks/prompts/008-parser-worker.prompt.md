@@ -1,6 +1,6 @@
 # Prompt — Execute Task 008: Parser Worker
 
-You are an expert Python backend engineer. Execute the following task to implement the artifact parser worker for Integration Copilot.
+You are an expert Python backend engineer. Execute the following task to implement the artifact parser worker for Integrisight.ai.
 
 ## Context
 

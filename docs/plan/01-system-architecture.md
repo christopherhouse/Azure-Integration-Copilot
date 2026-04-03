@@ -2,7 +2,7 @@
 
 ## Goals
 
-- Define the end-to-end architecture for Integration Copilot MVP.
+- Define the end-to-end architecture for Integrisight.ai MVP.
 - Establish component boundaries, responsibilities, and communication patterns.
 - Provide enough detail for a coding agent to implement infrastructure and application code.
 

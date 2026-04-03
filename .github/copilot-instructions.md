@@ -1,8 +1,8 @@
-# GitHub Copilot Instructions — Azure Integration Copilot
+# GitHub Copilot Instructions — Integrisight.ai
 
 ## Project Overview
 
-Azure Integration Copilot is a multi-tenant SaaS application running on Azure. It is a multi-agent solution that helps Azure Integration Services developers understand their systems, manage dependencies, operate effectively, and evolve with confidence.
+Integrisight.ai is a multi-tenant SaaS application running on Azure. It is a multi-agent solution that helps Azure Integration Services developers understand their systems, manage dependencies, operate effectively, and evolve with confidence.
 
 ## Custom Agents
 

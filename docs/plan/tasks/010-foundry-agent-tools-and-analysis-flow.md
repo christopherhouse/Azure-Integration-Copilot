@@ -10,7 +10,7 @@ Build the analysis flow end-to-end: API endpoints for requesting and viewing ana
 
 ## Why This Task Exists
 
-AI-powered analysis is the primary differentiator. Without it, Integration Copilot is a graph viewer. With it, users can ask questions about their integration landscape and get intelligent, data-backed answers. This task connects all previous work (graph, events, notifications) into a cohesive user experience.
+AI-powered analysis is the primary differentiator. Without it, Integrisight.ai is a graph viewer. With it, users can ask questions about their integration landscape and get intelligent, data-backed answers. This task connects all previous work (graph, events, notifications) into a cohesive user experience.
 
 ## In Scope
 

@@ -3,7 +3,7 @@
 > **Task:** [004 — Tenancy, Auth, and Subscription Foundation](../plan/tasks/004-tenancy-auth-and-subscription-foundation.md)
 > **Status:** ✅ Completed
 
-This document describes the authentication, multi-tenancy, and quota enforcement systems that form the foundation of the Azure Integration Copilot backend.
+This document describes the authentication, multi-tenancy, and quota enforcement systems that form the foundation of the Integrisight.ai backend.
 
 ---
 

@@ -10,7 +10,7 @@ Build the shared eventing library (publish + consume), the worker base class wit
 
 ## Why This Task Exists
 
-The async processing pipeline (scan → parse → graph → analysis → notification) is the backbone of Integration Copilot. Every worker needs to: pull events, validate tenant scope, process idempotently, handle errors, publish downstream events, and manage dead-letters. Building this once as a shared foundation prevents duplication and inconsistency across workers.
+The async processing pipeline (scan → parse → graph → analysis → notification) is the backbone of Integrisight.ai. Every worker needs to: pull events, validate tenant scope, process idempotently, handle errors, publish downstream events, and manage dead-letters. Building this once as a shared foundation prevents duplication and inconsistency across workers.
 
 ## In Scope
 

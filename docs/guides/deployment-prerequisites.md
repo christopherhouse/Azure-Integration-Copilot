@@ -1,6 +1,6 @@
 # Deployment Prerequisites
 
-> **Audience:** Platform engineers and DevOps practitioners preparing to deploy the Azure Integration Copilot to Azure via the CD pipeline.
+> **Audience:** Platform engineers and DevOps practitioners preparing to deploy Integrisight.ai to Azure via the CD pipeline.
 
 This guide covers every secret, variable, and external service configuration required before the [CI/CD workflow](../../.github/workflows/cicd.yml) can run successfully. It also walks through setting up Microsoft Entra External ID (CIAM) for authentication and Workload Identity Federation for GitHub Actions OIDC.
 
@@ -206,7 +206,7 @@ https://<subdomain>.ciamlogin.com/<subdomain>.onmicrosoft.com/v2.0/.well-known/o
 2. Navigate to **Microsoft Entra ID** → **Manage tenants** → **Create**.
 3. Select the **Customer** tenant type. This creates a Microsoft Entra External ID (CIAM) tenant.
 4. Fill in the tenant details:
-   - **Tenant name:** A human-readable name (e.g., `Integration Copilot Auth`)
+   - **Tenant name:** A human-readable name (e.g., `Integrisight.ai Auth`)
    - **Domain name:** Choose a subdomain (e.g., `integrationcopilot`). The full domain will be `integrationcopilot.onmicrosoft.com`.
 5. Complete the creation wizard.
 6. **Record the subdomain** — this is the value for `ENTRA_CIAM_TENANT_SUBDOMAIN`.
@@ -223,7 +223,7 @@ The backend API needs its own app registration so it can validate incoming token
 1. **Switch to the CIAM tenant** — in the Azure portal, click your profile icon → **Switch directory** and select the newly created CIAM tenant.
 2. Navigate to **Microsoft Entra ID** → **App registrations** → **New registration**.
 3. Configure the registration:
-   - **Name:** `Integration Copilot Backend API` (or similar)
+   - **Name:** `Integrisight.ai Backend API` (or similar)
    - **Supported account types:** Accounts in this organizational directory only
    - **Redirect URI:** Leave blank — the backend is an API and does not handle interactive sign-in
 4. Click **Register**.
@@ -245,8 +245,8 @@ Define a delegated permission scope so the frontend can request access to the ba
 3. Click **Add a scope** and configure:
    - **Scope name:** `access_as_user`
    - **Who can consent:** Admins and users
-   - **Admin consent display name:** `Access Integration Copilot API`
-   - **Admin consent description:** `Allows the app to access the Integration Copilot API on behalf of the signed-in user.`
+   - **Admin consent display name:** `Access Integrisight.ai API`
+   - **Admin consent description:** `Allows the app to access the Integrisight.ai API on behalf of the signed-in user.`
    - **State:** Enabled
 4. Click **Add scope**.
 5. Note the full scope string — you will need this when configuring the frontend:
@@ -264,7 +264,7 @@ The frontend application handles interactive user sign-in and acquires tokens to
 
 1. In the CIAM tenant, navigate to **App registrations** → **New registration**.
 2. Configure the registration:
-   - **Name:** `Integration Copilot Frontend` (or similar)
+   - **Name:** `Integrisight.ai Frontend` (or similar)
    - **Supported account types:** Accounts in this organizational directory only
    - **Redirect URI:** Select **Web** (⚠️ **not** SPA) and enter your frontend callback URL for each environment:
      ```
@@ -294,7 +294,7 @@ The frontend application handles interactive user sign-in and acquires tokens to
 The frontend app registration must be granted permission to request the `access_as_user` scope exposed by the backend.
 
 1. In the **frontend** app registration, go to **API permissions** → **Add a permission**.
-2. Select the **My APIs** tab → select **Integration Copilot Backend API** (the backend app registration from Step 2).
+2. Select the **My APIs** tab → select **Integrisight.ai Backend API** (the backend app registration from Step 2).
 3. Select **Delegated permissions** → check **access_as_user**.
 4. Click **Add permissions**.
 5. (Optional) Click **Grant admin consent for \<tenant\>** if you want to pre-consent for all users in the tenant.
@@ -332,8 +332,8 @@ User flows define how users sign up and sign in.
    - Choose which claims to return in the token
 3. **Link the user flow to both app registrations:**
    - Go to the user flow → **Applications** → **Add application**
-   - Select **Integration Copilot Backend API** (Step 2)
-   - Select **Integration Copilot Frontend** (Step 4)
+   - Select **Integrisight.ai Backend API** (Step 2)
+   - Select **Integrisight.ai Frontend** (Step 4)
 
 ### Step 8 — Record the Values
 

@@ -2,7 +2,7 @@
 
 ## Product Name
 
-Integration Copilot
+Integrisight.ai
 
 ## One-Line Summary
 

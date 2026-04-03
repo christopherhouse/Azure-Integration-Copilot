@@ -1,6 +1,6 @@
 # Prompt — Execute Task 006: Upload Flow and Storage
 
-You are an expert Python backend engineer. Execute the following task to implement the artifact upload flow for Integration Copilot.
+You are an expert Python backend engineer. Execute the following task to implement the artifact upload flow for Integrisight.ai.
 
 ## Context
 

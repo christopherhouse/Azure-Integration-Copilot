@@ -43,10 +43,10 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(
-    title="Integration Copilot API",
+    title="Integrisight.ai API",
     version="0.1.0",
     description=(
-        "Multi-tenant SaaS API for the Azure Integration Copilot. "
+        "Multi-tenant SaaS API for Integrisight.ai. "
         "Manages tenants, users, projects, and integration artifacts."
     ),
     lifespan=lifespan,

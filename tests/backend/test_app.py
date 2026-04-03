@@ -8,7 +8,7 @@ from main import app  # noqa: E402
 
 def test_app_title():
     """FastAPI app title matches the project name."""
-    assert app.title == "Integration Copilot API"
+    assert app.title == "Integrisight.ai API"
 
 
 def test_app_version():

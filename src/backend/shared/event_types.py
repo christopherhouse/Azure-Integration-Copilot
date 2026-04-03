@@ -1,4 +1,4 @@
-"""Event type constants for Integration Copilot CloudEvents."""
+"""Event type constants for Integrisight.ai CloudEvents."""
 
 EVENT_ARTIFACT_UPLOADED = "com.integration-copilot.artifact.uploaded.v1"
 EVENT_ARTIFACT_SCAN_PASSED = "com.integration-copilot.artifact.scan-passed.v1"

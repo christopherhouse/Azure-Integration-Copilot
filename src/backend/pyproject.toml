@@ -1,7 +1,7 @@
 [project]
 name = "integration-copilot-api"
 version = "0.1.0"
-description = "Integration Copilot API — a multitenant SaaS backend powered by FastAPI"
+description = "Integrisight.ai API — a multitenant SaaS backend powered by FastAPI"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
