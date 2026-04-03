@@ -69,19 +69,37 @@ class ParserHandler(WorkerHandler):
         tenant_id = event_data["tenantId"]
         project_id = event_data["projectId"]
         artifact_id = event_data["artifactId"]
-        artifact_type = event_data.get("artifactType", "")
-        blob_path = event_data.get("blobPath", "")
 
-        log = logger.bind(tenant_id=tenant_id, artifact_id=artifact_id, artifact_type=artifact_type)
+        log = logger.bind(tenant_id=tenant_id, artifact_id=artifact_id)
 
-        # scan_passed → parsing
+        # Fetch artifact and transition scan_passed → parsing.
+        # If the artifact is already in PARSING (retry after a transient failure),
+        # skip the status transition and continue with the parse attempt.
         try:
-            artifact = await self._repo.update_status(tenant_id, artifact_id, ArtifactStatus.PARSING)
+            artifact = await self._repo.get_by_id(tenant_id, artifact_id)
         except Exception as exc:
-            raise TransientError(f"Failed to transition to parsing: {exc}") from exc
+            raise TransientError(f"Failed to fetch artifact: {exc}") from exc
 
         if artifact is None:
             raise PermanentError(f"Artifact {artifact_id} not found for tenant {tenant_id}")
+
+        if artifact.status != ArtifactStatus.PARSING:
+            try:
+                artifact = await self._repo.update_status(tenant_id, artifact_id, ArtifactStatus.PARSING)
+            except Exception as exc:
+                raise TransientError(f"Failed to transition to parsing: {exc}") from exc
+
+            if artifact is None:
+                raise PermanentError(f"Artifact {artifact_id} not found for tenant {tenant_id}")
+
+        # Use artifact record as source of truth for blob_path and artifact_type,
+        # since upstream events may not include these fields.
+        blob_path = artifact.blob_path or ""
+        artifact_type = artifact.artifact_type or ""
+        log = log.bind(artifact_type=artifact_type)
+
+        if not blob_path:
+            raise PermanentError(f"Artifact {artifact_id} has no blob path")
 
         # Download raw artifact from Blob Storage
         try:
