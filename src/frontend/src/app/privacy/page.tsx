@@ -1,5 +1,3 @@
-"use client";
-
 import {
   Card,
   CardContent,
@@ -20,7 +18,9 @@ import {
   Users,
   Server,
   Globe,
+  ArrowLeft,
 } from "lucide-react";
+import Link from "next/link";
 
 function CommitmentItem({
   icon: Icon,
@@ -69,7 +69,17 @@ function SecurityFeatureCard({
 
 export default function PrivacyPage() {
   return (
-    <div className="flex flex-col gap-6 max-w-4xl">
+    <div className="min-h-screen bg-background">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-10">
+      {/* Back Navigation */}
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
+      >
+        <ArrowLeft className="size-4" />
+        Back to dashboard
+      </Link>
+
       {/* Page Header */}
       <div>
         <h1 className="text-2xl font-bold">Privacy &amp; Security</h1>
@@ -263,12 +273,10 @@ export default function PrivacyPage() {
 
       {/* Footer Note */}
       <p className="pb-4 text-center text-xs text-muted-foreground">
-        Have questions about how Integrisight handles your data?{" "}
-        <span className="font-medium text-foreground">
-          Reach out to our team
-        </span>{" "}
-        — we&apos;re happy to discuss your security and privacy requirements.
+        Have questions about how Integrisight handles your data? We&apos;re
+        happy to discuss your security and privacy requirements.
       </p>
+      </div>
     </div>
   );
 }

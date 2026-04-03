@@ -50,7 +50,7 @@ export default function LoginPage() {
           </Button>
         )}
         <p className="text-xs text-muted-foreground">
-          <Link href="/dashboard/privacy" className="underline hover:text-foreground">
+          <Link href="/privacy" className="underline hover:text-foreground">
             Privacy &amp; Security
           </Link>
         </p>

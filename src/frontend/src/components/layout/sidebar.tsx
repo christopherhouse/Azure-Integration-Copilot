@@ -70,10 +70,10 @@ export function Sidebar() {
       {/* Footer */}
       <div className="border-t border-sidebar-border p-2">
         <Link
-          href="/dashboard/privacy"
+          href="/privacy"
           className={cn(
             "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
-            pathname.startsWith("/dashboard/privacy")
+            pathname === "/privacy"
               ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
               : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
           )}
