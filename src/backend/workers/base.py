@@ -89,6 +89,11 @@ class BaseWorker:
             while self._running:
                 try:
                     details = await self._consumer.receive_events()
+                except asyncio.CancelledError:
+                    if not self._running:
+                        break
+                    logger.warning("receive_cancelled")
+                    continue
                 except Exception:
                     logger.error("receive_events_failed", exc_info=True)
                     await asyncio.sleep(self._poll_interval)
@@ -100,12 +105,15 @@ class BaseWorker:
 
                 for detail in details:
                     await self._process_event(detail)
+        except asyncio.CancelledError:
+            logger.info("worker_cancelled", was_running=self._running)
         finally:
             await self._consumer.close()
             logger.info("worker_stopped")
 
     def stop(self) -> None:
         """Signal the pull loop to exit after the current iteration."""
+        logger.info("worker_stop_requested")
         self._running = False
 
     async def _process_event(self, detail: Any) -> None:
