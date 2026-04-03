@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<policies>
+    <inbound>
+        <rate-limit calls="100" renewal-period="60" />
+        <cors>
+            <allowed-origins>
+                <origin>https://portal.example.com</origin>
+            </allowed-origins>
+        </cors>
+        <set-header name="X-Request-Id" exists-action="skip">
+            <value>@(context.RequestId)</value>
+        </set-header>
+        <base />
+    </inbound>
+    <backend>
+        <set-backend-service base-url="https://backend-api.internal.example.com/api" />
+        <base />
+    </backend>
+    <outbound>
+        <set-header name="X-Powered-By" exists-action="delete" />
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+        <send-request mode="new" response-variable-name="alertResponse">
+            <set-url>https://alerts.monitoring.example.com/webhook</set-url>
+            <set-method>POST</set-method>
+        </send-request>
+    </on-error>
+</policies>

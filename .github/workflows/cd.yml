@@ -145,10 +145,12 @@ jobs:
           FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-frontend") | .full_image' container-metadata.json)
           BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-backend") | .full_image' container-metadata.json)
           WORKER_SCAN_GATE_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-worker-scan-gate") | .full_image' container-metadata.json)
+          WORKER_PARSER_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-worker-parser") | .full_image' container-metadata.json)
           TAG=$(jq -r '.containers[] | select(.name=="azintcp-frontend") | .tag' container-metadata.json)
           echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "worker_scan_gate_image=${WORKER_SCAN_GATE_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "worker_parser_image=${WORKER_PARSER_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Import frontend image to ACR
@@ -183,6 +185,18 @@ jobs:
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.worker_scan_gate_image }}" \
             --image "azintcp-worker-scan-gate:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import worker-parser image to ACR
+        env:
+          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
+        run: |
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.worker_parser_image }}" \
+            --image "azintcp-worker-parser:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -317,6 +331,35 @@ jobs:
             --scale-rule-type cpu \
             --scale-rule-metadata "type=Utilization value=70" \
             --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
+
+      - name: Deploy worker-parser Container App
+        env:
+          WORKER_PARSER_ENV_VARS: >-
+            ENVIRONMENT=dev
+            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}
+            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}
+            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}
+            EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
+            AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
+            WORKER_MODULE=workers.parser.main
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-worker-parser" \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/azintcp-worker-parser:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --no-ingress \
+            --identity "${{ steps.identities.outputs.worker_id }}" \
+            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
+            --env-vars "${WORKER_PARSER_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
   # Dev — Deploy Azure Front Door (after Container Apps exist)
@@ -572,10 +615,12 @@ jobs:
           FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-frontend") | .full_image' container-metadata.json)
           BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-backend") | .full_image' container-metadata.json)
           WORKER_SCAN_GATE_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-worker-scan-gate") | .full_image' container-metadata.json)
+          WORKER_PARSER_IMAGE=$(jq -r '.containers[] | select(.name=="azintcp-worker-parser") | .full_image' container-metadata.json)
           TAG=$(jq -r '.containers[] | select(.name=="azintcp-frontend") | .tag' container-metadata.json)
           echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "worker_scan_gate_image=${WORKER_SCAN_GATE_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "worker_parser_image=${WORKER_PARSER_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Import frontend image to ACR
@@ -610,6 +655,18 @@ jobs:
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.worker_scan_gate_image }}" \
             --image "azintcp-worker-scan-gate:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import worker-parser image to ACR
+        env:
+          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
+        run: |
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.worker_parser_image }}" \
+            --image "azintcp-worker-parser:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -744,6 +801,35 @@ jobs:
             --scale-rule-type cpu \
             --scale-rule-metadata "type=Utilization value=70" \
             --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
+
+      - name: Deploy worker-parser Container App
+        env:
+          WORKER_PARSER_ENV_VARS: >-
+            ENVIRONMENT=prod
+            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}
+            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}
+            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}
+            EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
+            AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
+            WORKER_MODULE=workers.parser.main
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-worker-parser" \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/azintcp-worker-parser:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --no-ingress \
+            --identity "${{ steps.identities.outputs.worker_id }}" \
+            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
+            --env-vars "${WORKER_PARSER_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
   # Prod — Deploy Azure Front Door (after Container Apps exist)

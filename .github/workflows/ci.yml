@@ -191,11 +191,13 @@ jobs:
           FRONTEND_IMAGE="ghcr.io/${REPO_LOWER}/azintcp-frontend"
           BACKEND_IMAGE="ghcr.io/${REPO_LOWER}/azintcp-backend"
           WORKER_SCAN_GATE_IMAGE="ghcr.io/${REPO_LOWER}/azintcp-worker-scan-gate"
+          WORKER_PARSER_IMAGE="ghcr.io/${REPO_LOWER}/azintcp-worker-parser"
 
           # Build tag list — always include the short-SHA tag
           FRONTEND_TAGS="${FRONTEND_IMAGE}:${SHORT_SHA}"
           BACKEND_TAGS="${BACKEND_IMAGE}:${SHORT_SHA}"
           WORKER_SCAN_GATE_TAGS="${WORKER_SCAN_GATE_IMAGE}:${SHORT_SHA}"
+          WORKER_PARSER_TAGS="${WORKER_PARSER_IMAGE}:${SHORT_SHA}"
 
           # On pushes to main or workflow dispatch, also tag as latest
           if [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "workflow_dispatch") && "${{ github.ref }}" == "refs/heads/main" ]]; then
@@ -205,6 +207,8 @@ jobs:
           ${BACKEND_IMAGE}:latest"
             WORKER_SCAN_GATE_TAGS="${WORKER_SCAN_GATE_TAGS}
           ${WORKER_SCAN_GATE_IMAGE}:latest"
+            WORKER_PARSER_TAGS="${WORKER_PARSER_TAGS}
+          ${WORKER_PARSER_IMAGE}:latest"
           fi
 
           # Persist outputs
@@ -212,6 +216,7 @@ jobs:
             echo "frontend_image=${FRONTEND_IMAGE}"
             echo "backend_image=${BACKEND_IMAGE}"
             echo "worker_scan_gate_image=${WORKER_SCAN_GATE_IMAGE}"
+            echo "worker_parser_image=${WORKER_PARSER_IMAGE}"
             echo "frontend_tags<<EOF"
             echo "${FRONTEND_TAGS}"
             echo "EOF"
@@ -220,6 +225,9 @@ jobs:
             echo "EOF"
             echo "worker_scan_gate_tags<<EOF"
             echo "${WORKER_SCAN_GATE_TAGS}"
+            echo "EOF"
+            echo "worker_parser_tags<<EOF"
+            echo "${WORKER_PARSER_TAGS}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -255,6 +263,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build worker-parser image
+        id: build-worker-parser
+        uses: docker/build-push-action@v6
+        with:
+          context: src/backend
+          file: src/backend/Dockerfile.worker
+          load: true
+          tags: ${{ steps.meta.outputs.worker_parser_tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       # -- Scan images with Trivy ---------------------------------------------
       - name: Scan frontend image (Trivy)
         if: github.event_name != 'pull_request'
@@ -286,6 +305,16 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "0"
 
+      - name: Scan worker-parser image (Trivy)
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: "${{ steps.meta.outputs.worker_parser_image }}:${{ env.SHORT_SHA }}"
+          format: sarif
+          output: worker-parser-trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+
       # -- Upload SARIF to GitHub Security ------------------------------------
       - name: Upload frontend SARIF
         if: always() && github.event_name != 'pull_request'
@@ -307,6 +336,13 @@ jobs:
         with:
           sarif_file: worker-scan-gate-trivy-results.sarif
           category: trivy-worker-scan-gate
+
+      - name: Upload worker-parser SARIF
+        if: always() && github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: worker-parser-trivy-results.sarif
+          category: trivy-worker-parser
 
       # -- Push images to GHCR (push to main or workflow dispatch) --------------
       - name: Push frontend image
@@ -339,6 +375,16 @@ jobs:
           DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
+      - name: Push worker-parser image
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        id: push-worker-parser
+        run: |
+          WORKER_PARSER_IMAGE="${{ steps.meta.outputs.worker_parser_image }}"
+          RESULT=$(docker push --all-tags "${WORKER_PARSER_IMAGE}" 2>&1)
+          echo "${RESULT}"
+          DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
       # -- Container metadata (push to main or workflow dispatch) --------------
       - name: Generate container metadata
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
@@ -346,6 +392,7 @@ jobs:
           FRONTEND_DIGEST: ${{ steps.push-frontend.outputs.digest }}
           BACKEND_DIGEST: ${{ steps.push-backend.outputs.digest }}
           WORKER_SCAN_GATE_DIGEST: ${{ steps.push-worker-scan-gate.outputs.digest }}
+          WORKER_PARSER_DIGEST: ${{ steps.push-worker-parser.outputs.digest }}
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           cat > container-metadata.json <<EOF
@@ -382,6 +429,14 @@ jobs:
                 "tag": "${SHORT_SHA}",
                 "full_image": "ghcr.io/${REPO_LOWER}/azintcp-worker-scan-gate:${SHORT_SHA}",
                 "digest": "${WORKER_SCAN_GATE_DIGEST}"
+              },
+              {
+                "name": "azintcp-worker-parser",
+                "registry": "ghcr.io",
+                "repository": "${REPO_LOWER}/azintcp-worker-parser",
+                "tag": "${SHORT_SHA}",
+                "full_image": "ghcr.io/${REPO_LOWER}/azintcp-worker-parser:${SHORT_SHA}",
+                "digest": "${WORKER_PARSER_DIGEST}"
               }
             ]
           }
