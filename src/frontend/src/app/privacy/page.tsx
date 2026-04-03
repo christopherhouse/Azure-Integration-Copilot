@@ -73,11 +73,11 @@ export default function PrivacyPage() {
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-10">
       {/* Back Navigation */}
       <Link
-        href="/dashboard"
+        href="/"
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors w-fit"
       >
         <ArrowLeft className="size-4" />
-        Back to dashboard
+        Back
       </Link>
 
       {/* Page Header */}
@@ -184,7 +184,7 @@ export default function PrivacyPage() {
         <SecurityFeatureCard
           icon={Lock}
           title="Encrypted Data at Rest &amp; in Transit"
-          description="All data is encrypted using industry-standard encryption — TLS 1.2+ for data in transit and AES-256 for data at rest — so your artifacts are protected at every stage."
+          description="All data is encrypted using industry-standard encryption — TLS 1.3 for data in transit and AES-256 for data at rest — so your artifacts are protected at every stage."
         />
         <SecurityFeatureCard
           icon={Server}
@@ -273,8 +273,8 @@ export default function PrivacyPage() {
 
       {/* Footer Note */}
       <p className="pb-4 text-center text-xs text-muted-foreground">
-        Have questions about how Integrisight handles your data? We&apos;re
-        happy to discuss your security and privacy requirements.
+        Have questions about how Integrisight handles your data? Visit our
+        support channels to discuss your security and privacy requirements.
       </p>
       </div>
     </div>
