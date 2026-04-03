@@ -95,3 +95,61 @@ export function useProject(projectId: string) {
     enabled: !!projectId,
   });
 }
+
+/** Hook to update a project's name and/or description. */
+export function useUpdateProject(projectId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      name?: string;
+      description?: string | null;
+    }): Promise<Project> => {
+      const res = await apiFetch(`/api/v1/projects/${projectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new ApiRequestError(
+          res.status,
+          body?.error?.message ?? "Failed to update project",
+          body?.error?.code,
+          body?.error?.detail,
+        );
+      }
+      const json = await res.json();
+      return json.data;
+    },
+    onSuccess: (updated) => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.setQueryData(["project", projectId], updated);
+    },
+  });
+}
+
+/** Hook to delete a project (soft-delete with cascade). */
+export function useDeleteProject() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (projectId: string): Promise<void> => {
+      const res = await apiFetch(`/api/v1/projects/${projectId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new ApiRequestError(
+          res.status,
+          body?.error?.message ?? "Failed to delete project",
+          body?.error?.code,
+          body?.error?.detail,
+        );
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
+}

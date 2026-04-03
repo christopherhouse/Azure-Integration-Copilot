@@ -191,6 +191,44 @@ class GraphRepository:
             return GraphSummary.model_validate(item)
         return None
 
+    # -- Deletion helpers -----------------------------------------------------
+
+    async def delete_all_by_project(self, partition_key: str) -> int:
+        """Hard-delete all graph documents (components, edges, summaries) for a project.
+
+        Returns the number of documents deleted.
+        """
+        container = await self._get_container()
+
+        query = "SELECT c.id FROM c WHERE c.partitionKey = @pk"
+        params = [{"name": "@pk", "value": partition_key}]
+
+        doc_ids: list[str] = []
+        async for item in container.query_items(query=query, parameters=params):
+            doc_ids.append(item["id"])
+
+        count = 0
+        for doc_id in doc_ids:
+            try:
+                await container.delete_item(item=doc_id, partition_key=partition_key)
+                count += 1
+            except Exception as exc:
+                # Best-effort: log and continue so that a single failing
+                # document does not abort deletion of the remaining graph data.
+                logger.warning(
+                    "failed_to_delete_graph_doc",
+                    doc_id=doc_id,
+                    partition_key=partition_key,
+                    error=str(exc),
+                )
+
+        logger.info(
+            "graph_docs_deleted_for_project",
+            partition_key=partition_key,
+            count=count,
+        )
+        return count
+
     # -- Aggregation helpers --------------------------------------------------
 
     async def count_by_type(self, partition_key: str, doc_type: str) -> dict[str, int]:

@@ -5,6 +5,8 @@ from datetime import UTC, datetime
 
 import structlog
 
+from domains.artifacts.repository import artifact_repository
+from domains.graph.repository import graph_repository
 from domains.tenants.repository import tenant_repository
 from domains.tenants.service import tier_service
 from shared.exceptions import QuotaExceededError
@@ -109,7 +111,30 @@ class ProjectService:
         return await project_repository.update(project)
 
     async def delete_project(self, tenant_id: str, project_id: str) -> Project | None:
-        """Soft-delete a project."""
+        """Soft-delete a project and cascade-delete related artifacts and graph data.
+
+        Returns the deleted project, or None if the project does not exist or
+        has already been deleted.  Usage counters are only adjusted the first
+        time a project is deleted; duplicate calls are safely ignored.
+        """
+        project = await project_repository.get_by_id(tenant_id, project_id)
+        if project is None or project.status == ProjectStatus.DELETED:
+            return None
+
+        # Cascade: soft-delete all active artifacts and adjust usage counters.
+        deleted_artifact_count = await artifact_repository.soft_delete_all_by_project(
+            tenant_id, project_id
+        )
+        if deleted_artifact_count > 0:
+            await tenant_repository.increment_usage(
+                tenant_id, "total_artifact_count", amount=-deleted_artifact_count
+            )
+
+        # Cascade: hard-delete all graph data for this project.
+        graph_partition_key = f"{tenant_id}:{project_id}"
+        await graph_repository.delete_all_by_project(graph_partition_key)
+
+        # Soft-delete the project itself and decrement the tenant project quota.
         deleted = await project_repository.soft_delete(tenant_id, project_id)
         if deleted is not None:
             await tenant_repository.increment_usage(tenant_id, "project_count", amount=-1)

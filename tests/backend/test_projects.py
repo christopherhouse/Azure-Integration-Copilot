@@ -525,18 +525,27 @@ async def test_create_project_raises_quota_exceeded_when_tenant_not_found():
 async def test_delete_project_decrements_usage_counter():
     """ProjectService.delete_project decrements the tenant's project_count."""
     tenant_id = "t-001"
-    deleted_project = _make_project(status=ProjectStatus.DELETED)
+    project_id = "prj-001"
+    project = _make_project(project_id=project_id, tenant_id=tenant_id)
+    deleted_project = _make_project(
+        project_id=project_id, tenant_id=tenant_id, status=ProjectStatus.DELETED
+    )
 
     with (
         patch("domains.projects.service.project_repository") as mock_proj_repo,
+        patch("domains.projects.service.artifact_repository") as mock_art_repo,
+        patch("domains.projects.service.graph_repository") as mock_graph_repo,
         patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
     ):
+        mock_proj_repo.get_by_id = AsyncMock(return_value=project)
         mock_proj_repo.soft_delete = AsyncMock(return_value=deleted_project)
+        mock_art_repo.soft_delete_all_by_project = AsyncMock(return_value=0)
+        mock_graph_repo.delete_all_by_project = AsyncMock(return_value=0)
         mock_tenant_repo.increment_usage = AsyncMock(return_value=_make_tenant())
 
         from domains.projects.service import project_service
 
-        await project_service.delete_project(tenant_id, "prj-001")
+        await project_service.delete_project(tenant_id, project_id)
 
         mock_tenant_repo.increment_usage.assert_called_once_with(
             tenant_id, "project_count", amount=-1
@@ -550,9 +559,13 @@ async def test_delete_project_not_found_does_not_decrement():
 
     with (
         patch("domains.projects.service.project_repository") as mock_proj_repo,
+        patch("domains.projects.service.artifact_repository") as mock_art_repo,
+        patch("domains.projects.service.graph_repository") as mock_graph_repo,
         patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
     ):
-        mock_proj_repo.soft_delete = AsyncMock(return_value=None)
+        mock_proj_repo.get_by_id = AsyncMock(return_value=None)
+        mock_art_repo.soft_delete_all_by_project = AsyncMock(return_value=0)
+        mock_graph_repo.delete_all_by_project = AsyncMock(return_value=0)
         mock_tenant_repo.increment_usage = AsyncMock()
 
         from domains.projects.service import project_service
@@ -561,6 +574,81 @@ async def test_delete_project_not_found_does_not_decrement():
 
         assert result is None
         mock_tenant_repo.increment_usage.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_project_cascades_to_artifacts_and_graph():
+    """ProjectService.delete_project soft-deletes artifacts and deletes graph data."""
+    tenant_id = "t-001"
+    project_id = "prj-001"
+    project = _make_project(project_id=project_id, tenant_id=tenant_id)
+    deleted_project = _make_project(
+        project_id=project_id, tenant_id=tenant_id, status=ProjectStatus.DELETED
+    )
+
+    with (
+        patch("domains.projects.service.project_repository") as mock_proj_repo,
+        patch("domains.projects.service.artifact_repository") as mock_art_repo,
+        patch("domains.projects.service.graph_repository") as mock_graph_repo,
+        patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+    ):
+        mock_proj_repo.get_by_id = AsyncMock(return_value=project)
+        mock_proj_repo.soft_delete = AsyncMock(return_value=deleted_project)
+        mock_art_repo.soft_delete_all_by_project = AsyncMock(return_value=3)
+        mock_graph_repo.delete_all_by_project = AsyncMock(return_value=5)
+        mock_tenant_repo.increment_usage = AsyncMock(return_value=_make_tenant())
+
+        from domains.projects.service import project_service
+
+        result = await project_service.delete_project(tenant_id, project_id)
+
+        assert result is not None
+        mock_art_repo.soft_delete_all_by_project.assert_called_once_with(
+            tenant_id, project_id
+        )
+        mock_graph_repo.delete_all_by_project.assert_called_once_with(
+            f"{tenant_id}:{project_id}"
+        )
+        # Artifact count decremented by 3 (the number of deleted artifacts)
+        mock_tenant_repo.increment_usage.assert_any_call(
+            tenant_id, "total_artifact_count", amount=-3
+        )
+        # Project count decremented by 1
+        mock_tenant_repo.increment_usage.assert_any_call(
+            tenant_id, "project_count", amount=-1
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_project_no_artifacts_skips_artifact_count_decrement():
+    """ProjectService.delete_project skips artifact count update when no artifacts exist."""
+    tenant_id = "t-001"
+    project_id = "prj-001"
+    project = _make_project(project_id=project_id, tenant_id=tenant_id)
+    deleted_project = _make_project(
+        project_id=project_id, tenant_id=tenant_id, status=ProjectStatus.DELETED
+    )
+
+    with (
+        patch("domains.projects.service.project_repository") as mock_proj_repo,
+        patch("domains.projects.service.artifact_repository") as mock_art_repo,
+        patch("domains.projects.service.graph_repository") as mock_graph_repo,
+        patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+    ):
+        mock_proj_repo.get_by_id = AsyncMock(return_value=project)
+        mock_proj_repo.soft_delete = AsyncMock(return_value=deleted_project)
+        mock_art_repo.soft_delete_all_by_project = AsyncMock(return_value=0)
+        mock_graph_repo.delete_all_by_project = AsyncMock(return_value=0)
+        mock_tenant_repo.increment_usage = AsyncMock(return_value=_make_tenant())
+
+        from domains.projects.service import project_service
+
+        await project_service.delete_project(tenant_id, project_id)
+
+        # Only project_count should be decremented — no artifact count call
+        mock_tenant_repo.increment_usage.assert_called_once_with(
+            tenant_id, "project_count", amount=-1
+        )
 
 
 # ---------------------------------------------------------------------------
