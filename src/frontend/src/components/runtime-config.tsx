@@ -19,7 +19,7 @@ export function RuntimeConfig() {
     return null;
   }
 
-  const config: Record<string, string> = {};
+  const config: RuntimeConfig = {};
   if (apiBaseUrl) config.apiBaseUrl = apiBaseUrl;
   if (clarityProjectId) config.clarityProjectId = clarityProjectId;
 
