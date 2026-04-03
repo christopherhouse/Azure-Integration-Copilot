@@ -223,6 +223,11 @@ jobs:
             context: src/backend
             dockerfile: Dockerfile.worker
             cache_scope: worker             # shared — same context & Dockerfile
+          - name: worker-graph-builder
+            image_name: integrisight-worker-graph-builder
+            context: src/backend
+            dockerfile: Dockerfile.worker
+            cache_scope: worker             # shared — same context & Dockerfile
           - name: worker-parser-rust
             image_name: integrisight-worker-parser-rust
             context: src/worker-parser-rust
