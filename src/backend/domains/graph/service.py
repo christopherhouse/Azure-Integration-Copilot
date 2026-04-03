@@ -5,11 +5,8 @@ from __future__ import annotations
 import structlog
 
 from .models import (
-    Component,
     ComponentResponse,
-    Edge,
     EdgeResponse,
-    GraphSummary,
     GraphSummaryResponse,
     NeighborResponse,
 )

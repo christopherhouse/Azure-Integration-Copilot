@@ -35,8 +35,6 @@ class GraphRepository:
         """Get a single component by ID."""
         container = await self._get_container()
         try:
-            from azure.cosmos import exceptions as cosmos_exceptions
-
             doc = await container.read_item(item=component_id, partition_key=partition_key)
             if doc.get("type") != "component":
                 return None

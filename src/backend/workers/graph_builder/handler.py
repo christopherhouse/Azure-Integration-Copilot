@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from ulid import ULID
 
 from domains.artifacts.models import ArtifactError, ArtifactStatus
 from domains.artifacts.repository import ArtifactRepository
