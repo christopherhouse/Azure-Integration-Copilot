@@ -192,16 +192,45 @@ jobs:
           retention-days: 7
 
   # -------------------------------------------------------------------------
-  # Job 5 — Containers: build, scan, push (push to GHCR only on main)
+  # Job 5 — Container build matrix: build, scan, push (parallel per image)
   # -------------------------------------------------------------------------
-  containers:
-    name: "Containers — Build, Scan & Push"
+  container-build:
+    name: "Container — ${{ matrix.image_name }}"
     runs-on: ubuntu-latest
     needs: [build-and-test-frontend, build-and-test-backend, build-and-test-rust]
 
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: frontend
+            image_name: integrisight-frontend
+            context: src/frontend
+            dockerfile: Dockerfile
+            cache_scope: frontend
+          - name: backend
+            image_name: integrisight-backend
+            context: src/backend
+            dockerfile: Dockerfile
+            cache_scope: backend
+          - name: worker-scan-gate
+            image_name: integrisight-worker-scan-gate
+            context: src/backend
+            dockerfile: Dockerfile.worker
+            cache_scope: worker             # shared — same context & Dockerfile
+          - name: worker-parser
+            image_name: integrisight-worker-parser
+            context: src/backend
+            dockerfile: Dockerfile.worker
+            cache_scope: worker             # shared — same context & Dockerfile
+          - name: worker-parser-rust
+            image_name: integrisight-worker-parser-rust
+            context: src/worker-parser-rust
+            dockerfile: Dockerfile
+            cache_scope: worker-parser-rust
+
     env:
       REGISTRY: ghcr.io
-      IMAGE_PREFIX: ${{ github.repository }}
 
     steps:
       - name: Checkout code
@@ -222,322 +251,126 @@ jobs:
       - name: Set short SHA
         run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
-      - name: Compute image names and tags
+      - name: Compute image tags
         id: meta
         run: |
-          # Ensure image names are lowercase
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE="${{ env.REGISTRY }}/${REPO_LOWER}/${{ matrix.image_name }}"
 
-          FRONTEND_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-frontend"
-          BACKEND_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-backend"
-          WORKER_SCAN_GATE_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-worker-scan-gate"
-          WORKER_PARSER_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-worker-parser"
-          WORKER_PARSER_RUST_IMAGE="ghcr.io/${REPO_LOWER}/integrisight-worker-parser-rust"
-
-          # Build tag list — always include the short-SHA tag
-          FRONTEND_TAGS="${FRONTEND_IMAGE}:${SHORT_SHA}"
-          BACKEND_TAGS="${BACKEND_IMAGE}:${SHORT_SHA}"
-          WORKER_SCAN_GATE_TAGS="${WORKER_SCAN_GATE_IMAGE}:${SHORT_SHA}"
-          WORKER_PARSER_TAGS="${WORKER_PARSER_IMAGE}:${SHORT_SHA}"
-          WORKER_PARSER_RUST_TAGS="${WORKER_PARSER_RUST_IMAGE}:${SHORT_SHA}"
+          # Always include the short-SHA tag
+          TAGS="${IMAGE}:${SHORT_SHA}"
 
           # On pushes to main or workflow dispatch, also tag as latest
           if [[ ("${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "workflow_dispatch") && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            FRONTEND_TAGS="${FRONTEND_TAGS}
-          ${FRONTEND_IMAGE}:latest"
-            BACKEND_TAGS="${BACKEND_TAGS}
-          ${BACKEND_IMAGE}:latest"
-            WORKER_SCAN_GATE_TAGS="${WORKER_SCAN_GATE_TAGS}
-          ${WORKER_SCAN_GATE_IMAGE}:latest"
-            WORKER_PARSER_TAGS="${WORKER_PARSER_TAGS}
-          ${WORKER_PARSER_IMAGE}:latest"
-            WORKER_PARSER_RUST_TAGS="${WORKER_PARSER_RUST_TAGS}
-          ${WORKER_PARSER_RUST_IMAGE}:latest"
+            TAGS="${TAGS}
+          ${IMAGE}:latest"
           fi
 
-          # Persist outputs
           {
-            echo "frontend_image=${FRONTEND_IMAGE}"
-            echo "backend_image=${BACKEND_IMAGE}"
-            echo "worker_scan_gate_image=${WORKER_SCAN_GATE_IMAGE}"
-            echo "worker_parser_image=${WORKER_PARSER_IMAGE}"
-            echo "worker_parser_rust_image=${WORKER_PARSER_RUST_IMAGE}"
-            echo "frontend_tags<<EOF"
-            echo "${FRONTEND_TAGS}"
-            echo "EOF"
-            echo "backend_tags<<EOF"
-            echo "${BACKEND_TAGS}"
-            echo "EOF"
-            echo "worker_scan_gate_tags<<EOF"
-            echo "${WORKER_SCAN_GATE_TAGS}"
-            echo "EOF"
-            echo "worker_parser_tags<<EOF"
-            echo "${WORKER_PARSER_TAGS}"
-            echo "EOF"
-            echo "worker_parser_rust_tags<<EOF"
-            echo "${WORKER_PARSER_RUST_TAGS}"
+            echo "image=${IMAGE}"
+            echo "tags<<EOF"
+            echo "${TAGS}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      # -- Build images (load locally for scanning) ----------------------------
-      - name: Build frontend image
-        id: build-frontend
+      # -- Build image (load locally for scanning) ----------------------------
+      - name: Build ${{ matrix.image_name }} image
+        id: build
         uses: docker/build-push-action@v6
         with:
-          context: src/frontend
+          context: ${{ matrix.context }}
+          file: ${{ matrix.context }}/${{ matrix.dockerfile }}
           load: true
-          tags: ${{ steps.meta.outputs.frontend_tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
 
-      - name: Build backend image
-        id: build-backend
-        uses: docker/build-push-action@v6
-        with:
-          context: src/backend
-          load: true
-          tags: ${{ steps.meta.outputs.backend_tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build worker-scan-gate image
-        id: build-worker-scan-gate
-        uses: docker/build-push-action@v6
-        with:
-          context: src/backend
-          file: src/backend/Dockerfile.worker
-          load: true
-          tags: ${{ steps.meta.outputs.worker_scan_gate_tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build worker-parser image
-        id: build-worker-parser
-        uses: docker/build-push-action@v6
-        with:
-          context: src/backend
-          file: src/backend/Dockerfile.worker
-          load: true
-          tags: ${{ steps.meta.outputs.worker_parser_tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build worker-parser-rust image
-        id: build-worker-parser-rust
-        uses: docker/build-push-action@v6
-        with:
-          context: src/worker-parser-rust
-          load: true
-          tags: ${{ steps.meta.outputs.worker_parser_rust_tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # -- Scan images with Trivy ---------------------------------------------
-      - name: Scan frontend image (Trivy)
+      # -- Scan image with Trivy ---------------------------------------------
+      - name: Scan ${{ matrix.image_name }} image (Trivy)
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@v0.35.0
         with:
-          image-ref: "${{ steps.meta.outputs.frontend_image }}:${{ env.SHORT_SHA }}"
+          image-ref: "${{ steps.meta.outputs.image }}:${{ env.SHORT_SHA }}"
           format: sarif
-          output: frontend-trivy-results.sarif
+          output: ${{ matrix.name }}-trivy-results.sarif
           severity: CRITICAL,HIGH
           exit-code: "0"
 
-      - name: Scan backend image (Trivy)
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@v0.35.0
-        with:
-          image-ref: "${{ steps.meta.outputs.backend_image }}:${{ env.SHORT_SHA }}"
-          format: sarif
-          output: backend-trivy-results.sarif
-          severity: CRITICAL,HIGH
-          exit-code: "0"
-
-      - name: Scan worker-scan-gate image (Trivy)
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@v0.35.0
-        with:
-          image-ref: "${{ steps.meta.outputs.worker_scan_gate_image }}:${{ env.SHORT_SHA }}"
-          format: sarif
-          output: worker-scan-gate-trivy-results.sarif
-          severity: CRITICAL,HIGH
-          exit-code: "0"
-
-      - name: Scan worker-parser image (Trivy)
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@v0.35.0
-        with:
-          image-ref: "${{ steps.meta.outputs.worker_parser_image }}:${{ env.SHORT_SHA }}"
-          format: sarif
-          output: worker-parser-trivy-results.sarif
-          severity: CRITICAL,HIGH
-          exit-code: "0"
-
-      - name: Scan worker-parser-rust image (Trivy)
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@v0.35.0
-        with:
-          image-ref: "${{ steps.meta.outputs.worker_parser_rust_image }}:${{ env.SHORT_SHA }}"
-          format: sarif
-          output: worker-parser-rust-trivy-results.sarif
-          severity: CRITICAL,HIGH
-          exit-code: "0"
-
-      # -- Upload SARIF to GitHub Security ------------------------------------
-      - name: Upload frontend SARIF
+      - name: Upload ${{ matrix.image_name }} SARIF
         if: always() && github.event_name != 'pull_request'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: frontend-trivy-results.sarif
-          category: trivy-frontend
+          sarif_file: ${{ matrix.name }}-trivy-results.sarif
+          category: trivy-${{ matrix.name }}
 
-      - name: Upload backend SARIF
-        if: always() && github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: backend-trivy-results.sarif
-          category: trivy-backend
-
-      - name: Upload worker-scan-gate SARIF
-        if: always() && github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: worker-scan-gate-trivy-results.sarif
-          category: trivy-worker-scan-gate
-
-      - name: Upload worker-parser SARIF
-        if: always() && github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: worker-parser-trivy-results.sarif
-          category: trivy-worker-parser
-
-      - name: Upload worker-parser-rust SARIF
-        if: always() && github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: worker-parser-rust-trivy-results.sarif
-          category: trivy-worker-parser-rust
-
-      # -- Push images to GHCR (push to main or workflow dispatch) --------------
-      - name: Push frontend image
+      # -- Push image to GHCR (push to main or workflow dispatch) --------------
+      - name: Push ${{ matrix.image_name }} image
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-        id: push-frontend
+        id: push
         run: |
-          FRONTEND_IMAGE="${{ steps.meta.outputs.frontend_image }}"
-          RESULT=$(docker push --all-tags "${FRONTEND_IMAGE}" 2>&1)
+          IMAGE="${{ steps.meta.outputs.image }}"
+          RESULT=$(docker push --all-tags "${IMAGE}" 2>&1)
           echo "${RESULT}"
           DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
           echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
 
-      - name: Push backend image
+      # -- Per-container metadata fragment ------------------------------------
+      - name: Generate container metadata fragment
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-        id: push-backend
-        run: |
-          BACKEND_IMAGE="${{ steps.meta.outputs.backend_image }}"
-          RESULT=$(docker push --all-tags "${BACKEND_IMAGE}" 2>&1)
-          echo "${RESULT}"
-          DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-
-      - name: Push worker-scan-gate image
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-        id: push-worker-scan-gate
-        run: |
-          WORKER_SCAN_GATE_IMAGE="${{ steps.meta.outputs.worker_scan_gate_image }}"
-          RESULT=$(docker push --all-tags "${WORKER_SCAN_GATE_IMAGE}" 2>&1)
-          echo "${RESULT}"
-          DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-
-      - name: Push worker-parser image
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-        id: push-worker-parser
-        run: |
-          WORKER_PARSER_IMAGE="${{ steps.meta.outputs.worker_parser_image }}"
-          RESULT=$(docker push --all-tags "${WORKER_PARSER_IMAGE}" 2>&1)
-          echo "${RESULT}"
-          DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-
-      - name: Push worker-parser-rust image
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-        id: push-worker-parser-rust
-        run: |
-          WORKER_PARSER_RUST_IMAGE="${{ steps.meta.outputs.worker_parser_rust_image }}"
-          RESULT=$(docker push --all-tags "${WORKER_PARSER_RUST_IMAGE}" 2>&1)
-          echo "${RESULT}"
-          DIGEST=$(echo "${RESULT}" | grep -oP 'digest: \Ksha256:[a-f0-9]+' | tail -1)
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
-
-      # -- Container metadata (push to main or workflow dispatch) --------------
-      - name: Generate container metadata
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
-        env:
-          FRONTEND_DIGEST: ${{ steps.push-frontend.outputs.digest }}
-          BACKEND_DIGEST: ${{ steps.push-backend.outputs.digest }}
-          WORKER_SCAN_GATE_DIGEST: ${{ steps.push-worker-scan-gate.outputs.digest }}
-          WORKER_PARSER_DIGEST: ${{ steps.push-worker-parser.outputs.digest }}
-          WORKER_PARSER_RUST_DIGEST: ${{ steps.push-worker-parser-rust.outputs.digest }}
         run: |
           REPO_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
-          cat > container-metadata.json <<EOF
-          {
-            "build": {
-              "commit_sha": "${{ github.sha }}",
-              "short_sha": "${SHORT_SHA}",
-              "ref": "${{ github.ref_name }}",
-              "run_id": "${{ github.run_id }}",
-              "run_number": "${{ github.run_number }}",
-              "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-            },
-            "containers": [
-              {
-                "name": "integrisight-frontend",
-                "registry": "ghcr.io",
-                "repository": "${REPO_LOWER}/integrisight-frontend",
-                "tag": "${SHORT_SHA}",
-                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-frontend:${SHORT_SHA}",
-                "digest": "${FRONTEND_DIGEST}"
-              },
-              {
-                "name": "integrisight-backend",
-                "registry": "ghcr.io",
-                "repository": "${REPO_LOWER}/integrisight-backend",
-                "tag": "${SHORT_SHA}",
-                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-backend:${SHORT_SHA}",
-                "digest": "${BACKEND_DIGEST}"
-              },
-              {
-                "name": "integrisight-worker-scan-gate",
-                "registry": "ghcr.io",
-                "repository": "${REPO_LOWER}/integrisight-worker-scan-gate",
-                "tag": "${SHORT_SHA}",
-                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-worker-scan-gate:${SHORT_SHA}",
-                "digest": "${WORKER_SCAN_GATE_DIGEST}"
-              },
-              {
-                "name": "integrisight-worker-parser",
-                "registry": "ghcr.io",
-                "repository": "${REPO_LOWER}/integrisight-worker-parser",
-                "tag": "${SHORT_SHA}",
-                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-worker-parser:${SHORT_SHA}",
-                "digest": "${WORKER_PARSER_DIGEST}"
-              },
-              {
-                "name": "integrisight-worker-parser-rust",
-                "registry": "ghcr.io",
-                "repository": "${REPO_LOWER}/integrisight-worker-parser-rust",
-                "tag": "${SHORT_SHA}",
-                "full_image": "ghcr.io/${REPO_LOWER}/integrisight-worker-parser-rust:${SHORT_SHA}",
-                "digest": "${WORKER_PARSER_RUST_DIGEST}"
-              }
-            ]
-          }
-          EOF
+          jq -n \
+            --arg name        "${{ matrix.image_name }}" \
+            --arg registry    "${{ env.REGISTRY }}" \
+            --arg repository  "${REPO_LOWER}/${{ matrix.image_name }}" \
+            --arg tag         "${SHORT_SHA}" \
+            --arg full_image  "${{ env.REGISTRY }}/${REPO_LOWER}/${{ matrix.image_name }}:${SHORT_SHA}" \
+            --arg digest      "${{ steps.push.outputs.digest }}" \
+            '{name: $name, registry: $registry, repository: $repository, tag: $tag, full_image: $full_image, digest: $digest}' \
+            > ${{ matrix.name }}-metadata.json
+
+      - name: Upload container metadata fragment
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: container-meta-${{ matrix.name }}
+          path: ${{ matrix.name }}-metadata.json
+          retention-days: 1
+
+  # -------------------------------------------------------------------------
+  # Job 6 — Aggregate container metadata for CD consumption
+  # -------------------------------------------------------------------------
+  container-metadata:
+    name: "Container Metadata — Aggregate"
+    runs-on: ubuntu-latest
+    needs: [container-build]
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Download all container metadata fragments
+        uses: actions/download-artifact@v4.1.3
+        with:
+          pattern: container-meta-*
+          merge-multiple: true
+
+      - name: Assemble container-metadata.json
+        shell: bash
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          jq -n \
+            --arg commit_sha  "${{ github.sha }}" \
+            --arg short_sha   "${SHORT_SHA}" \
+            --arg ref         "${{ github.ref_name }}" \
+            --arg run_id      "${{ github.run_id }}" \
+            --arg run_number  "${{ github.run_number }}" \
+            --arg timestamp   "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+            --slurpfile containers <(jq -s '.' *-metadata.json) \
+            '{build: {commit_sha: $commit_sha, short_sha: $short_sha, ref: $ref, run_id: $run_id, run_number: $run_number, timestamp: $timestamp}, containers: $containers[0]}' \
+            > container-metadata.json
+          echo "--- Combined container metadata ---"
+          cat container-metadata.json
 
       - name: Upload container metadata
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: container-metadata

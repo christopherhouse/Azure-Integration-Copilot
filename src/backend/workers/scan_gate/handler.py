@@ -100,6 +100,8 @@ class ScanGateHandler(WorkerHandler):
                 "tenantId": tenant_id,
                 "projectId": project_id,
                 "artifactId": artifact_id,
+                "artifactType": artifact.artifact_type,
+                "blobPath": artifact.blob_path,
             },
         )
         await self._publisher.publish_event(event)

@@ -25,6 +25,7 @@ def _make_artifact(
     project_id: str = "p1",
     status: ArtifactStatus = ArtifactStatus.SCAN_PASSED,
     artifact_type: str = "logic_app_workflow",
+    blob_path: str | None = "tenants/t1/projects/p1/artifacts/art_test123/test-workflow.json",
 ) -> Artifact:
     now = datetime.now(UTC)
     return Artifact(
@@ -36,6 +37,7 @@ def _make_artifact(
         artifactType=artifact_type,
         status=status,
         fileSizeBytes=1024,
+        blobPath=blob_path,
         createdAt=now,
         updatedAt=now,
     )
@@ -45,16 +47,12 @@ def _make_event_data(
     tenant_id: str = "t1",
     project_id: str = "p1",
     artifact_id: str = "art_test123",
-    artifact_type: str = "logic_app_workflow",
 ) -> dict:
+    """Build a minimal event payload matching what the scan-gate worker publishes."""
     return {
         "tenantId": tenant_id,
         "projectId": project_id,
         "artifactId": artifact_id,
-        "artifactType": artifact_type,
-        "blobPath": f"tenants/{tenant_id}/projects/{project_id}/artifacts/{artifact_id}/test-workflow.json",
-        "fileSizeBytes": 1024,
-        "contentHash": "abc123",
     }
 
 
@@ -72,14 +70,15 @@ def _make_handler(
     cosmos=None,
     publisher=None,
     blob_content: bytes = _SAMPLE_LOGIC_APP,
+    artifact_type: str = "logic_app_workflow",
 ):
     if repo is None:
         repo = AsyncMock()
-        repo.get_by_id = AsyncMock(return_value=_make_artifact())
+        repo.get_by_id = AsyncMock(return_value=_make_artifact(artifact_type=artifact_type))
         repo.update_status = AsyncMock(
             side_effect=[
-                _make_artifact(status=ArtifactStatus.PARSING),
-                _make_artifact(status=ArtifactStatus.PARSED),
+                _make_artifact(status=ArtifactStatus.PARSING, artifact_type=artifact_type),
+                _make_artifact(status=ArtifactStatus.PARSED, artifact_type=artifact_type),
             ]
         )
         repo.update = AsyncMock()
@@ -175,16 +174,11 @@ class TestParserHandle:
     @pytest.mark.asyncio
     async def test_full_pipeline_openapi(self):
         openapi_content = b'{"openapi": "3.0.0", "info": {"title": "Test", "version": "1.0"}, "paths": {"/test": {"get": {"summary": "Test"}}}}'
-        handler, repo, blob, cosmos, publisher = _make_handler(blob_content=openapi_content)
-        repo.update_status = AsyncMock(
-            side_effect=[
-                _make_artifact(status=ArtifactStatus.PARSING),
-                _make_artifact(status=ArtifactStatus.PARSED),
-            ]
+        handler, repo, blob, cosmos, publisher = _make_handler(
+            blob_content=openapi_content, artifact_type="openapi_spec"
         )
 
-        event_data = _make_event_data(artifact_type="openapi_spec")
-        await handler.handle(event_data)
+        await handler.handle(_make_event_data())
 
         publisher.publish_event.assert_awaited_once()
         published_event = publisher.publish_event.call_args.args[0]
@@ -193,16 +187,11 @@ class TestParserHandle:
     @pytest.mark.asyncio
     async def test_full_pipeline_apim_policy(self):
         apim_content = b"<policies><inbound><base /></inbound></policies>"
-        handler, repo, blob, cosmos, publisher = _make_handler(blob_content=apim_content)
-        repo.update_status = AsyncMock(
-            side_effect=[
-                _make_artifact(status=ArtifactStatus.PARSING),
-                _make_artifact(status=ArtifactStatus.PARSED),
-            ]
+        handler, repo, blob, cosmos, publisher = _make_handler(
+            blob_content=apim_content, artifact_type="apim_policy"
         )
 
-        event_data = _make_event_data(artifact_type="apim_policy")
-        await handler.handle(event_data)
+        await handler.handle(_make_event_data())
 
         publisher.publish_event.assert_awaited_once()
 
@@ -232,12 +221,11 @@ class TestParserHandle:
 
     @pytest.mark.asyncio
     async def test_raises_permanent_error_on_unsupported_type(self):
-        handler, repo, blob, *_ = _make_handler()
+        handler, repo, blob, *_ = _make_handler(artifact_type="unknown_type")
         blob.download_blob = AsyncMock(return_value=b"content")
 
-        event_data = _make_event_data(artifact_type="unknown_type")
         with pytest.raises(PermanentError, match="No parser registered"):
-            await handler.handle(event_data)
+            await handler.handle(_make_event_data())
 
     @pytest.mark.asyncio
     async def test_raises_permanent_error_on_parse_error(self):
@@ -254,6 +242,58 @@ class TestParserHandle:
         cosmos.get_container = AsyncMock(return_value=mock_container)
 
         with pytest.raises(TransientError, match="store parse result"):
+            await handler.handle(_make_event_data())
+
+    @pytest.mark.asyncio
+    async def test_retries_when_already_in_parsing_status(self):
+        """On retry after a transient failure, the artifact is already in PARSING.
+        The handler should skip the status transition and proceed with parsing."""
+        repo = AsyncMock()
+        repo.get_by_id = AsyncMock(
+            return_value=_make_artifact(status=ArtifactStatus.PARSING)
+        )
+        # Only one update_status call expected (parsing → parsed)
+        repo.update_status = AsyncMock(
+            return_value=_make_artifact(status=ArtifactStatus.PARSED)
+        )
+        handler, _, blob, cosmos, publisher = _make_handler(repo=repo)
+
+        await handler.handle(_make_event_data())
+
+        # Should NOT have tried scan_passed→parsing; only parsing→parsed
+        assert repo.update_status.await_count == 1
+        repo.update_status.assert_awaited_with("t1", "art_test123", ArtifactStatus.PARSED)
+        blob.download_blob.assert_awaited_once()
+        publisher.publish_event.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_raises_permanent_error_when_blob_path_missing(self):
+        """Artifact with no blob_path should raise PermanentError."""
+        repo = AsyncMock()
+        repo.get_by_id = AsyncMock(
+            return_value=_make_artifact(blob_path=None)
+        )
+        repo.update_status = AsyncMock(
+            return_value=_make_artifact(status=ArtifactStatus.PARSING, blob_path=None)
+        )
+        handler, _, _, _, _ = _make_handler(repo=repo)
+
+        with pytest.raises(PermanentError, match="no blob path"):
+            await handler.handle(_make_event_data())
+
+    @pytest.mark.asyncio
+    async def test_raises_permanent_error_when_artifact_type_missing(self):
+        """Artifact with no artifact_type should raise PermanentError."""
+        repo = AsyncMock()
+        repo.get_by_id = AsyncMock(
+            return_value=_make_artifact(artifact_type=None)
+        )
+        repo.update_status = AsyncMock(
+            return_value=_make_artifact(status=ArtifactStatus.PARSING, artifact_type=None)
+        )
+        handler, _, _, _, _ = _make_handler(repo=repo)
+
+        with pytest.raises(PermanentError, match="no artifact type"):
             await handler.handle(_make_event_data())
 
 
