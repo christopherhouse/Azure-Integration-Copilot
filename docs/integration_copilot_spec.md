@@ -1,7 +1,7 @@
-# Integration Copilot — MVP Software Specification
+# Integrisight.ai — MVP Software Specification
 
 ## Overview
-Integration Copilot is a multitenant SaaS application that ingests Azure integration artifacts, builds a normalized system graph, and enables analysis via Azure AI Foundry Agent Service.
+Integrisight.ai is a multitenant SaaS application that ingests Azure integration artifacts, builds a normalized system graph, and enables analysis via Azure AI Foundry Agent Service.
 
 The product will support multiple subscription tiers with increasing capabilities. MVP includes a restricted **free tier** only.
 

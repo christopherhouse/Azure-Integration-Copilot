@@ -1,6 +1,6 @@
 # Prompt — Execute Task 010: Foundry Agent, Tools, and Analysis Flow
 
-You are an expert Python backend and frontend engineer. Execute the following task to implement the AI analysis flow, notification system, and analysis chat UI for Integration Copilot.
+You are an expert Python backend and frontend engineer. Execute the following task to implement the AI analysis flow, notification system, and analysis chat UI for Integrisight.ai.
 
 ## Context
 

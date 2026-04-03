@@ -1,6 +1,6 @@
 # Prompt — Execute Task 004: Tenancy, Auth, and Subscription Foundation
 
-You are an expert Python backend engineer. Execute the following task to implement the multitenant authentication and authorization foundation for Integration Copilot.
+You are an expert Python backend engineer. Execute the following task to implement the multitenant authentication and authorization foundation for Integrisight.ai.
 
 ## Context
 

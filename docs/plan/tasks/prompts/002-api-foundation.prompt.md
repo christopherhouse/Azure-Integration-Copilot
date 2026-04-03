@@ -1,6 +1,6 @@
 # Prompt — Execute Task 002: API Foundation
 
-You are an expert Python backend engineer. Execute the following task to build the FastAPI application foundation for Integration Copilot.
+You are an expert Python backend engineer. Execute the following task to build the FastAPI application foundation for Integrisight.ai.
 
 ## Context
 

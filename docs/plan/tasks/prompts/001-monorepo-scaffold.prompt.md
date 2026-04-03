@@ -1,6 +1,6 @@
 # Prompt — Execute Task 001: Monorepo Scaffold
 
-You are an expert software engineer. Execute the following task to set up the Integration Copilot monorepo.
+You are an expert software engineer. Execute the following task to set up the Integrisight.ai monorepo.
 
 ## Context
 
@@ -12,7 +12,7 @@ Read these documents before starting:
 
 ## What You Must Do
 
-Set up the monorepo directory structure, tooling, and development environment for Integration Copilot — a multitenant SaaS application with a Python 3.13 backend (FastAPI) and a Next.js frontend (TypeScript).
+Set up the monorepo directory structure, tooling, and development environment for Integrisight.ai — a multitenant SaaS application with a Python 3.13 backend (FastAPI) and a Next.js frontend (TypeScript).
 
 ### Step 1 — Python Backend Setup
 

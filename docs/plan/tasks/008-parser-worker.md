@@ -10,7 +10,7 @@ Build the parser worker that consumes `ArtifactScanPassed` events, downloads raw
 
 ## Why This Task Exists
 
-The dependency graph is the core value of Integration Copilot. The graph is only as good as the parsing. This task implements the deterministic parsing that extracts structure from raw artifacts — the foundation that the agent reasons over.
+The dependency graph is the core value of Integrisight.ai. The graph is only as good as the parsing. This task implements the deterministic parsing that extracts structure from raw artifacts — the foundation that the agent reasons over.
 
 ## In Scope
 
