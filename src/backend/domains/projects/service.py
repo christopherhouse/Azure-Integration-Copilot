@@ -111,7 +111,12 @@ class ProjectService:
         return await project_repository.update(project)
 
     async def delete_project(self, tenant_id: str, project_id: str) -> Project | None:
-        """Soft-delete a project and cascade-delete related artifacts and graph data."""
+        """Soft-delete a project and cascade-delete related artifacts and graph data.
+
+        Returns the deleted project, or None if the project does not exist or
+        has already been deleted.  Usage counters are only adjusted the first
+        time a project is deleted; duplicate calls are safely ignored.
+        """
         project = await project_repository.get_by_id(tenant_id, project_id)
         if project is None or project.status == ProjectStatus.DELETED:
             return None

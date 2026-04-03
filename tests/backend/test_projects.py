@@ -525,8 +525,11 @@ async def test_create_project_raises_quota_exceeded_when_tenant_not_found():
 async def test_delete_project_decrements_usage_counter():
     """ProjectService.delete_project decrements the tenant's project_count."""
     tenant_id = "t-001"
-    project = _make_project()
-    deleted_project = _make_project(status=ProjectStatus.DELETED)
+    project_id = "prj-001"
+    project = _make_project(project_id=project_id, tenant_id=tenant_id)
+    deleted_project = _make_project(
+        project_id=project_id, tenant_id=tenant_id, status=ProjectStatus.DELETED
+    )
 
     with (
         patch("domains.projects.service.project_repository") as mock_proj_repo,
@@ -542,7 +545,7 @@ async def test_delete_project_decrements_usage_counter():
 
         from domains.projects.service import project_service
 
-        await project_service.delete_project(tenant_id, "prj-001")
+        await project_service.delete_project(tenant_id, project_id)
 
         mock_tenant_repo.increment_usage.assert_called_once_with(
             tenant_id, "project_count", amount=-1
@@ -621,8 +624,10 @@ async def test_delete_project_no_artifacts_skips_artifact_count_decrement():
     """ProjectService.delete_project skips artifact count update when no artifacts exist."""
     tenant_id = "t-001"
     project_id = "prj-001"
-    project = _make_project()
-    deleted_project = _make_project(status=ProjectStatus.DELETED)
+    project = _make_project(project_id=project_id, tenant_id=tenant_id)
+    deleted_project = _make_project(
+        project_id=project_id, tenant_id=tenant_id, status=ProjectStatus.DELETED
+    )
 
     with (
         patch("domains.projects.service.project_repository") as mock_proj_repo,

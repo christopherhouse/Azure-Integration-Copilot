@@ -138,7 +138,7 @@ export function useDeleteProject() {
       const res = await apiFetch(`/api/v1/projects/${projectId}`, {
         method: "DELETE",
       });
-      if (!res.ok && res.status !== 204) {
+      if (!res.ok) {
         const body = await res.json().catch(() => null);
         throw new ApiRequestError(
           res.status,
