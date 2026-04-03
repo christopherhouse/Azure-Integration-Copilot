@@ -22,4 +22,4 @@ RUN uv sync --frozen --no-dev
 #   WORKER_MODULE=workers.scan_gate.main
 ENV WORKER_MODULE=workers.scan_gate.main
 
-CMD ["sh", "-c", "uv run python -m ${WORKER_MODULE}"]
+CMD ["sh", "-c", ".venv/bin/python -m ${WORKER_MODULE}"]

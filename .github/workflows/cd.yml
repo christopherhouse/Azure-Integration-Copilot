@@ -308,7 +308,7 @@ jobs:
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
-            --min-replicas 0 \
+            --min-replicas 1 \
             --max-replicas 5 \
             --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
 
@@ -729,7 +729,7 @@ jobs:
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
-            --min-replicas 0 \
+            --min-replicas 1 \
             --max-replicas 5 \
             --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
 
