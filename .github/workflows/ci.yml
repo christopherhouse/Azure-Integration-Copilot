@@ -167,18 +167,22 @@ jobs:
             image_name: integrisight-frontend
             context: src/frontend
             dockerfile: Dockerfile
+            cache_scope: frontend
           - name: backend
             image_name: integrisight-backend
             context: src/backend
             dockerfile: Dockerfile
+            cache_scope: backend
           - name: worker-scan-gate
             image_name: integrisight-worker-scan-gate
             context: src/backend
             dockerfile: Dockerfile.worker
+            cache_scope: worker             # shared — same context & Dockerfile
           - name: worker-parser
             image_name: integrisight-worker-parser
             context: src/backend
             dockerfile: Dockerfile.worker
+            cache_scope: worker             # shared — same context & Dockerfile
 
     env:
       REGISTRY: ghcr.io
@@ -233,8 +237,8 @@ jobs:
           file: ${{ matrix.context }}/${{ matrix.dockerfile }}
           load: true
           tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          cache-from: type=gha,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
 
       # -- Scan image with Trivy ---------------------------------------------
       - name: Scan ${{ matrix.image_name }} image (Trivy)
