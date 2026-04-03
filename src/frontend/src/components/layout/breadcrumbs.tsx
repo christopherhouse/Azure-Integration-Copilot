@@ -47,7 +47,8 @@ export function Breadcrumbs() {
     if (segment === "dashboard") {
       label = "Home";
     } else if (isProjectSegment) {
-      label = project?.name ?? "";
+      // Show "…" while the project name is being fetched.
+      label = project?.name ?? "…";
     } else {
       label = segment.charAt(0).toUpperCase() + segment.slice(1);
     }
@@ -59,8 +60,6 @@ export function Breadcrumbs() {
     <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm">
       {crumbs.map((crumb, i) => {
         const isLoading = crumb.isProjectSegment && projectNameLoading;
-        const fallback = crumb.href.split("/").pop() ?? "";
-        const displayLabel = crumb.label || fallback;
 
         return (
           <Fragment key={crumb.href}>
@@ -75,7 +74,7 @@ export function Breadcrumbs() {
                   isLoading ? "Loading project name" : undefined
                 }
               >
-                {crumb.label || "…"}
+                {crumb.label}
               </span>
             ) : (
               <Link
@@ -86,7 +85,7 @@ export function Breadcrumbs() {
                   isLoading ? "Loading project name" : undefined
                 }
               >
-                {displayLabel}
+                {crumb.label}
               </Link>
             )}
           </Fragment>
