@@ -1,0 +1,67 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "manual": {
+        "type": "Request",
+        "kind": "Http",
+        "inputs": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "orderId": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "Get_Order_Details": {
+        "type": "Http",
+        "inputs": {
+          "method": "GET",
+          "uri": "https://api.orders.example.com/orders/@{triggerBody()?['orderId']}"
+        },
+        "runAfter": {}
+      },
+      "Send_To_ServiceBus": {
+        "type": "ServiceBusMessage",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['servicebus']['connectionId']"
+            }
+          },
+          "method": "post",
+          "body": "@body('Get_Order_Details')",
+          "path": "/orders-queue/messages"
+        },
+        "runAfter": {
+          "Get_Order_Details": ["Succeeded"]
+        }
+      },
+      "Notify_Webhook": {
+        "type": "Http",
+        "inputs": {
+          "method": "POST",
+          "uri": "https://hooks.slack.example.com/services/notify"
+        },
+        "runAfter": {
+          "Send_To_ServiceBus": ["Succeeded"]
+        }
+      }
+    }
+  },
+  "parameters": {
+    "$connections": {
+      "value": {
+        "servicebus": {
+          "connectionId": "/subscriptions/xxx/resourceGroups/rg/providers/Microsoft.Web/connections/servicebus",
+          "connectionName": "servicebus",
+          "id": "/subscriptions/xxx/providers/Microsoft.Web/locations/eastus/managedApis/servicebus"
+        }
+      }
+    }
+  }
+}
