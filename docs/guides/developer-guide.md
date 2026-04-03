@@ -363,7 +363,7 @@ All event types are defined in `shared/event_types.py`:
 2. Implement `WorkerHandler` in `handler.py`
 3. Create `main.py` entry point that wires up `EventGridConsumerClient` → `BaseWorker` → your handler
 4. Add a `Dockerfile.worker` build target or reuse the existing one
-5. Add the container image build to `ci.yml` and deployment to `cd.yml`
+5. Add the container image build to `ci.yml` and the Container App deployment to `cd.yml` (both are called by the parent `cicd.yml`)
 
 ## Frontend Development
 

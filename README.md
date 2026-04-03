@@ -333,7 +333,7 @@ Three container images are built and published to GHCR:
 | `ghcr.io/<owner>/<repo>/azintcp-backend` | `src/backend/Dockerfile` | FastAPI backend API |
 | `ghcr.io/<owner>/<repo>/azintcp-worker-scan-gate` | `src/backend/Dockerfile.worker` | Malware scan gate worker |
 
-Images are tagged with the 7-character commit SHA and `latest` on pushes to `main`.
+All images are tagged with the 7-character commit SHA and `latest` on pushes to `main`.
 
 ### CD — `.github/workflows/cd.yml`
 
