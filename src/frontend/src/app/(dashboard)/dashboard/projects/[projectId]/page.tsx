@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { toast } from "sonner";
 import { ApiRequestError } from "@/lib/api";
 import {
@@ -22,8 +23,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { ArtifactUpload } from "@/components/artifacts/artifact-upload";
 import { ArtifactList } from "@/components/artifacts/artifact-list";
+import { GraphCanvas } from "@/components/graph/graph-canvas";
+import { ComponentPanel } from "@/components/graph/component-panel";
+import { GraphSummary } from "@/components/graph/graph-summary";
 import { useProject } from "@/hooks/use-projects";
 import { useArtifacts, useUploadArtifact } from "@/hooks/use-artifacts";
+import {
+  useGraphSummary,
+  useGraphComponents,
+  useGraphEdges,
+  type GraphComponent,
+} from "@/hooks/use-graph";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -45,6 +55,16 @@ export default function ProjectDetailPage() {
   const { data: artifactData, isLoading: artifactsLoading } =
     useArtifacts(projectId);
   const uploadMutation = useUploadArtifact(projectId);
+
+  // Graph data
+  const { data: graphSummary } = useGraphSummary(projectId);
+  const { data: componentData } = useGraphComponents(projectId);
+  const { data: edgeData } = useGraphEdges(projectId);
+  const [selectedComponent, setSelectedComponent] =
+    useState<GraphComponent | null>(null);
+
+  const graphComponents = componentData?.data ?? [];
+  const graphEdges = edgeData?.data ?? [];
 
   const handleUpload = (file: File) => {
     uploadMutation.mutate(file, {
@@ -202,25 +222,48 @@ export default function ProjectDetailPage() {
 
         {/* Graph Tab */}
         <TabsContent value="graph" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Dependency Graph</CardTitle>
-              <CardDescription>
-                The dependency graph will be generated once artifacts are parsed
-                and analyzed.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-border">
-                <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                  <GitBranch className="size-10 opacity-50" />
-                  <p className="text-sm">
-                    Graph visualization will appear here.
-                  </p>
+          {graphSummary && <GraphSummary summary={graphSummary} />}
+
+          <div className="mt-4 flex gap-0">
+            <div className="flex-1">
+              <GraphCanvas
+                components={graphComponents}
+                edges={graphEdges}
+                selectedComponentId={selectedComponent?.id ?? null}
+                onSelectComponent={setSelectedComponent}
+              />
+            </div>
+
+            {selectedComponent && (
+              <ComponentPanel
+                component={selectedComponent}
+                projectId={projectId}
+                onClose={() => setSelectedComponent(null)}
+              />
+            )}
+          </div>
+
+          {!graphSummary && (
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle>Dependency Graph</CardTitle>
+                <CardDescription>
+                  The dependency graph will be generated once artifacts are parsed
+                  and analyzed.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-border">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <GitBranch className="size-10 opacity-50" />
+                    <p className="text-sm">
+                      Graph visualization will appear here.
+                    </p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Settings Tab */}
