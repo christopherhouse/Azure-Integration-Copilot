@@ -310,6 +310,9 @@ jobs:
             --memory 0.5Gi \
             --min-replicas 1 \
             --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
             --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
@@ -731,6 +734,9 @@ jobs:
             --memory 0.5Gi \
             --min-replicas 1 \
             --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
             --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
