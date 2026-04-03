@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { FolderKanban, Settings, PanelLeftClose, PanelLeft } from "lucide-react";
+import { FolderKanban, Settings, PanelLeftClose, PanelLeft, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -66,6 +66,22 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {/* Footer */}
+      <div className="border-t border-sidebar-border p-2">
+        <Link
+          href="/dashboard/privacy"
+          className={cn(
+            "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+            pathname.startsWith("/dashboard/privacy")
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+              : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
+          )}
+        >
+          <ShieldCheck className="size-4 shrink-0" />
+          {!collapsed && <span className="truncate">Privacy &amp; Security</span>}
+        </Link>
+      </div>
     </aside>
   );
 }
