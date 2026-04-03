@@ -69,8 +69,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
 
-        # Skip auth for health endpoints
-        if request.url.path.startswith("/api/v1/health"):
+        # Skip auth for health and OpenAPI documentation endpoints
+        if request.url.path.startswith("/api/v1/health") or request.url.path in (
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+        ):
             request.state.external_id = "anonymous"
             request.state.email = ""
             request.state.display_name = ""

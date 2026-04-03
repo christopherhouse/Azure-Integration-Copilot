@@ -42,7 +42,33 @@ async def lifespan(_app: FastAPI):
     logger.info("app_stopped")
 
 
-app = FastAPI(title="Integration Copilot API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(
+    title="Integration Copilot API",
+    version="0.1.0",
+    description=(
+        "Multi-tenant SaaS API for the Azure Integration Copilot. "
+        "Manages tenants, users, projects, and integration artifacts."
+    ),
+    lifespan=lifespan,
+    openapi_tags=[
+        {
+            "name": "tenants",
+            "description": "Tenant registration and management.",
+        },
+        {
+            "name": "users",
+            "description": "User profile operations.",
+        },
+        {
+            "name": "projects",
+            "description": "Project CRUD operations.",
+        },
+        {
+            "name": "artifacts",
+            "description": "Artifact upload, download, and metadata.",
+        },
+    ],
+)
 
 # Register middleware (execution order is reversed from registration order in Starlette)
 # Desired request flow: cors → auth → tenant_context → quota → handler
