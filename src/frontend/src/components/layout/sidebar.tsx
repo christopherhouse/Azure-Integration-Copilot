@@ -27,7 +27,7 @@ export function Sidebar() {
       <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-3">
         {!collapsed && (
           <span className="truncate text-sm font-semibold">
-            Integration Copilot
+            Integrisight.ai
           </span>
         )}
         <Button

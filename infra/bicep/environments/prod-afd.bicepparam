@@ -15,6 +15,6 @@ param backendHostname = 'api.integrisight.ai'
 param webpubsubHostname = 'pubsub.integrisight.ai'
 
 param tags = {
-  project: 'azure-integration-copilot'
+  project: 'integrisight'
   cost_center: 'engineering'
 }

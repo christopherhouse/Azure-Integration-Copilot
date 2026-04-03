@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Integration Copilot",
+  title: "Integrisight.ai",
   description: "Azure Integration Services management and analysis platform",
 };
 

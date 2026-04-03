@@ -1,5 +1,5 @@
 // =============================================================================
-// Azure Integration Copilot — Main Infrastructure Template
+// Integrisight.ai — Main Infrastructure Template
 // =============================================================================
 // Deploys all Azure resources except Container Apps (which are deployed via
 // a separate script after container images have been pushed to ACR).

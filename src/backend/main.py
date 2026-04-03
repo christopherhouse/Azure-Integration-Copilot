@@ -42,7 +42,7 @@ async def lifespan(_app: FastAPI):
     logger.info("app_stopped")
 
 
-app = FastAPI(title="Integration Copilot API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Integrisight.ai API", version="0.1.0", lifespan=lifespan)
 
 # Register middleware (execution order is reversed from registration order in Starlette)
 # Desired request flow: cors → auth → tenant_context → quota → handler
