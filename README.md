@@ -1,8 +1,7 @@
 # Azure Integration Copilot
 
 <!-- Badges -->
-[![CI](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/ci.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/ci.yml)
-[![CD](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/cd.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/cd.yml)
+[![CI/CD](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/cicd.yml/badge.svg)](https://github.com/christopherhouse/Azure-Integration-Copilot/actions/workflows/cicd.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > A multi-agent SaaS application that helps Azure Integration Services developers **understand** their systems, **manage** dependencies, **operate** effectively, and **evolve** with confidence.
@@ -37,7 +36,7 @@
 
 Azure Integration Copilot is a **multi-tenant SaaS application** running on Azure. Built as a multi-agent solution using the [Microsoft Foundry](https://learn.microsoft.com/en-us/azure/ai-services/) agent framework, it assists Azure Integration Services developers throughout the full lifecycle of their solutions — from planning and understanding system dependencies to day-to-day operations and future evolution.
 
-The application consists of a **Next.js frontend** and a **Python backend**, both hosted on Azure Container Apps with real-time updates delivered via Azure Web PubSub.
+The application consists of a **Next.js frontend**, a **Python backend API**, and **async worker services**, all hosted on Azure Container Apps with real-time updates delivered via Azure Web PubSub and event-driven processing via Azure Event Grid.
 
 ---
 
@@ -45,9 +44,14 @@ The application consists of a **Next.js frontend** and a **Python backend**, bot
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | Next.js (App Router), TypeScript (strict mode), Azure Container Apps |
-| **Backend** | Python 3.13, FastAPI, UV package manager, Azure Container Apps |
+| **Frontend** | Next.js (App Router), TypeScript (strict mode), shadcn/ui, Tailwind CSS |
+| **Backend API** | Python 3.13, FastAPI, UV package manager |
+| **Workers** | Python 3.13, async event-driven processors |
+| **Hosting** | Azure Container Apps (consumption workload profile) |
 | **Agent Framework** | Microsoft Foundry |
+| **Eventing** | Azure Event Grid Namespace (pull delivery) |
+| **Real-time** | Azure Web PubSub |
+| **Data** | Azure Cosmos DB (serverless), Azure Blob Storage |
 | **Infrastructure** | Bicep with [Azure Verified Modules (AVM)](https://azure.github.io/Azure-Verified-Modules/) |
 | **CI/CD** | GitHub Actions with OIDC authentication to Azure |
 
@@ -59,13 +63,33 @@ The application consists of a **Next.js frontend** and a **Python backend**, bot
 ├── .github/
 │   ├── agents/                  # GitHub Copilot custom agent definitions (10 agents)
 │   ├── workflows/
-│   │   ├── ci.yml               # CI pipeline (build, test, scan, push)
-│   │   └── cd.yml               # CD pipeline (deploy infra & apps to dev, then prod)
+│   │   ├── cicd.yml             # Unified CI/CD orchestrator (PR + push to main)
+│   │   ├── ci.yml               # CI child workflow (build, test, scan, push)
+│   │   └── cd.yml               # CD child workflow (deploy infra & apps to dev → prod)
 │   └── copilot-instructions.md  # Shared Copilot coding instructions
 ├── src/
 │   ├── frontend/                # Next.js application (TypeScript)
+│   │   ├── src/
+│   │   │   ├── app/             # Next.js App Router pages (auth, dashboard, health)
+│   │   │   ├── components/      # UI components (artifacts, projects, layout, providers)
+│   │   │   ├── hooks/           # React hooks (useArtifacts, useProjects, useRealtime, …)
+│   │   │   ├── lib/             # API client, auth config, utilities
+│   │   │   └── types/           # TypeScript type definitions
+│   │   └── Dockerfile           # Multi-stage production image
 │   ├── backend/                 # Python 3.13 backend services (UV)
-│   │   └── domains/tenants/     # Tenant, auth, and quota domain (task 004)
+│   │   ├── domains/
+│   │   │   ├── tenants/         # Tenant, user, tier, and quota domain
+│   │   │   ├── projects/        # Project CRUD domain
+│   │   │   ├── artifacts/       # Artifact metadata, upload, download domain
+│   │   │   └── users/           # User lookup endpoints
+│   │   ├── middleware/          # Auth, tenant context, and quota middleware
+│   │   ├── shared/              # Cosmos DB, Blob, Event Grid, WebPubSub, logging, models
+│   │   ├── workers/
+│   │   │   ├── base.py          # BaseWorker framework (receive → handle → ack/release)
+│   │   │   ├── shared/          # Dead-letter utilities
+│   │   │   └── scan_gate/       # Malware scan gate worker
+│   │   ├── Dockerfile           # Backend API multi-stage image
+│   │   └── Dockerfile.worker    # Worker multi-stage image
 │   └── agents/                  # Microsoft Foundry agent definitions
 ├── infra/
 │   ├── bicep/
@@ -73,11 +97,11 @@ The application consists of a **Next.js frontend** and a **Python backend**, bot
 │   │   │   ├── container-apps-env.bicep  # Container Apps Environment
 │   │   │   ├── container-registry.bicep  # Azure Container Registry
 │   │   │   ├── cosmos-db.bicep           # Cosmos DB (serverless)
+│   │   │   ├── event-grid.bicep          # Event Grid Namespace (topics, subscriptions)
 │   │   │   ├── front-door.bicep          # Azure Front Door Premium (AVM)
 │   │   │   ├── key-vault.bicep           # Azure Key Vault
 │   │   │   ├── networking.bicep          # VNet, subnets, NSGs, Private DNS
 │   │   │   ├── observability.bicep       # Log Analytics + Application Insights
-│   │   │   ├── event-grid.bicep           # Azure Event Grid Namespace
 │   │   │   ├── storage.bicep             # Azure Storage Account
 │   │   │   ├── web-pubsub.bicep          # Azure Web PubSub
 │   │   │   ├── bastion.bicep             # Azure Bastion (Standard SKU)
@@ -88,12 +112,16 @@ The application consists of a **Next.js frontend** and a **Python backend**, bot
 │   │       └── prod.bicepparam  # Production environment parameters
 │   └── scripts/
 │       └── deploy-container-app.sh  # Reusable Container App deployment script
-├── docs/                        # Project documentation (architecture, guides, planning)
-│   └── architecture/            # Architecture docs (tenancy, auth, quota)
+├── docs/                        # Project documentation
+│   ├── architecture/            # Architecture docs (tenancy, auth, quota)
+│   ├── guides/                  # Developer guide, deployment prerequisites
+│   └── plan/                    # Planning documents and task specs
 ├── tests/
-│   ├── frontend/                # Frontend tests
-│   ├── backend/                 # Backend tests
+│   ├── backend/                 # Python tests (pytest) — 23 test files, 230+ tests
+│   ├── frontend/                # Frontend tests (Jest + React Testing Library)
 │   └── integration/             # End-to-end / integration tests
+├── docker-compose.yml           # Local multi-service development
+├── Makefile                     # Developer shortcuts (lint, test, build, up)
 ├── LICENSE                      # MIT License
 └── README.md                    # This file
 ```
@@ -139,18 +167,18 @@ For the full developer guide — including setup, testing, and tooling details �
 | Service | Purpose |
 |---|---|
 | **Azure Front Door Premium** | Internet-facing ingress with WAF, Microsoft managed TLS certificates, Private Link origin support |
-| **Azure Container Apps** | Hosts the frontend and backend |
+| **Azure Container Apps** | Hosts frontend, backend API, and async worker services (consumption workload profile) |
 | **Azure Container Registry** | Private container image storage |
 | **Azure Cosmos DB** | Multi-tenant data storage (serverless mode) |
-| **Azure Event Grid Namespace** | Event routing with pull delivery for async processing |
+| **Azure Event Grid Namespace** | Event routing with pull delivery for async processing (topics + filtered subscriptions) |
 | **Microsoft Foundry** | Agent framework and orchestration |
 | **Azure Key Vault** | Secrets management |
-| **Azure Storage** | Blob, queue, and table storage |
+| **Azure Storage** | Blob storage for artifact files, queue and table storage |
 | **Azure Web PubSub** | Real-time messaging for live agent updates to clients |
 | **Azure Bastion** | Standard SKU bastion host for secure VM access — no public IP required on target VMs |
 | **Virtual Network** | Network isolation with five dedicated subnets |
 | **Private Endpoints** | Secure connectivity to all PaaS services |
-| **User Assigned Managed Identities** | RBAC-based authentication for frontend and backend |
+| **User Assigned Managed Identities** | RBAC-based authentication — three identities (frontend, backend, worker) |
 
 ---
 
@@ -166,7 +194,8 @@ graph TB
         direction TB
         subgraph CAE ["Container Apps Subnet<br/><i>dev: 10.0.0.0/23 · prod: 10.1.0.0/23</i>"]
             FE[Frontend App]
-            BE[Backend App]
+            BE[Backend API]
+            WK[Worker Apps]
         end
         subgraph PES ["Private Endpoints Subnet"]
             PE[Private Endpoints]
@@ -192,6 +221,7 @@ graph TB
     PE --> KV[Key Vault]
     PE --> SA[Storage]
     PE --> WPS
+    WK -- "pull delivery" --> EG
     BASTION -- "RDP" --> VM
 ```
 
@@ -203,12 +233,13 @@ graph TB
 
 ### Managed Identities
 
-Two **User Assigned Managed Identities** (UAMIs) are provisioned per environment:
+Three **User Assigned Managed Identities** (UAMIs) are provisioned per environment:
 
 | Identity | Resource ID Pattern | Assignment |
 |---|---|---|
 | Frontend UAMI | `id-frontend-*` | Frontend Container App |
-| Backend UAMI | `id-backend-*` | Backend Container App |
+| Backend UAMI | `id-backend-*` | Backend API Container App |
+| Worker UAMI | `id-worker-*` | Worker Container Apps (scan gate, parser, etc.) |
 
 ### Security
 
@@ -253,19 +284,20 @@ Deployment 2 ──► deploy_front_door = true  ──► Front Door created wi
 
 ## CI/CD Pipeline
 
-The CI and CD workflows use **OIDC federated credentials** for Azure authentication — no stored secrets or service principal passwords. CI runs on every PR and push to `main`; CD triggers automatically when CI succeeds on `main`.
+CI and CD are implemented as **reusable child workflows** orchestrated by a unified parent workflow (`cicd.yml`). The pipeline uses **OIDC federated credentials** for Azure authentication — no stored secrets or service principal passwords. CI runs on every PR and push to `main`; CD runs additionally on push to `main` (after CI succeeds).
 
 ```mermaid
 flowchart LR
-    A[PR / Push to main] --> B[Frontend Build & Test]
-    A --> C[Backend Build & Test]
-    A --> D[Bicep Lint & Build]
-    B --> E[Containers]
-    C --> E
+    A[PR / Push to main] --> B["CI (cicd.yml → ci.yml)"]
+    B --> B1[Frontend Build & Test]
+    B --> B2[Backend Build & Test]
+    B --> B3[Bicep Lint & Build]
+    B1 --> E[Containers]
+    B2 --> E
     E --> F[Trivy SARIF → GitHub Security]
     E -->|main only| G[Push to GHCR]
 
-    G --> CD[CD Workflow]
+    G --> CD["CD (cicd.yml → cd.yml)"]
     CD --> I1[Deploy Infra dev]
     CD --> I2[Promote Containers dev]
     I1 --> I3[Deploy Apps dev]
@@ -276,6 +308,14 @@ flowchart LR
     I5 --> I6
 ```
 
+### Workflow Structure
+
+| File | Role |
+|---|---|
+| `.github/workflows/cicd.yml` | **Parent orchestrator** — triggers on PR, push to `main`, and `workflow_dispatch`; calls CI and CD as child workflows |
+| `.github/workflows/ci.yml` | **CI child** — build, lint, test, scan, push containers |
+| `.github/workflows/cd.yml` | **CD child** — deploy infrastructure and apps to dev → prod |
+
 ### CI — `.github/workflows/ci.yml`
 
 | Job | Trigger | Description |
@@ -285,20 +325,28 @@ flowchart LR
 | **Bicep Lint & Build** | Every PR and push | Lints all Bicep templates, builds to ARM JSON, uploads compiled artifact (7-day retention) |
 | **Containers** | After tests pass, **skipped on PRs** | Docker Buildx build, Trivy scan (CRITICAL/HIGH → SARIF), push to GHCR on `main`, container metadata JSON artifact (90-day retention) |
 
-Container images are published to GHCR at `ghcr.io/<owner>/<repo>/azintcp-frontend` and `ghcr.io/<owner>/<repo>/azintcp-backend`, tagged with the 7-character commit SHA and `latest` on pushes to `main`.
+Three container images are built and published to GHCR:
+
+| Image | Source | Description |
+|---|---|---|
+| `ghcr.io/<owner>/<repo>/azintcp-frontend` | `src/frontend/Dockerfile` | Next.js frontend |
+| `ghcr.io/<owner>/<repo>/azintcp-backend` | `src/backend/Dockerfile` | FastAPI backend API |
+| `ghcr.io/<owner>/<repo>/azintcp-worker-scan-gate` | `src/backend/Dockerfile.worker` | Malware scan gate worker |
+
+All images are tagged with the 7-character commit SHA and `latest` on pushes to `main`.
 
 ### CD — `.github/workflows/cd.yml`
 
-The CD workflow triggers via `workflow_run` when CI completes successfully on `main`. It deploys **dev → prod** sequentially — the prod stage is gated on dev success.
+The CD workflow is called by `cicd.yml` when the event is not a PR (i.e., push to `main` or `workflow_dispatch`). It deploys **dev → prod** sequentially — the prod stage is gated on dev success.
 
 | Job | Environment | Description |
 |---|---|---|
 | **deploy-infra-dev** | dev | Deploys Bicep infrastructure via `az deployment group create`, captures outputs (ACR, CAE, identities) |
-| **promote-containers-dev** | dev | Downloads container metadata artifact, imports frontend/backend images from GHCR → dev ACR via `az acr import` |
-| **deploy-apps-dev** | dev | Deploys `ca-frontend` and `ca-backend` Container Apps using the reusable `deploy-container-app.sh` script |
+| **promote-containers-dev** | dev | Downloads container metadata artifact, imports all three images from GHCR → dev ACR via `az acr import` |
+| **deploy-apps-dev** | dev | Deploys `ca-frontend`, `ca-backend`, and `ca-worker-scan-gate` Container Apps using the reusable `deploy-container-app.sh` script |
 | **deploy-infra-prod** | prod | Deploys Bicep infrastructure to prod, captures outputs |
 | **promote-containers-prod** | prod | Downloads container metadata, imports images from GHCR → prod ACR |
-| **deploy-apps-prod** | prod | Deploys Container Apps to prod using the reusable deployment script |
+| **deploy-apps-prod** | prod | Deploys all Container Apps to prod using the reusable deployment script |
 
 ---
 
@@ -435,7 +483,7 @@ In your GitHub repository, go to **Settings → Environments** and create `dev` 
 
 > **Tip:** `AZURE_CLIENT_ID` and `AZURE_SUBSCRIPTION_ID` use the same secret name in both environments — GitHub scopes them to the environment declared on each workflow job. `AZURE_TENANT_ID` is a repository-level secret since it's shared across all environments. `AZURE_RESOURCE_GROUP` is an environment variable (not a secret) since resource group names are not sensitive.
 
-Once complete, the CI workflow (`.github/workflows/ci.yml`) will authenticate to Azure using OIDC without any stored passwords or access keys.
+Once complete, the CI/CD workflow (`.github/workflows/cicd.yml`) will authenticate to Azure using OIDC without any stored passwords or access keys.
 
 ### First Deployment
 

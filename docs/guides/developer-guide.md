@@ -40,38 +40,69 @@ src/
 │   ├── shared/
 │   │   ├── models.py         # ResponseEnvelope[T], PaginatedResponse[T], ErrorResponse
 │   │   ├── exceptions.py     # AppError hierarchy (404, 401, 403, 422, 429)
-│   │   ├── cosmos.py         # Cosmos DB async client wrapper
+│   │   ├── cosmos.py         # Cosmos DB async client wrapper (with OTel RU tracking)
 │   │   ├── blob.py           # Blob Storage async client wrapper
-│   │   ├── events.py         # Event Grid publisher wrapper
+│   │   ├── events.py         # Event Grid publisher wrapper (CloudEvents + ULID IDs)
+│   │   ├── event_consumer.py # Event Grid pull-delivery consumer wrapper
+│   │   ├── event_types.py    # CloudEvent type constants
+│   │   ├── credential.py     # Azure credential helper
+│   │   ├── webpubsub.py      # Web PubSub async client wrapper
 │   │   └── logging.py        # structlog + OpenTelemetry setup
 │   ├── domains/
-│   │   └── tenants/          # Multi-tenant domain (task 004)
-│   │       ├── models.py     # Tenant, User, TierDefinition, QuotaResult, FREE_TIER
-│   │       ├── router.py     # POST/GET/PATCH /api/v1/tenants endpoints
-│   │       ├── service.py    # TenantService, UserService, TierService, QuotaService
-│   │       └── repository.py # Cosmos DB CRUD for tenants container
+│   │   ├── tenants/          # Multi-tenant domain — registration, tiers, quotas
+│   │   │   ├── models.py     # Tenant, User, TierDefinition, QuotaResult, FREE_TIER
+│   │   │   ├── router.py     # POST/GET/PATCH /api/v1/tenants endpoints
+│   │   │   ├── service.py    # TenantService, UserService, TierService, QuotaService
+│   │   │   └── repository.py # Cosmos DB CRUD for tenants container
+│   │   ├── projects/         # Project CRUD domain
+│   │   │   ├── models.py     # CreateProjectRequest, ProjectResponse, UpdateProjectRequest
+│   │   │   ├── router.py     # /api/v1/projects endpoints
+│   │   │   ├── service.py    # ProjectService
+│   │   │   └── repository.py # Cosmos DB CRUD for projects container
+│   │   ├── artifacts/        # Artifact metadata, upload, and download domain
+│   │   │   ├── models.py     # ArtifactResponse, ArtifactStatus (12-state machine)
+│   │   │   ├── router.py     # /api/v1/projects/{id}/artifacts endpoints
+│   │   │   ├── service.py    # ArtifactService (upload, download, state transitions)
+│   │   │   ├── repository.py # Cosmos DB CRUD for artifacts
+│   │   │   ├── content_hash.py # SHA-256 content hashing
+│   │   │   └── type_detector.py # File type detection
+│   │   └── users/            # User lookup endpoints
+│   │       └── router.py     # /api/v1/users/me endpoint
+│   ├── workers/
+│   │   ├── base.py           # BaseWorker framework (receive → handle → ack/release)
+│   │   ├── shared/
+│   │   │   └── dead_letter.py # Dead-letter handling utilities
+│   │   └── scan_gate/        # Malware scan gate worker
+│   │       ├── handler.py    # ScanGateHandler (WorkerHandler ABC implementation)
+│   │       └── main.py       # Worker entry point
 │   ├── pyproject.toml        # Python project config and dependencies
 │   ├── uv.lock               # Locked dependency versions
-│   └── Dockerfile            # Multi-stage production image
+│   ├── Dockerfile            # Backend API multi-stage production image
+│   └── Dockerfile.worker     # Worker multi-stage production image
 └── frontend/                 # Next.js 16 TypeScript frontend
     ├── src/
     │   ├── app/              # Next.js App Router pages
     │   │   ├── (auth)/       # Auth pages (login, callback)
     │   │   ├── (dashboard)/  # Dashboard layout and pages
+    │   │   │   └── dashboard/
+    │   │   │       ├── projects/   # Project list and detail pages
+    │   │   │       └── settings/   # Settings page
     │   │   ├── api/auth/     # NextAuth.js API route
     │   │   └── v1/health/    # Frontend health check endpoint
     │   ├── components/
     │   │   ├── ui/           # shadcn/ui base components
     │   │   ├── layout/       # Sidebar, header, breadcrumbs
+    │   │   ├── artifacts/    # ArtifactUpload, ArtifactList, ArtifactStatusBadge
+    │   │   ├── projects/     # Project components
     │   │   └── providers/    # Auth, React Query, and realtime providers
-    │   ├── hooks/            # Custom React hooks
+    │   ├── hooks/            # Custom React hooks (useArtifacts, useProjects, useRealtime, …)
     │   ├── lib/              # API client, auth config, utilities
     │   └── types/            # TypeScript type definitions
     ├── package.json          # Node.js project config
     └── Dockerfile            # Multi-stage production image
 
 tests/
-├── backend/                  # Python tests (pytest)
+├── backend/                  # Python tests (pytest) — 23 test files, 230+ tests
 ├── frontend/                 # Frontend tests (Jest + React Testing Library)
 └── integration/              # End-to-end tests (placeholder)
 ```
@@ -99,6 +130,18 @@ uv run uvicorn main:app --reload --port 8000
 | `POST` | `/api/v1/tenants` | Register a new tenant and owner user (returns `201`) |
 | `GET` | `/api/v1/tenants/me` | Return the current tenant with usage data |
 | `PATCH` | `/api/v1/tenants/me` | Update the current tenant's display name |
+| `GET` | `/api/v1/users/me` | Return the current user's profile |
+| `PATCH` | `/api/v1/users/me` | Update the current user's profile (e.g. Gravatar email) |
+| `POST` | `/api/v1/projects` | Create a new project for the current tenant |
+| `GET` | `/api/v1/projects` | List projects (paginated) |
+| `GET` | `/api/v1/projects/{id}` | Get a specific project |
+| `PATCH` | `/api/v1/projects/{id}` | Update a project |
+| `DELETE` | `/api/v1/projects/{id}` | Delete a project |
+| `POST` | `/api/v1/projects/{id}/artifacts` | Upload an artifact file (multipart/form-data, returns `202`) |
+| `GET` | `/api/v1/projects/{id}/artifacts` | List artifacts for a project (paginated) |
+| `GET` | `/api/v1/projects/{id}/artifacts/{aid}` | Get artifact metadata |
+| `GET` | `/api/v1/projects/{id}/artifacts/{aid}/download` | Download artifact file |
+| `DELETE` | `/api/v1/projects/{id}/artifacts/{aid}` | Delete an artifact |
 
 ### Configuration
 
@@ -274,6 +317,53 @@ uv sync
 ```
 
 > **Important**: Always use UV for Python dependency management. Do not use `pip` directly.
+
+## Worker Development
+
+Workers are **async event-driven processors** that consume messages from Azure Event Grid Namespace using pull delivery. They run as separate Container Apps and scale independently from the backend API.
+
+### Architecture
+
+```
+Event Grid Namespace  →  EventGridConsumerClient  →  BaseWorker  →  WorkerHandler
+     (pull delivery)          (receive)             (orchestrate)    (business logic)
+```
+
+- **BaseWorker** (`workers/base.py`) — Generic receive loop that polls Event Grid, dispatches events to a handler, and manages acknowledgement or release of messages.
+- **WorkerHandler** (ABC) — Business logic interface with `is_already_processed()`, `handle()`, and `handle_failure()` methods.
+- **TransientError** — Handler raises this to signal a retriable failure (message is released back to the subscription).
+- **PermanentError** — Handler raises this to signal a non-retriable failure (message is acknowledged after calling `handle_failure()`).
+
+### Implemented Workers
+
+| Worker | Event Type | Purpose |
+|--------|-----------|---------|
+| **scan-gate** | `artifact.uploaded` | Validates malware scan results before advancing artifact state |
+
+### Event Types
+
+All event types are defined in `shared/event_types.py`:
+
+| Constant | CloudEvent Type |
+|----------|----------------|
+| `EVENT_ARTIFACT_UPLOADED` | `com.integration-copilot.artifact.uploaded.v1` |
+| `EVENT_ARTIFACT_SCAN_PASSED` | `com.integration-copilot.artifact.scan-passed.v1` |
+| `EVENT_ARTIFACT_SCAN_FAILED` | `com.integration-copilot.artifact.scan-failed.v1` |
+| `EVENT_ARTIFACT_PARSED` | `com.integration-copilot.artifact.parsed.v1` |
+| `EVENT_ARTIFACT_PARSE_FAILED` | `com.integration-copilot.artifact.parse-failed.v1` |
+| `EVENT_GRAPH_UPDATED` | `com.integration-copilot.graph.updated.v1` |
+| `EVENT_GRAPH_BUILD_FAILED` | `com.integration-copilot.graph.build-failed.v1` |
+| `EVENT_ANALYSIS_REQUESTED` | `com.integration-copilot.analysis.requested.v1` |
+| `EVENT_ANALYSIS_COMPLETED` | `com.integration-copilot.analysis.completed.v1` |
+| `EVENT_ANALYSIS_FAILED` | `com.integration-copilot.analysis.failed.v1` |
+
+### Adding a New Worker
+
+1. Create a new directory under `src/backend/workers/<worker-name>/`
+2. Implement `WorkerHandler` in `handler.py`
+3. Create `main.py` entry point that wires up `EventGridConsumerClient` → `BaseWorker` → your handler
+4. Add a `Dockerfile.worker` build target or reuse the existing one
+5. Add the container image build to `ci.yml` and the Container App deployment to `cd.yml` (both are called by the parent `cicd.yml`)
 
 ## Frontend Development
 
@@ -460,9 +550,15 @@ The root `Makefile` provides convenient shortcuts:
 
 ## CI/CD
 
+CI and CD are implemented as **reusable child workflows** called by a unified parent orchestrator (`cicd.yml`).
+
+### Parent — `.github/workflows/cicd.yml`
+
+The parent workflow triggers on every PR, push to `main`, and `workflow_dispatch`. It calls CI unconditionally and CD only on non-PR events (push to `main` or manual dispatch), gated on CI success.
+
 ### CI — `.github/workflows/ci.yml`
 
-The CI workflow triggers on every PR targeting `main` and on pushes to `main`.
+The CI child workflow runs build, lint, test, and container operations.
 
 | Job | What it does |
 |-----|------|
@@ -471,24 +567,25 @@ The CI workflow triggers on every PR targeting `main` and on pushes to `main`.
 | **Bicep Lint & Build** | Lints all Bicep templates, builds to ARM JSON, uploads compiled artifact |
 | **Containers** | **Skipped on PRs.** Builds Docker images with Buildx, scans with [Trivy](https://github.com/aquasecurity/trivy) (SARIF → GitHub Security), pushes to GHCR on `main`, uploads container metadata JSON |
 
-Container images are published to:
-- `ghcr.io/<owner>/<repo>/frontend:<sha>`
-- `ghcr.io/<owner>/<repo>/backend:<sha>`
+Three container images are published to:
+- `ghcr.io/<owner>/<repo>/azintcp-frontend:<sha>`
+- `ghcr.io/<owner>/<repo>/azintcp-backend:<sha>`
+- `ghcr.io/<owner>/<repo>/azintcp-worker-scan-gate:<sha>`
 
 On pushes to `main`, images are also tagged as `latest`.
 
 ### CD — `.github/workflows/cd.yml`
 
-The CD workflow triggers via `workflow_run` when CI completes successfully on `main`. It deploys **dev → prod** sequentially — the prod stage is gated on dev success.
+The CD child workflow deploys **dev → prod** sequentially — the prod stage is gated on dev success.
 
 | Job | Environment | What it does |
 |-----|-------------|------|
 | **deploy-infra-dev** | dev | Deploys Bicep infrastructure via `az deployment group create` |
-| **promote-containers-dev** | dev | Imports frontend/backend images from GHCR → dev ACR via `az acr import` |
-| **deploy-apps-dev** | dev | Deploys `ca-frontend`, `ca-backend`, and `ca-worker` using `deploy-container-app.sh` |
+| **promote-containers-dev** | dev | Imports all three images from GHCR → dev ACR via `az acr import` |
+| **deploy-apps-dev** | dev | Deploys `ca-frontend`, `ca-backend`, and `ca-worker-scan-gate` using `deploy-container-app.sh` |
 | **deploy-infra-prod** | prod | Deploys Bicep infrastructure to prod |
-| **promote-containers-prod** | prod | Imports frontend/backend images from GHCR → prod ACR |
-| **deploy-apps-prod** | prod | Deploys Container Apps to prod using the deployment script |
+| **promote-containers-prod** | prod | Imports all three images from GHCR → prod ACR |
+| **deploy-apps-prod** | prod | Deploys all Container Apps to prod using the deployment script |
 
 > 📋 **Before deploying:** See the [Deployment Prerequisites](deployment-prerequisites.md) guide for all GitHub secrets, variables, and external service setup required by the CD pipeline — including Microsoft Entra External ID (CIAM) tenant configuration and Azure OIDC setup.
 
