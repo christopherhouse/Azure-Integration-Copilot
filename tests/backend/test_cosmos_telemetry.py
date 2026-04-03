@@ -138,10 +138,7 @@ class TestPatchDistributedTracingForRuCost:
         """Calling the patch twice should only wrap once."""
         _patch_distributed_tracing_for_ru_cost()
         first_patched = DistributedTracingPolicy.on_response
-        # Re-enable the guard so a second call can test idempotency
-        import shared.cosmos as cosmos_mod
-
-        cosmos_mod._ru_patch_applied = True
+        # Second call should be a no-op since the flag is already set.
         _patch_distributed_tracing_for_ru_cost()
         assert DistributedTracingPolicy.on_response is first_patched
 
@@ -151,15 +148,16 @@ class TestPatchDistributedTracingForRuCost:
         # was still recording at that point.
         call_log: list[bool] = []
 
-        def tracking_original(self, request, response):
+        def span_ending_original(self, request, response):
             span = request.context.get(DistributedTracingPolicy.TRACING_CONTEXT)
             if span:
                 # By this point our wrapper should already have set the attr.
                 call_log.append(True)
                 span.end()  # simulate what the real on_response does
 
-        # Temporarily install the tracking original, then apply our patch on top.
-        DistributedTracingPolicy.on_response = tracking_original
+        # Temporarily install a simplified original that just ends the span,
+        # then apply our patch on top.
+        DistributedTracingPolicy.on_response = span_ending_original
         _patch_distributed_tracing_for_ru_cost()
 
         tracer = trace.get_tracer(__name__)

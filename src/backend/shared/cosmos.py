@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import structlog
@@ -17,8 +18,9 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 # RU-charge enrichment on Cosmos DB dependency spans
 # ---------------------------------------------------------------------------
 
-# Sentinel used to ensure the monkey-patch is applied at most once.
+# Guard + lock to ensure the monkey-patch is applied at most once.
 _ru_patch_applied = False
+_ru_patch_lock = threading.Lock()
 
 
 def _enrich_span_with_request_charge(
@@ -63,9 +65,10 @@ def _patch_distributed_tracing_for_ru_cost() -> None:
     ``x-ms-request-charge`` header is absent the wrapper is a no-op.
     """
     global _ru_patch_applied  # noqa: PLW0603
-    if _ru_patch_applied:
-        return
-    _ru_patch_applied = True
+    with _ru_patch_lock:
+        if _ru_patch_applied:
+            return
+        _ru_patch_applied = True
 
     _original_on_response = DistributedTracingPolicy.on_response
 
