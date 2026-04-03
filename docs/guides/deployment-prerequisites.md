@@ -2,7 +2,7 @@
 
 > **Audience:** Platform engineers and DevOps practitioners preparing to deploy the Azure Integration Copilot to Azure via the CD pipeline.
 
-This guide covers every secret, variable, and external service configuration required before the [CD workflow](../../.github/workflows/cd.yml) can run successfully. It also walks through setting up Microsoft Entra External ID (CIAM) for authentication and Workload Identity Federation for GitHub Actions OIDC.
+This guide covers every secret, variable, and external service configuration required before the [CI/CD workflow](../../.github/workflows/cicd.yml) can run successfully. It also walks through setting up Microsoft Entra External ID (CIAM) for authentication and Workload Identity Federation for GitHub Actions OIDC.
 
 For local development setup, see the [Developer Guide](developer-guide.md). For a deep dive into the authentication and tenancy architecture, see [Tenancy & Auth](../architecture/tenancy-and-auth.md).
 
@@ -32,7 +32,7 @@ For local development setup, see the [Developer Guide](developer-guide.md). For 
 
 ## Overview
 
-The CD pipeline (`.github/workflows/cd.yml`) deploys infrastructure via Bicep, promotes container images from GHCR to ACR, deploys container apps, and configures Azure Front Door and Cloudflare DNS. It runs in two stages — **dev** first, then **prod** — each backed by a separate GitHub environment.
+The CI/CD pipeline (`.github/workflows/cicd.yml` → `cd.yml`) deploys infrastructure via Bicep, promotes container images from GHCR to ACR, deploys container apps, and configures Azure Front Door and Cloudflare DNS. It runs in two stages — **dev** first, then **prod** — each backed by a separate GitHub environment.
 
 Configuration is split into three categories:
 
@@ -422,4 +422,6 @@ Use this checklist to verify all prerequisites are in place before triggering th
 
 - [Developer Guide](developer-guide.md) — Local development setup and workflow
 - [Tenancy & Auth Architecture](../architecture/tenancy-and-auth.md) — Authentication flow, tenant resolution, and tier system
-- [CD Workflow](../../.github/workflows/cd.yml) — Full pipeline definition
+- [CI/CD Workflow](../../.github/workflows/cicd.yml) — Parent pipeline orchestrator
+- [CI Workflow](../../.github/workflows/ci.yml) — Build, test, scan, and push
+- [CD Workflow](../../.github/workflows/cd.yml) — Deploy infrastructure and apps
