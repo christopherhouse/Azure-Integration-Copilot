@@ -94,12 +94,16 @@ class ParserHandler(WorkerHandler):
 
         # Use artifact record as source of truth for blob_path and artifact_type,
         # since upstream events may not include these fields.
-        blob_path = artifact.blob_path or ""
-        artifact_type = artifact.artifact_type or ""
-        log = log.bind(artifact_type=artifact_type)
+        blob_path = artifact.blob_path
+        artifact_type = artifact.artifact_type
 
         if not blob_path:
             raise PermanentError(f"Artifact {artifact_id} has no blob path")
+
+        if not artifact_type:
+            raise PermanentError(f"Artifact {artifact_id} has no artifact type")
+
+        log = log.bind(artifact_type=artifact_type)
 
         # Download raw artifact from Blob Storage
         try:

@@ -281,6 +281,21 @@ class TestParserHandle:
         with pytest.raises(PermanentError, match="no blob path"):
             await handler.handle(_make_event_data())
 
+    @pytest.mark.asyncio
+    async def test_raises_permanent_error_when_artifact_type_missing(self):
+        """Artifact with no artifact_type should raise PermanentError."""
+        repo = AsyncMock()
+        repo.get_by_id = AsyncMock(
+            return_value=_make_artifact(artifact_type=None)
+        )
+        repo.update_status = AsyncMock(
+            return_value=_make_artifact(status=ArtifactStatus.PARSING, artifact_type=None)
+        )
+        handler, _, _, _, _ = _make_handler(repo=repo)
+
+        with pytest.raises(PermanentError, match="no artifact type"):
+            await handler.handle(_make_event_data())
+
 
 class TestParserHandleFailure:
     """Tests for the parser failure handler."""
