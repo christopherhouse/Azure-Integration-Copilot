@@ -23,8 +23,12 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        # Skip for health endpoints
-        if request.url.path.startswith("/api/v1/health"):
+        # Skip for health and OpenAPI documentation endpoints
+        if request.url.path.startswith("/api/v1/health") or request.url.path in (
+            "/docs",
+            "/redoc",
+            "/openapi.json",
+        ):
             request.state.tenant = None
             request.state.tier = FREE_TIER
             request.state.user = None
