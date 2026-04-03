@@ -302,8 +302,7 @@ jobs:
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
             --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/azintcp-worker-scan-gate:${{ needs.promote-containers-dev.outputs.image_tag }}" \
-            --target-port 8000 \
-            --ingress-external false \
+            --no-ingress \
             --identity "${{ steps.identities.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
             --cpu 0.25 \
@@ -723,8 +722,7 @@ jobs:
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
             --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/azintcp-worker-scan-gate:${{ needs.promote-containers-prod.outputs.image_tag }}" \
-            --target-port 8000 \
-            --ingress-external false \
+            --no-ingress \
             --identity "${{ steps.identities.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
             --cpu 0.25 \

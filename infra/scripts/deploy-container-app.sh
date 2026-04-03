@@ -18,7 +18,8 @@
 #     --min-replicas <min> \
 #     --max-replicas <max> \
 #     [--env-vars "KEY=value KEY2=value2"] \
-#     [--ingress-external true|false]
+#     [--ingress-external true|false] \
+#     [--no-ingress]
 # =============================================================================
 
 set -euo pipefail
@@ -52,6 +53,7 @@ print_banner() {
 print_summary() {
   local INGRESS_LABEL="External"
   [[ "${INGRESS_EXTERNAL}" == "false" ]] && INGRESS_LABEL="Internal"
+  [[ "${NO_INGRESS}" == "true" ]]        && INGRESS_LABEL="None (background worker)"
 
   echo -e "  ${BLUE}${BOLD}📦 Application${NC}"
   echo -e "  ${CYAN}├─${NC} ${BOLD}Name${NC}            ${GREEN}${APP_NAME}${NC}"
@@ -86,6 +88,7 @@ MIN_REPLICAS="0"
 MAX_REPLICAS="10"
 ENV_VARS=""
 INGRESS_EXTERNAL="true"
+NO_INGRESS="false"
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -105,6 +108,7 @@ while [[ $# -gt 0 ]]; do
     --max-replicas)     MAX_REPLICAS="$2";      shift 2 ;;
     --env-vars)         ENV_VARS="$2";          shift 2 ;;
     --ingress-external) INGRESS_EXTERNAL="$2";  shift 2 ;;
+    --no-ingress)       NO_INGRESS="true";      shift   ;;
     *)
       log_error "Unknown option: $1"
       exit 1
@@ -204,20 +208,12 @@ if [[ "${APP_EXISTS}" == "true" ]]; then
 else
   log_step "Creating Container App '${APP_NAME}'..."
 
-  INGRESS_TYPE="external"
-  if [[ "${INGRESS_EXTERNAL}" == "false" ]]; then
-    INGRESS_TYPE="internal"
-  fi
-
   CREATE_CMD=(
     az containerapp create
     --name "${APP_NAME}"
     --resource-group "${RESOURCE_GROUP}"
     --environment "${ENVIRONMENT}"
     --image "${IMAGE}"
-    --target-port "${TARGET_PORT}"
-    --ingress "${INGRESS_TYPE}"
-    --transport http
     --cpu "${CPU}"
     --memory "${MEMORY}"
     --min-replicas "${MIN_REPLICAS}"
@@ -227,6 +223,23 @@ else
     --user-assigned "${IDENTITY}"
     --revisions-mode single
   )
+
+  # Only configure ingress for apps that serve HTTP traffic.
+  # Background workers (--no-ingress) run without ingress so
+  # Azure Container Apps won't set up health probes against a
+  # port that nothing listens on.
+  if [[ "${NO_INGRESS}" != "true" ]]; then
+    INGRESS_TYPE="external"
+    if [[ "${INGRESS_EXTERNAL}" == "false" ]]; then
+      INGRESS_TYPE="internal"
+    fi
+
+    CREATE_CMD+=(
+      --target-port "${TARGET_PORT}"
+      --ingress "${INGRESS_TYPE}"
+      --transport http
+    )
+  fi
 
   if [[ -n "${ENV_VARS}" ]]; then
     CREATE_CMD+=(--env-vars ${ENV_VARS})
