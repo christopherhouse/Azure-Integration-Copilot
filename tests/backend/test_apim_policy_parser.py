@@ -54,12 +54,12 @@ class TestApimPolicyParser:
 
     def test_backend_external_reference(self, parser, policy_content):
         result = parser.parse(policy_content, "api-policy.xml")
-        backend_refs = [r for r in result.external_references if "backend-api.internal.example.com" in r.name]
+        backend_refs = [r for r in result.external_references if r.name == "backend-api.internal.example.com"]
         assert len(backend_refs) >= 1
 
     def test_send_request_external_reference(self, parser, policy_content):
         result = parser.parse(policy_content, "api-policy.xml")
-        alert_refs = [r for r in result.external_references if "alerts.monitoring.example.com" in r.name]
+        alert_refs = [r for r in result.external_references if r.name == "alerts.monitoring.example.com"]
         assert len(alert_refs) >= 1
 
     def test_invalid_xml_raises_value_error(self, parser):

@@ -55,7 +55,7 @@ class TestLogicAppParser:
         assert len(http_actions) == 2
         get_order = next(a for a in http_actions if a.name == "Get_Order_Details")
         assert get_order.properties["method"] == "GET"
-        assert "api.orders.example.com" in get_order.properties["uri"]
+        assert get_order.properties["uri"].startswith("https://api.orders.example.com/")
 
     def test_workflow_to_trigger_edges(self, parser, workflow_content):
         result = parser.parse(workflow_content, "order-processor.json")
@@ -76,7 +76,7 @@ class TestLogicAppParser:
 
     def test_external_references_from_http(self, parser, workflow_content):
         result = parser.parse(workflow_content, "order-processor.json")
-        ext_names = [r.name for r in result.external_references]
+        ext_names = {r.name for r in result.external_references}
         assert "api.orders.example.com" in ext_names
         assert "hooks.slack.example.com" in ext_names
 

@@ -48,7 +48,7 @@ class TestOpenApiV3Json:
         result = parser.parse(v3_content, "orders-api.json")
         refs = result.external_references
         assert len(refs) >= 1
-        assert any("api.orders.example.com" in r.name for r in refs)
+        assert any(r.name == "https://api.orders.example.com/v1" for r in refs)
 
     def test_base_url_from_servers(self, parser, v3_content):
         result = parser.parse(v3_content, "orders-api.json")
