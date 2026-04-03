@@ -65,6 +65,9 @@ param deployFrontDoor bool = false
 @description('Custom domain hostname for the frontend')
 param frontendHostname string = ''
 
+@description('Custom domain hostname for the frontend www subdomain')
+param frontendWwwHostname string = ''
+
 @description('Custom domain hostname for the backend API')
 param backendHostname string = ''
 
@@ -512,6 +515,7 @@ module frontDoor 'modules/front-door.bicep' = if (deployFrontDoor) {
     location: location
     name: resourceNames.frontDoor
     frontendHostname: frontendHostname
+    frontendWwwHostname: frontendWwwHostname
     backendHostname: backendHostname
     webpubsubHostname: webpubsubHostname
     frontendOriginHostname: frontendOriginHostname
