@@ -4,6 +4,7 @@
  */
 interface RuntimeConfig {
   apiBaseUrl?: string;
+  clarityProjectId?: string;
 }
 
 interface Window {

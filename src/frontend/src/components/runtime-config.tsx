@@ -12,16 +12,16 @@ export function RuntimeConfig() {
   noStore();
 
   const apiBaseUrl = process.env.API_BASE_URL;
+  const clarityProjectId = process.env.CLARITY_PROJECT_ID;
 
-  // Only inject the config object if we have a valid API_BASE_URL.
-  // If not set, the client-side getApiBaseUrl() will fall back to localhost.
-  if (!apiBaseUrl) {
+  // Only inject the config object if we have at least one value to provide.
+  if (!apiBaseUrl && !clarityProjectId) {
     return null;
   }
 
-  const config = {
-    apiBaseUrl,
-  };
+  const config: Record<string, string> = {};
+  if (apiBaseUrl) config.apiBaseUrl = apiBaseUrl;
+  if (clarityProjectId) config.clarityProjectId = clarityProjectId;
 
   // JSON.stringify does not escape "</script>" sequences which would break
   // out of the inline script tag.  Replace angle-bracket sequences with
