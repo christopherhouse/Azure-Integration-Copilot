@@ -271,6 +271,7 @@ jobs:
             ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
             ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
+            CLARITY_PROJECT_ID=${{ vars.CLARITY_PROJECT_ID }}
         run: |
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-frontend" \
@@ -691,6 +692,7 @@ jobs:
             ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
             ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
+            CLARITY_PROJECT_ID=${{ vars.CLARITY_PROJECT_ID }}
         run: |
           ./infra/scripts/deploy-container-app.sh \
             --name "ca-frontend" \

@@ -16,3 +16,4 @@ services:
       - "3000:3000"
     environment:
       - API_BASE_URL=http://localhost:8000
+      - CLARITY_PROJECT_ID=${CLARITY_PROJECT_ID:-}
