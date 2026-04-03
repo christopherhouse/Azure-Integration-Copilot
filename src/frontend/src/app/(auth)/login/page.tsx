@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export default function LoginPage() {
@@ -48,6 +49,11 @@ export default function LoginPage() {
             Sign in
           </Button>
         )}
+        <p className="text-xs text-muted-foreground">
+          <Link href="/privacy" className="underline hover:text-foreground">
+            Privacy &amp; Security
+          </Link>
+        </p>
       </div>
     </div>
   );
