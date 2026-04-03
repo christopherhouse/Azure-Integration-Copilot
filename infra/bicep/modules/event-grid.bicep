@@ -64,6 +64,11 @@ module eventGridNamespace 'br/public:avm/res/event-grid/namespace:0.7.0' = {
                 receiveLockDurationInSeconds: 60
               }
             }
+            filtersConfiguration: {
+              includedEventTypes: [
+                'com.integration-copilot.artifact.uploaded.v1'
+              ]
+            }
           }
           {
             name: 'artifact-parser'
@@ -74,6 +79,11 @@ module eventGridNamespace 'br/public:avm/res/event-grid/namespace:0.7.0' = {
                 maxDeliveryCount: 5
                 receiveLockDurationInSeconds: 60
               }
+            }
+            filtersConfiguration: {
+              includedEventTypes: [
+                'com.integration-copilot.artifact.scan-passed.v1'
+              ]
             }
           }
           {
@@ -86,6 +96,11 @@ module eventGridNamespace 'br/public:avm/res/event-grid/namespace:0.7.0' = {
                 receiveLockDurationInSeconds: 60
               }
             }
+            filtersConfiguration: {
+              includedEventTypes: [
+                'com.integration-copilot.artifact.parsed.v1'
+              ]
+            }
           }
           {
             name: 'analysis-execution'
@@ -97,6 +112,11 @@ module eventGridNamespace 'br/public:avm/res/event-grid/namespace:0.7.0' = {
                 receiveLockDurationInSeconds: 60
               }
             }
+            filtersConfiguration: {
+              includedEventTypes: [
+                'com.integration-copilot.analysis.requested.v1'
+              ]
+            }
           }
           {
             name: 'notification'
@@ -107,6 +127,16 @@ module eventGridNamespace 'br/public:avm/res/event-grid/namespace:0.7.0' = {
                 maxDeliveryCount: 5
                 receiveLockDurationInSeconds: 60
               }
+            }
+            filtersConfiguration: {
+              includedEventTypes: [
+                'com.integration-copilot.artifact.scan-failed.v1'
+                'com.integration-copilot.artifact.parse-failed.v1'
+                'com.integration-copilot.graph.updated.v1'
+                'com.integration-copilot.graph.build-failed.v1'
+                'com.integration-copilot.analysis.completed.v1'
+                'com.integration-copilot.analysis.failed.v1'
+              ]
             }
           }
         ]
