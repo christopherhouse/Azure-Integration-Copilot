@@ -25,6 +25,7 @@ param webPubSubSku = 'Free_F1'
 // Azure Front Door — set to true after first deployment
 param deployFrontDoor = false
 param frontendHostname = 'dev.integrisight.ai'
+param frontendWwwHostname = 'dev.www.integrisight.ai'
 param backendHostname = 'dev.api.integrisight.ai'
 param webpubsubHostname = 'dev.pubsub.integrisight.ai'
 

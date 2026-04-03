@@ -11,6 +11,7 @@ param workload = 'aic'
 
 // Custom domain hostnames
 param frontendHostname = 'dev.integrisight.ai'
+param frontendWwwHostname = 'dev.www.integrisight.ai'
 param backendHostname = 'dev.api.integrisight.ai'
 param webpubsubHostname = 'dev.pubsub.integrisight.ai'
 

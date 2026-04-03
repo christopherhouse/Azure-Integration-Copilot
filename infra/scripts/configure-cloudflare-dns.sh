@@ -11,8 +11,8 @@
 #     --resource-group <azure-resource-group> \
 #     --cloudflare-zone-id <cloudflare-dns-zone-id> \
 #     --cloudflare-api-key <cloudflare-api-token> \
-#     --domains "cd-frontend,cd-backend,cd-pubsub" \
-#     --endpoints "frontend.azurefd.net,backend.azurefd.net,pubsub.azurefd.net" \
+#     --domains "cd-frontend,cd-frontend-www,cd-backend,cd-pubsub" \
+#     --endpoints "frontend.azurefd.net,frontend.azurefd.net,backend.azurefd.net,pubsub.azurefd.net" \
 #     [--debug]
 # =============================================================================
 

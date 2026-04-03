@@ -11,6 +11,9 @@ param name string
 @description('Custom domain hostname for the frontend')
 param frontendHostname string
 
+@description('Custom domain hostname for the frontend www subdomain')
+param frontendWwwHostname string
+
 @description('Custom domain hostname for the backend API')
 param backendHostname string
 
@@ -106,6 +109,12 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
       {
         name: 'cd-frontend'
         hostName: frontendHostname
+        certificateType: 'ManagedCertificate'
+        minimumTlsVersion: 'TLS12'
+      }
+      {
+        name: 'cd-frontend-www'
+        hostName: frontendWwwHostname
         certificateType: 'ManagedCertificate'
         minimumTlsVersion: 'TLS12'
       }
@@ -227,7 +236,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
           {
             name: 'route-frontend'
             originGroupName: 'og-frontend'
-            customDomainNames: ['cd-frontend']
+            customDomainNames: ['cd-frontend', 'cd-frontend-www']
             supportedProtocols: ['Http', 'Https']
             patternsToMatch: ['/*']
             forwardingProtocol: 'HttpsOnly'
@@ -308,6 +317,7 @@ resource securityPolicy 'Microsoft.Cdn/profiles/securityPolicies@2024-02-01' = {
         {
           domains: [
             { id: '${frontDoor.outputs.resourceId}/customDomains/cd-frontend' }
+            { id: '${frontDoor.outputs.resourceId}/customDomains/cd-frontend-www' }
             { id: '${frontDoor.outputs.resourceId}/customDomains/cd-backend' }
           ]
           patternsToMatch: ['/*']
