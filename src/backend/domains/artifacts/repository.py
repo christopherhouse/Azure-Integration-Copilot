@@ -185,6 +185,8 @@ class ArtifactRepository:
                 await container.replace_item(item=artifact.id, body=doc)
                 count += 1
             except Exception:
+                # Best-effort: log and continue so that a single failing
+                # document does not abort deletion of the remaining artifacts.
                 logger.warning(
                     "failed_to_soft_delete_artifact",
                     artifact_id=artifact.id,

@@ -35,42 +35,63 @@ export function Breadcrumbs() {
   const projectId = getProjectIdFromSegments(segments);
 
   // Always call the hook; `enabled` is false when there is no project ID.
-  const { data: project } = useProject(projectId ?? "");
+  const { data: project, isLoading: projectNameLoading } = useProject(
+    projectId ?? "",
+  );
 
   const crumbs = segments.map((segment, index) => {
     const href = "/" + segments.slice(0, index + 1).join("/");
+    const isProjectSegment = !!(projectId && segment === projectId);
     let label: string;
 
     if (segment === "dashboard") {
       label = "Home";
-    } else if (projectId && segment === projectId) {
-      label = project?.name ?? "…";
+    } else if (isProjectSegment) {
+      label = project?.name ?? "";
     } else {
       label = segment.charAt(0).toUpperCase() + segment.slice(1);
     }
 
-    return { href, label };
+    return { href, label, isProjectSegment };
   });
 
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm">
-      {crumbs.map((crumb, i) => (
-        <Fragment key={crumb.href}>
-          {i > 0 && (
-            <ChevronRight className="size-3.5 text-muted-foreground" />
-          )}
-          {i === crumbs.length - 1 ? (
-            <span className="font-medium text-foreground">{crumb.label}</span>
-          ) : (
-            <Link
-              href={crumb.href}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {crumb.label}
-            </Link>
-          )}
-        </Fragment>
-      ))}
+      {crumbs.map((crumb, i) => {
+        const isLoading = crumb.isProjectSegment && projectNameLoading;
+        const fallback = crumb.href.split("/").pop() ?? "";
+        const displayLabel = crumb.label || fallback;
+
+        return (
+          <Fragment key={crumb.href}>
+            {i > 0 && (
+              <ChevronRight className="size-3.5 text-muted-foreground" />
+            )}
+            {i === crumbs.length - 1 ? (
+              <span
+                className="font-medium text-foreground"
+                aria-busy={isLoading || undefined}
+                aria-label={
+                  isLoading ? "Loading project name" : undefined
+                }
+              >
+                {crumb.label || "…"}
+              </span>
+            ) : (
+              <Link
+                href={crumb.href}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+                aria-busy={isLoading || undefined}
+                aria-label={
+                  isLoading ? "Loading project name" : undefined
+                }
+              >
+                {displayLabel}
+              </Link>
+            )}
+          </Fragment>
+        );
+      })}
     </nav>
   );
 }

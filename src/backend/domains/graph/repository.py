@@ -213,6 +213,8 @@ class GraphRepository:
                 await container.delete_item(item=doc_id, partition_key=partition_key)
                 count += 1
             except Exception:
+                # Best-effort: log and continue so that a single failing
+                # document does not abort deletion of the remaining graph data.
                 logger.warning(
                     "failed_to_delete_graph_doc",
                     doc_id=doc_id,
