@@ -185,6 +185,19 @@ if [[ "${APP_EXISTS}" == "true" ]]; then
     exit 1
   fi
 
+  # If --no-ingress was requested, disable ingress on the existing app.
+  # This handles the case where a previously-ingressed app is being
+  # converted to a background worker.  The || true handles the case
+  # where ingress is already disabled.
+  if [[ "${NO_INGRESS}" == "true" ]]; then
+    log_detail "Disabling ingress (--no-ingress requested)..."
+    az containerapp ingress disable \
+      --name "${APP_NAME}" \
+      --resource-group "${RESOURCE_GROUP}" \
+      --output none 2>/dev/null || true
+    log_success "Ingress disabled for '${APP_NAME}'"
+  fi
+
   # Build update command
   UPDATE_CMD=(
     az containerapp update
