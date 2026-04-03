@@ -88,7 +88,7 @@ MIN_REPLICAS="0"
 MAX_REPLICAS="10"
 ENV_VARS=""
 INGRESS_EXTERNAL="true"
-NO_INGRESS=false
+NO_INGRESS="false"
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -108,7 +108,7 @@ while [[ $# -gt 0 ]]; do
     --max-replicas)     MAX_REPLICAS="$2";      shift 2 ;;
     --env-vars)         ENV_VARS="$2";          shift 2 ;;
     --ingress-external) INGRESS_EXTERNAL="$2";  shift 2 ;;
-    --no-ingress)       NO_INGRESS=true;        shift   ;;
+    --no-ingress)       NO_INGRESS="true";      shift   ;;
     *)
       log_error "Unknown option: $1"
       exit 1
