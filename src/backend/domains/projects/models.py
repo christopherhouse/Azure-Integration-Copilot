@@ -27,7 +27,10 @@ class Project(BaseModel):
     artifact_count: int = Field(default=0, alias="artifactCount")
     graph_version: int = Field(default=0, alias="graphVersion")
     created_by: str = Field(alias="createdBy")
+    created_by_name: str | None = Field(default=None, alias="createdByName")
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), alias="createdAt")
+    updated_by: str | None = Field(default=None, alias="updatedBy")
+    updated_by_name: str | None = Field(default=None, alias="updatedByName")
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), alias="updatedAt")
     deleted_at: datetime | None = Field(default=None, alias="deletedAt")
     etag: str | None = Field(default=None, alias="_etag", exclude=True)
@@ -64,7 +67,10 @@ class ProjectResponse(BaseModel):
     artifact_count: int = Field(alias="artifactCount")
     graph_version: int = Field(alias="graphVersion")
     created_by: str = Field(alias="createdBy")
+    created_by_name: str | None = Field(default=None, alias="createdByName")
     created_at: datetime = Field(alias="createdAt")
+    updated_by: str | None = Field(default=None, alias="updatedBy")
+    updated_by_name: str | None = Field(default=None, alias="updatedByName")
     updated_at: datetime = Field(alias="updatedAt")
 
     model_config = {"populate_by_name": True}
@@ -80,6 +86,9 @@ class ProjectResponse(BaseModel):
             artifactCount=project.artifact_count,
             graphVersion=project.graph_version,
             createdBy=project.created_by,
+            createdByName=project.created_by_name,
             createdAt=project.created_at,
+            updatedBy=project.updated_by,
+            updatedByName=project.updated_by_name,
             updatedAt=project.updated_at,
         )

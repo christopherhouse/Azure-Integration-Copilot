@@ -221,8 +221,15 @@ export default function ProjectDetailPage() {
                 <div className="flex items-center gap-2">
                   <User className="size-4 text-muted-foreground" />
                   <dt className="text-muted-foreground">Created by</dt>
-                  <dd className="truncate">{project.createdBy}</dd>
+                  <dd className="truncate">{project.createdByName ?? project.createdBy}</dd>
                 </div>
+                {project.updatedByName && (
+                  <div className="flex items-center gap-2">
+                    <User className="size-4 text-muted-foreground" />
+                    <dt className="text-muted-foreground">Updated by</dt>
+                    <dd className="truncate">{project.updatedByName}</dd>
+                  </div>
+                )}
               </dl>
             </CardContent>
           </Card>
