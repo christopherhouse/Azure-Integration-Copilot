@@ -1,4 +1,4 @@
-"""Security hardening tests — CORS validation, Content-Disposition sanitisation,
+"""Security hardening tests — CORS validation, Content-Disposition sanitization,
 and streaming upload size enforcement.
 """
 
@@ -73,11 +73,11 @@ class TestCorsWildcardGuard:
 
 
 # ---------------------------------------------------------------------------
-# Content-Disposition filename sanitisation
+# Content-Disposition filename sanitization
 # ---------------------------------------------------------------------------
 
 
-class TestContentDispositionSanitisation:
+class TestContentDispositionSanitization:
     """Verify that _sanitize_content_disposition prevents header injection."""
 
     def _sanitize(self, name: str) -> str:
@@ -108,7 +108,7 @@ class TestContentDispositionSanitisation:
         header = self._sanitize("path\\file.json")
         assert 'filename="pathfile.json"' in header
 
-    def test_empty_after_sanitisation_uses_fallback(self):
+    def test_empty_after_sanitization_uses_fallback(self):
         header = self._sanitize('"\x00"')
         assert 'filename="download"' in header
 

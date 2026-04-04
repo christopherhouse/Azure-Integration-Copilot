@@ -140,7 +140,7 @@ Overall security posture is **moderate** with a solid baseline (JWT-based auth m
    - ~~rotated JWKS accepted after refresh,~~ ✅ (existed)
    - ~~artifact upload rejects unknown project,~~ ✅ (existed)
    - ~~CORS config rejects insecure wildcard+credentials.~~ ✅ **Remediated** — Startup guard added in `main.py` that raises `RuntimeError` when `CORS_ALLOWED_ORIGINS` contains `*`. Test added in `test_security_hardening.py`.
-   - Additional tests added: Content-Disposition sanitisation (6 tests), streaming upload size enforcement (2 tests).
+   - Additional tests added: Content-Disposition sanitization (6 tests), streaming upload size enforcement (2 tests).
 
 ## Next 2–4 weeks
 9. Add security logging improvements (auth failures by reason, rate telemetry, anomaly detection signals).
