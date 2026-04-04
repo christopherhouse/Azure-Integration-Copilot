@@ -67,6 +67,21 @@ class TestValidTransitions:
         result = transition_status(ArtifactStatus.GRAPH_BUILDING, ArtifactStatus.GRAPH_FAILED)
         assert result == ArtifactStatus.GRAPH_FAILED
 
+    def test_scanning_to_scanning_idempotent(self):
+        """Self-transition allows idempotent retries during scanning."""
+        result = transition_status(ArtifactStatus.SCANNING, ArtifactStatus.SCANNING)
+        assert result == ArtifactStatus.SCANNING
+
+    def test_parsing_to_parsing_idempotent(self):
+        """Self-transition allows idempotent retries during parsing."""
+        result = transition_status(ArtifactStatus.PARSING, ArtifactStatus.PARSING)
+        assert result == ArtifactStatus.PARSING
+
+    def test_graph_building_to_graph_building_idempotent(self):
+        """Self-transition allows idempotent retries during graph building."""
+        result = transition_status(ArtifactStatus.GRAPH_BUILDING, ArtifactStatus.GRAPH_BUILDING)
+        assert result == ArtifactStatus.GRAPH_BUILDING
+
 
 # ---------------------------------------------------------------------------
 # Invalid transitions
