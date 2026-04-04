@@ -27,12 +27,10 @@ export function EditProjectDialog({ project }: EditProjectDialogProps) {
   const [description, setDescription] = useState(project.description ?? "");
   const updateMutation = useUpdateProject(project.id);
 
-  // Keep fields in sync when the dialog opens (e.g. after another update).
+  // Keep fields in sync when the dialog opens or closes (e.g. after another update).
   const handleOpenChange = (newOpen: boolean) => {
-    if (newOpen) {
-      setName(project.name);
-      setDescription(project.description ?? "");
-    }
+    setName(project.name);
+    setDescription(project.description ?? "");
     setOpen(newOpen);
   };
 
