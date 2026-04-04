@@ -33,11 +33,19 @@ def _enrich_span_with_request_charge(
     and contains the Request Unit (RU) cost of the operation.  This mirrors the
     attribute that the .NET and Java Azure Cosmos DB SDKs emit natively but
     that the Python SDK does not yet include.
+
+    **IMPORTANT**: Azure Monitor OpenTelemetry Python requires setting attributes
+    via the private ``_attributes`` dictionary to populate ``customDimensions``
+    in Application Insights. Using ``set_attribute()`` records the value on the
+    span but does NOT export it to the ``customDimensions`` field.
+    See: https://learn.microsoft.com/azure/azure-monitor/app/opentelemetry-add-modify#modify-telemetry
     """
     try:
         request_charge = response.http_response.headers.get("x-ms-request-charge")
-        if request_charge is not None and hasattr(span, "is_recording") and span.is_recording():
-            span.set_attribute("db.cosmosdb.request_charge", float(request_charge))
+        if request_charge is not None and hasattr(span, "_attributes"):
+            # Directly modify _attributes to ensure the RU cost appears in
+            # customDimensions in Application Insights / Log Analytics.
+            span._attributes["db.cosmosdb.request_charge"] = float(request_charge)
     except Exception:  # noqa: BLE001
         # Telemetry enrichment must never break the request pipeline.
         pass
