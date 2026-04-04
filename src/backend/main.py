@@ -34,6 +34,13 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Application lifespan: startup and shutdown tasks."""
+    # --- Security guard: prevent SKIP_AUTH in production ---
+    if settings.environment.lower() == "production" and settings.skip_auth:
+        raise RuntimeError(
+            "FATAL: SKIP_AUTH=true is not allowed when ENVIRONMENT=production. "
+            "Refusing to start to prevent unauthenticated access."
+        )
+
     logger.info("app_started", environment=settings.environment)
     yield
     await cosmos_service.close()

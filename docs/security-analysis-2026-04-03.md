@@ -126,10 +126,10 @@ Overall security posture is **moderate** with a solid baseline (JWT-based auth m
 ## Immediate To-Dos (Prioritized)
 
 ## Next 24 hours
-1. **Patch JWT validation** to enforce issuer and claims checks; add negative tests.
-2. **Add JWKS TTL/refresh-on-miss** logic.
-3. **Block artifact uploads to non-existent projects** with explicit 404.
-4. **Add deployment guard**: fail startup if production + `SKIP_AUTH=true`.
+1. ~~**Patch JWT validation** to enforce issuer and claims checks; add negative tests.~~ ✅ **Remediated** — JWT `decode()` now validates `issuer` from OIDC discovery metadata. Added negative test for wrong-issuer rejection.
+2. ~~**Add JWKS TTL/refresh-on-miss** logic.~~ ✅ **Remediated** — JWKS cache now has 60-minute TTL with `time.monotonic()`. On KID miss, JWKS is refreshed once before rejecting. Added tests for TTL expiry and KID-miss refresh.
+3. ~~**Block artifact uploads to non-existent projects** with explicit 404.~~ ✅ **Remediated** — `ArtifactService.upload_artifact()` now raises `NotFoundError` (HTTP 404) when `project_repository.get_by_id()` returns `None`. Added negative test.
+4. ~~**Add deployment guard**: fail startup if production + `SKIP_AUTH=true`.~~ ✅ **Remediated** — Lifespan function raises `RuntimeError` if `ENVIRONMENT=production` and `SKIP_AUTH=true`. Added test.
 
 ## Next 3–7 days
 5. Implement frontend/app-edge security headers (CSP/HSTS/frame restrictions/etc.).
@@ -152,10 +152,10 @@ Overall security posture is **moderate** with a solid baseline (JWT-based auth m
 
 | ID | Area | Severity | Status | Owner Suggestion |
 |---|---|---|---|---|
-| H1 | JWT issuer validation missing | High | Open | Backend/Auth |
-| H2 | JWKS cache no expiry | High | Open | Backend/Auth |
-| M1 | Artifact upload without project existence check | Medium | Open | Backend/Artifacts |
+| H1 | JWT issuer validation missing | High | ✅ Remediated | Backend/Auth |
+| H2 | JWKS cache no expiry | High | ✅ Remediated | Backend/Auth |
+| M1 | Artifact upload without project existence check | Medium | ✅ Remediated | Backend/Artifacts |
 | M2 | Missing frontend security headers | Medium | Open | Frontend/Platform |
-| M3 | Dev-mode toggle deployment risk | Medium | Open | Platform/DevOps |
+| M3 | Dev-mode toggle deployment risk | Medium | ✅ Remediated | Platform/DevOps |
 | M4 | Content-Disposition filename sanitization | Medium | Open | Backend/API |
 

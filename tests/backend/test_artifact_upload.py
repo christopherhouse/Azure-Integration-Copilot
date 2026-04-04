@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src" / "backend"))
 from domains.artifacts.service import ArtifactService
 from domains.projects.models import Project, ProjectStatus
 from domains.tenants.models import FREE_TIER, TierDefinition, TierFeatures, TierLimits
-from shared.exceptions import QuotaExceededError
+from shared.exceptions import NotFoundError, QuotaExceededError
 
 _test_env = {
     "ENVIRONMENT": "test",
@@ -406,3 +406,47 @@ async def test_delete_artifact_decrements_counters():
         mock_proj_repo.increment_artifact_count.assert_called_once_with(
             "t-001", "prj-001", amount=-1
         )
+
+
+# ---------------------------------------------------------------------------
+# Block artifact uploads for non-existent projects (M1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_upload_artifact_rejects_nonexistent_project():
+    """ArtifactService.upload_artifact raises NotFoundError when project does not exist."""
+    tenant = _make_tenant()
+    tier = TierDefinition(
+        id="tier_free",
+        name="Free",
+        slug="free",
+        limits=TierLimits(max_artifacts_per_project=25),
+    )
+
+    file = MagicMock()
+    file.read = AsyncMock(return_value=b"small content")
+    file.seek = AsyncMock()
+    file.filename = "workflow.json"
+    file.content_type = "application/json"
+
+    with (
+        patch("domains.artifacts.service.project_repository") as mock_proj_repo,
+        patch("domains.artifacts.service.artifact_repository"),
+        patch("domains.artifacts.service.tenant_repository"),
+        patch("domains.artifacts.service.blob_service"),
+        patch("domains.artifacts.service.event_grid_publisher"),
+    ):
+        mock_proj_repo.get_by_id = AsyncMock(return_value=None)
+
+        svc = ArtifactService()
+        with pytest.raises(NotFoundError) as exc_info:
+            await svc.upload_artifact(
+                tenant=tenant,
+                tier=tier,
+                project_id="prj-nonexistent",
+                file=file,
+            )
+
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail["project_id"] == "prj-nonexistent"
