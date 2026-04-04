@@ -1,8 +1,10 @@
 """Artifact metadata API routes."""
 
 import math
+import re
 import uuid
 from datetime import UTC, datetime
+from urllib.parse import quote
 
 import structlog
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
@@ -15,6 +17,35 @@ from .models import ArtifactResponse, ArtifactStatus
 from .service import artifact_service
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+# Pre-compiled regex for stripping unsafe characters from filenames used in
+# Content-Disposition headers.  Removes control characters (U+0000–U+001F,
+# U+007F), double-quotes, backslashes, and any characters outside the ASCII
+# printable range that could cause header parsing issues.
+_UNSAFE_FILENAME_RE = re.compile(r'[\x00-\x1f\x7f"\\]')
+
+
+def _sanitize_content_disposition(raw_filename: str) -> str:
+    """Build a safe ``Content-Disposition`` header value.
+
+    Returns an ``attachment`` value with both an ASCII-safe ``filename``
+    parameter **and** an RFC 5987 ``filename*`` parameter so that modern
+    browsers can display Unicode names correctly while legacy clients still
+    get a usable fallback.
+
+    Control characters, quotes, and backslashes are stripped from the ASCII
+    fallback to prevent header-injection attacks.
+    """
+    # ASCII-safe fallback: strip dangerous characters
+    safe = _UNSAFE_FILENAME_RE.sub("", raw_filename)
+    if not safe:
+        safe = "download"
+
+    # RFC 5987 encoded version for Unicode support
+    encoded = quote(raw_filename, safe="")
+
+    return f"attachment; filename=\"{safe}\"; filename*=UTF-8''{encoded}"
+
 
 router = APIRouter(prefix="/api/v1/projects/{project_id}/artifacts", tags=["artifacts"])
 
@@ -322,5 +353,5 @@ async def download_artifact(project_id: str, artifact_id: str, request: Request)
     return Response(
         content=content,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={"Content-Disposition": _sanitize_content_disposition(filename)},
     )

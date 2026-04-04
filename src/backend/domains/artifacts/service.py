@@ -37,17 +37,30 @@ class ArtifactService:
         Returns the created artifact metadata document.
         Raises ValueError for file size violations.
         """
-        # --- File size validation ---
+        # --- Streaming file size validation ---
+        # Read file in chunks to avoid loading the entire payload into memory
+        # before checking the size limit.  This prevents DoS from large uploads
+        # that would be rejected anyway.
         max_size = tier.limits.max_file_size_mb * 1024 * 1024
-        content = await file.read()
-        file_size = len(content)
-        await file.seek(0)
+        chunks: list[bytes] = []
+        bytes_read = 0
+        chunk_size = 256 * 1024  # 256 KiB per chunk
 
-        if file_size > max_size:
-            raise ValueError(
-                f"File size {file_size} exceeds maximum {max_size} bytes "
-                f"({tier.limits.max_file_size_mb} MB)."
-            )
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+            bytes_read += len(chunk)
+            if bytes_read > max_size:
+                raise ValueError(
+                    f"File size exceeds maximum {max_size} bytes "
+                    f"({tier.limits.max_file_size_mb} MB)."
+                )
+            chunks.append(chunk)
+
+        content = b"".join(chunks)
+        file_size = bytes_read
+        await file.seek(0)
 
         # --- Per-project artifact quota check ---
         project = await project_repository.get_by_id(tenant.id, project_id)
