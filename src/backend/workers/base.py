@@ -134,10 +134,10 @@ class BaseWorker:
                         logger.warning("receive_cancelled")
                         span.set_status(StatusCode.OK, "cancelled")
                         continue
-                    except Exception:
+                    except Exception as exc:
                         logger.error("receive_events_failed", exc_info=True)
                         span.set_status(StatusCode.ERROR, "receive_events_failed")
-                        span.record_exception(Exception("receive_events_failed"))
+                        span.record_exception(exc)
                         await asyncio.sleep(self._poll_interval)
                         continue
 
@@ -201,6 +201,8 @@ class BaseWorker:
             "worker process event",
             attributes=span_attrs,
         ) as span:
+            handler_attrs = {"worker.handler": self._handler_name}
+
             # --- Tenant validation ---
             if not tenant_id:
                 log.error("missing_tenant_id")
@@ -220,7 +222,7 @@ class BaseWorker:
             except Exception:
                 log.error("idempotency_check_failed", exc_info=True)
                 span.set_status(StatusCode.ERROR, "idempotency_check_failed")
-                _messages_failed.add(1, {"worker.handler": self._handler_name})
+                _messages_failed.add(1, handler_attrs)
                 await self._consumer.release([lock_token])
                 return
 
@@ -231,18 +233,18 @@ class BaseWorker:
                 await self._consumer.acknowledge([lock_token])
                 log.info("event_processing_succeeded")
                 span.set_status(StatusCode.OK)
-                _messages_processed.add(1, {"worker.handler": self._handler_name})
+                _messages_processed.add(1, handler_attrs)
 
             except TransientError:
                 log.warning("transient_error", exc_info=True)
                 span.set_status(StatusCode.ERROR, "transient_error")
-                _messages_failed.add(1, {"worker.handler": self._handler_name})
+                _messages_failed.add(1, handler_attrs)
                 await self._consumer.release([lock_token])
 
             except PermanentError as exc:
                 log.error("permanent_error", exc_info=True)
                 span.set_status(StatusCode.ERROR, "permanent_error")
-                _messages_failed.add(1, {"worker.handler": self._handler_name})
+                _messages_failed.add(1, handler_attrs)
                 try:
                     await self._handler.handle_failure(event_data, exc)
                 except Exception:
@@ -252,5 +254,5 @@ class BaseWorker:
             except Exception:
                 log.error("unexpected_error", exc_info=True)
                 span.set_status(StatusCode.ERROR, "unexpected_error")
-                _messages_failed.add(1, {"worker.handler": self._handler_name})
+                _messages_failed.add(1, handler_attrs)
                 await self._consumer.release([lock_token])
