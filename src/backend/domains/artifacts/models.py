@@ -40,11 +40,23 @@ class ArtifactStatus(StrEnum):
 VALID_TRANSITIONS: dict[ArtifactStatus, set[ArtifactStatus]] = {
     ArtifactStatus.UPLOADING: {ArtifactStatus.UPLOADED, ArtifactStatus.UNSUPPORTED},
     ArtifactStatus.UPLOADED: {ArtifactStatus.SCANNING},
-    ArtifactStatus.SCANNING: {ArtifactStatus.SCAN_PASSED, ArtifactStatus.SCAN_FAILED},
+    ArtifactStatus.SCANNING: {
+        ArtifactStatus.SCANNING,
+        ArtifactStatus.SCAN_PASSED,
+        ArtifactStatus.SCAN_FAILED,
+    },
     ArtifactStatus.SCAN_PASSED: {ArtifactStatus.PARSING},
-    ArtifactStatus.PARSING: {ArtifactStatus.PARSED, ArtifactStatus.PARSE_FAILED},
+    ArtifactStatus.PARSING: {
+        ArtifactStatus.PARSING,
+        ArtifactStatus.PARSED,
+        ArtifactStatus.PARSE_FAILED,
+    },
     ArtifactStatus.PARSED: {ArtifactStatus.GRAPH_BUILDING},
-    ArtifactStatus.GRAPH_BUILDING: {ArtifactStatus.GRAPH_BUILT, ArtifactStatus.GRAPH_FAILED},
+    ArtifactStatus.GRAPH_BUILDING: {
+        ArtifactStatus.GRAPH_BUILDING,
+        ArtifactStatus.GRAPH_BUILT,
+        ArtifactStatus.GRAPH_FAILED,
+    },
 }
 
 
