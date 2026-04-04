@@ -159,12 +159,13 @@ async def update_project(project_id: str, body: UpdateProjectRequest, request: R
             },
         )
 
+    user = getattr(request.state, "user", None)
     project = await project_service.update_project(
         tenant_id,
         project_id,
         body,
-        updated_by_id=getattr(getattr(request.state, "user", None), "id", None),
-        updated_by_name=getattr(getattr(request.state, "user", None), "display_name", None),
+        updated_by_id=user.id if user else None,
+        updated_by_name=user.display_name if user else None,
     )
     if project is None:
         return JSONResponse(

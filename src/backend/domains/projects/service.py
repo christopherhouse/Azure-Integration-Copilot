@@ -70,7 +70,7 @@ class ProjectService:
             name=request.name,
             description=request.description,
             createdBy=user_id,
-            createdByName=user_display_name or None,
+            createdByName=user_display_name if user_display_name else None,
             createdAt=now,
             updatedAt=now,
         )
