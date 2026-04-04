@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import structlog
 from azure.cosmos.aio import ContainerProxy
+from azure.cosmos.exceptions import CosmosResourceNotFoundError
 
 from shared.cosmos import cosmos_service
 
@@ -204,8 +205,17 @@ class GraphRepository:
         params = [{"name": "@pk", "value": partition_key}]
 
         doc_ids: list[str] = []
-        async for item in container.query_items(query=query, parameters=params):
-            doc_ids.append(item["id"])
+        try:
+            async for item in container.query_items(query=query, parameters=params):
+                doc_ids.append(item["id"])
+        except CosmosResourceNotFoundError:
+            # The graph container does not exist yet (no graph data has ever
+            # been written).  Nothing to delete.
+            logger.info(
+                "graph_container_not_found_skipping_delete",
+                partition_key=partition_key,
+            )
+            return 0
 
         count = 0
         for doc_id in doc_ids:
