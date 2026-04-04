@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 
 import structlog
+from azure.core.exceptions import ResourceNotFoundError
 from azure.identity.aio import DefaultAzureCredential
 from azure.storage.blob import ContentSettings
 from azure.storage.blob.aio import BlobServiceClient
@@ -46,8 +47,9 @@ class BlobService:
         try:
             await blob_client.delete_blob()
             logger.info("blob_deleted", blob_path=blob_path)
+        except ResourceNotFoundError:
+            logger.info("blob_already_deleted", blob_path=blob_path)
         except Exception:
-            # Best-effort: blob may have already been removed or never uploaded.
             logger.warning("blob_delete_failed", blob_path=blob_path, exc_info=True)
 
     async def download_blob(self, blob_path: str) -> bytes:
