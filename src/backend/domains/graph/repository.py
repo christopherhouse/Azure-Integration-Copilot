@@ -300,18 +300,20 @@ class GraphRepository:
         container = await self._get_container()
         type_field = "componentType" if doc_type == "component" else "edgeType"
 
+        # Fetch individual subtype values and count client-side because the
+        # current Cosmos SDK version does not support GROUP BY / non-VALUE
+        # aggregates.  Revisit if a future SDK adds support (azure-cosmos ≥5.x).
         query = (
-            f"SELECT c.{type_field} AS subtype, COUNT(1) AS cnt FROM c "
-            f"WHERE c.partitionKey = @pk AND c.type = @docType "
-            f"GROUP BY c.{type_field}"
+            f"SELECT VALUE c.{type_field} FROM c "
+            f"WHERE c.partitionKey = @pk AND c.type = @docType"
         )
         params = [
             {"name": "@pk", "value": partition_key},
             {"name": "@docType", "value": doc_type},
         ]
         counts: dict[str, int] = {}
-        async for item in container.query_items(query=query, parameters=params):
-            counts[item["subtype"]] = item["cnt"]
+        async for subtype in container.query_items(query=query, parameters=params):
+            counts[subtype] = counts.get(subtype, 0) + 1
         return counts
 
 
