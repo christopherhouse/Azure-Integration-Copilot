@@ -734,3 +734,132 @@ async def test_project_repository_increment_artifact_count_floors_at_zero():
         # The project passed to update should have artifact_count=0, not -1
         updated_arg = repo.update.call_args[0][0]
         assert updated_arg.artifact_count == 0
+
+
+# ---------------------------------------------------------------------------
+# created_by_name and updated_by tracking tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_project_stores_created_by_name():
+    """ProjectService.create_project stores user display_name in created_by_name."""
+    from domains.projects.models import CreateProjectRequest
+
+    tenant_id = "t-001"
+    user_id = "u-001"
+    user_display_name = "Alice Smith"
+    project = _make_project(name="Named Project")
+    project.created_by_name = user_display_name
+    request = CreateProjectRequest(name="Named Project")
+
+    with (
+        patch("domains.projects.service.project_repository") as mock_proj_repo,
+        patch("domains.projects.service.tenant_repository") as mock_tenant_repo,
+        patch("domains.projects.service.tier_service") as mock_tier_svc,
+    ):
+        mock_tenant_repo.increment_usage = AsyncMock(return_value=_make_tenant(project_count=1))
+        mock_tier_svc.get_tier.return_value = FREE_TIER
+        mock_proj_repo.create = AsyncMock(return_value=project)
+
+        from domains.projects.service import project_service
+
+        result = await project_service.create_project(request, tenant_id, user_id, user_display_name)
+
+        created_doc = mock_proj_repo.create.call_args[0][0]
+        assert created_doc.created_by_name == user_display_name
+        assert result.created_by_name == user_display_name
+
+
+@pytest.mark.asyncio
+async def test_create_project_response_includes_created_by_name(client):
+    """POST /api/v1/projects response includes createdByName field."""
+    tenant = _make_tenant()
+    user = _make_user()
+    user.display_name = "Alice Smith"
+    project = _make_project(name="Named Project")
+    project.created_by_name = "Alice Smith"
+
+    mock1, mock2, mock3 = _setup_context_mocks(tenant, user=user)
+    with mock1, mock2, mock3:
+        with patch("domains.projects.router.project_service") as mock_svc:
+            mock_svc.create_project = AsyncMock(return_value=project)
+
+            response = await client.post("/api/v1/projects", json={"name": "Named Project"})
+            assert response.status_code == 201
+            body = response.json()
+            assert body["data"]["createdByName"] == "Alice Smith"
+
+
+@pytest.mark.asyncio
+async def test_update_project_stores_updated_by():
+    """ProjectService.update_project stores updated_by_id and updated_by_name."""
+    from domains.projects.models import UpdateProjectRequest
+
+    tenant_id = "t-001"
+    project_id = "prj-001"
+    project = _make_project()
+    updated_project = _make_project(name="Renamed")
+    updated_project.updated_by = "u-001"
+    updated_project.updated_by_name = "Bob Jones"
+    request = UpdateProjectRequest(name="Renamed")
+
+    with (
+        patch("domains.projects.service.project_repository") as mock_proj_repo,
+    ):
+        mock_proj_repo.get_by_id = AsyncMock(return_value=project)
+        mock_proj_repo.update = AsyncMock(return_value=updated_project)
+
+        from domains.projects.service import project_service
+
+        result = await project_service.update_project(
+            tenant_id, project_id, request, updated_by_id="u-001", updated_by_name="Bob Jones"
+        )
+
+        updated_arg = mock_proj_repo.update.call_args[0][0]
+        assert updated_arg.updated_by == "u-001"
+        assert updated_arg.updated_by_name == "Bob Jones"
+        assert result.updated_by == "u-001"
+        assert result.updated_by_name == "Bob Jones"
+
+
+@pytest.mark.asyncio
+async def test_update_project_response_includes_updated_by(client):
+    """PATCH /api/v1/projects/{id} response includes updatedBy and updatedByName fields."""
+    tenant = _make_tenant()
+    user = _make_user()
+    user.display_name = "Bob Jones"
+    updated_project = _make_project(name="Renamed")
+    updated_project.updated_by = "u-001"
+    updated_project.updated_by_name = "Bob Jones"
+
+    mock1, mock2, mock3 = _setup_context_mocks(tenant, user=user)
+    with mock1, mock2, mock3:
+        with patch("domains.projects.router.project_service") as mock_svc:
+            mock_svc.update_project = AsyncMock(return_value=updated_project)
+
+            response = await client.patch(
+                "/api/v1/projects/prj-001", json={"name": "Renamed"}
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["data"]["updatedBy"] == "u-001"
+            assert body["data"]["updatedByName"] == "Bob Jones"
+
+
+@pytest.mark.asyncio
+async def test_get_project_response_includes_created_by_name(client):
+    """GET /api/v1/projects/{id} response includes createdByName field."""
+    tenant = _make_tenant()
+    project = _make_project()
+    project.created_by_name = "Alice Smith"
+
+    mock1, mock2, mock3 = _setup_context_mocks(tenant)
+    with mock1, mock2, mock3:
+        with patch("domains.projects.router.project_service") as mock_svc:
+            mock_svc.get_project = AsyncMock(return_value=project)
+
+            response = await client.get("/api/v1/projects/prj-001")
+            assert response.status_code == 200
+            body = response.json()
+            assert body["data"]["createdByName"] == "Alice Smith"

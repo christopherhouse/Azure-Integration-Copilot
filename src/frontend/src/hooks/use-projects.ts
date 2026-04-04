@@ -12,7 +12,10 @@ export interface Project {
   artifactCount: number;
   graphVersion: number | null;
   createdBy: string;
+  createdByName: string | null;
   createdAt: string;
+  updatedBy: string | null;
+  updatedByName: string | null;
   updatedAt: string;
 }
 

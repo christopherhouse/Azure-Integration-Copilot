@@ -21,7 +21,7 @@ class ProjectService:
     """Manages project lifecycle operations."""
 
     async def create_project(
-        self, request: CreateProjectRequest, tenant_id: str, user_id: str
+        self, request: CreateProjectRequest, tenant_id: str, user_id: str, user_display_name: str = ""
     ) -> Project:
         """Create a new project for a tenant.
 
@@ -70,6 +70,7 @@ class ProjectService:
             name=request.name,
             description=request.description,
             createdBy=user_id,
+            createdByName=user_display_name or None,
             createdAt=now,
             updatedAt=now,
         )
@@ -96,7 +97,12 @@ class ProjectService:
         return await project_repository.list_by_tenant(tenant_id, page, page_size)
 
     async def update_project(
-        self, tenant_id: str, project_id: str, request: UpdateProjectRequest
+        self,
+        tenant_id: str,
+        project_id: str,
+        request: UpdateProjectRequest,
+        updated_by_id: str | None = None,
+        updated_by_name: str | None = None,
     ) -> Project | None:
         """Update a project's name and/or description."""
         project = await project_repository.get_by_id(tenant_id, project_id)
@@ -107,6 +113,10 @@ class ProjectService:
             project.name = request.name
         if request.description is not None:
             project.description = request.description
+        if updated_by_id is not None:
+            project.updated_by = updated_by_id
+        if updated_by_name is not None:
+            project.updated_by_name = updated_by_name
 
         return await project_repository.update(project)
 

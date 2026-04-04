@@ -50,8 +50,10 @@ async def create_project(body: CreateProjectRequest, request: Request):
     # Get the user ID from the tenant owner
     tenant = request.state.tenant
     user_id = tenant.owner_id
+    user = getattr(request.state, "user", None)
+    user_display_name = user.display_name if user else ""
 
-    project = await project_service.create_project(body, tenant_id, user_id)
+    project = await project_service.create_project(body, tenant_id, user_id, user_display_name)
     project_resp = ProjectResponse.from_project(project)
     envelope = ResponseEnvelope(
         data=project_resp.model_dump(by_alias=True),
@@ -157,7 +159,13 @@ async def update_project(project_id: str, body: UpdateProjectRequest, request: R
             },
         )
 
-    project = await project_service.update_project(tenant_id, project_id, body)
+    project = await project_service.update_project(
+        tenant_id,
+        project_id,
+        body,
+        updated_by_id=getattr(getattr(request.state, "user", None), "id", None),
+        updated_by_name=getattr(getattr(request.state, "user", None), "display_name", None),
+    )
     if project is None:
         return JSONResponse(
             status_code=404,
