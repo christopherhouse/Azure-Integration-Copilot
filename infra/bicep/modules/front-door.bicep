@@ -343,7 +343,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
                 name: 'CacheExpiration'
                 parameters: {
                   typeName: 'DeliveryRuleCacheExpirationActionParameters'
-                  cacheBehavior: 'OverrideAlways'
+                  cacheBehavior: 'Override'
                   cacheType: 'All'
                   cacheDuration: '365.00:00:00'
                 }
