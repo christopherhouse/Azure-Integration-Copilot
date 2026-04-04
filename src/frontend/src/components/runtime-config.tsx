@@ -13,15 +13,17 @@ export function RuntimeConfig() {
 
   const apiBaseUrl = process.env.API_BASE_URL;
   const clarityProjectId = process.env.CLARITY_PROJECT_ID;
+  const googleMeasurementId = process.env.GOOGLE_MEASUREMENT_ID;
 
   // Only inject the config object if we have at least one value to provide.
-  if (!apiBaseUrl && !clarityProjectId) {
+  if (!apiBaseUrl && !clarityProjectId && !googleMeasurementId) {
     return null;
   }
 
   const config: RuntimeConfig = {};
   if (apiBaseUrl) config.apiBaseUrl = apiBaseUrl;
   if (clarityProjectId) config.clarityProjectId = clarityProjectId;
+  if (googleMeasurementId) config.googleMeasurementId = googleMeasurementId;
 
   // JSON.stringify does not escape "</script>" sequences which would break
   // out of the inline script tag.  Replace angle-bracket sequences with
