@@ -93,6 +93,13 @@ app.add_middleware(AuthMiddleware)
 # Starlette reverses registration order, so register CORS last.
 if settings.cors_allowed_origins:
     cors_origins = [o.strip() for o in settings.cors_allowed_origins.split(",") if o.strip()]
+    # Security guard: wildcard origin with credentials is a browser-enforced
+    # error, but fail loudly at startup so operators notice immediately.
+    if "*" in cors_origins:
+        raise RuntimeError(
+            "CORS: wildcard origin '*' must not be used with allow_credentials=True. "
+            "Specify explicit origins in CORS_ALLOWED_ORIGINS."
+        )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,

@@ -299,7 +299,7 @@ async def test_upload_artifact_service_checks_project_quota():
     project = _make_project(artifact_count=25)
 
     file = MagicMock()
-    file.read = AsyncMock(return_value=b"small content")
+    file.read = AsyncMock(side_effect=[b"small content", b""])
     file.seek = AsyncMock()
     file.filename = "workflow.json"
     file.content_type = "application/json"
@@ -337,7 +337,7 @@ async def test_upload_artifact_increments_project_artifact_count():
     artifact = _make_artifact()
 
     file = MagicMock()
-    file.read = AsyncMock(return_value=b"small content")
+    file.read = AsyncMock(side_effect=[b"small content", b""])
     file.seek = AsyncMock()
     file.filename = "workflow.json"
     file.content_type = "application/json"
@@ -425,7 +425,7 @@ async def test_upload_artifact_rejects_nonexistent_project():
     )
 
     file = MagicMock()
-    file.read = AsyncMock(return_value=b"small content")
+    file.read = AsyncMock(side_effect=[b"small content", b""])
     file.seek = AsyncMock()
     file.filename = "workflow.json"
     file.content_type = "application/json"

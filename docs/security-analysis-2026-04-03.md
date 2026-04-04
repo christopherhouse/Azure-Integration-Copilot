@@ -132,14 +132,15 @@ Overall security posture is **moderate** with a solid baseline (JWT-based auth m
 4. ~~**Add deployment guard**: fail startup if production + `SKIP_AUTH=true`.~~ ✅ **Remediated** — Lifespan function raises `RuntimeError` if `ENVIRONMENT=production` and `SKIP_AUTH=true`. Added test.
 
 ## Next 3–7 days
-5. Implement frontend/app-edge security headers (CSP/HSTS/frame restrictions/etc.).
-6. Sanitize `Content-Disposition` filename handling.
-7. Move upload size enforcement to streaming/chunked check.
-8. Add security-focused tests:
-   - wrong issuer token rejected,
-   - rotated JWKS accepted after refresh,
-   - artifact upload rejects unknown project,
-   - CORS config rejects insecure wildcard+credentials.
+5. ~~Implement frontend/app-edge security headers (CSP/HSTS/frame restrictions/etc.).~~ ✅ **Remediated** — Added CSP, X-Frame-Options (DENY), X-Content-Type-Options (nosniff), Referrer-Policy, HSTS, and Permissions-Policy via `next.config.ts` `headers()` API. CSP permits `'unsafe-inline'` for the RuntimeConfig inline script.
+6. ~~Sanitize `Content-Disposition` filename handling.~~ ✅ **Remediated** — Added `_sanitize_content_disposition()` in artifact router that strips control chars, quotes, and backslashes from ASCII fallback; emits RFC 5987 `filename*=UTF-8''<encoded>` for Unicode support.
+7. ~~Move upload size enforcement to streaming/chunked check.~~ ✅ **Remediated** — `ArtifactService.upload_artifact()` now reads in 256 KiB chunks with a running size counter, raising `ValueError` as soon as the limit is exceeded instead of buffering the entire payload first.
+8. ~~Add security-focused tests:~~
+   - ~~wrong issuer token rejected,~~ ✅ (existed)
+   - ~~rotated JWKS accepted after refresh,~~ ✅ (existed)
+   - ~~artifact upload rejects unknown project,~~ ✅ (existed)
+   - ~~CORS config rejects insecure wildcard+credentials.~~ ✅ **Remediated** — Startup guard added in `main.py` that raises `RuntimeError` when `CORS_ALLOWED_ORIGINS` contains `*`. Test added in `test_security_hardening.py`.
+   - Additional tests added: Content-Disposition sanitization (6 tests), streaming upload size enforcement (2 tests).
 
 ## Next 2–4 weeks
 9. Add security logging improvements (auth failures by reason, rate telemetry, anomaly detection signals).
@@ -155,7 +156,7 @@ Overall security posture is **moderate** with a solid baseline (JWT-based auth m
 | H1 | JWT issuer validation missing | High | ✅ Remediated | Backend/Auth |
 | H2 | JWKS cache no expiry | High | ✅ Remediated | Backend/Auth |
 | M1 | Artifact upload without project existence check | Medium | ✅ Remediated | Backend/Artifacts |
-| M2 | Missing frontend security headers | Medium | Open | Frontend/Platform |
+| M2 | Missing frontend security headers | Medium | ✅ Remediated | Frontend/Platform |
 | M3 | Dev-mode toggle deployment risk | Medium | ✅ Remediated | Platform/DevOps |
-| M4 | Content-Disposition filename sanitization | Medium | Open | Backend/API |
+| M4 | Content-Disposition filename sanitization | Medium | ✅ Remediated | Backend/API |
 
