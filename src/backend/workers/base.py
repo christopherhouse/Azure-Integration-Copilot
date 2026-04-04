@@ -129,10 +129,10 @@ class BaseWorker:
                         details = await self._consumer.receive_events()
                     except asyncio.CancelledError:
                         if not self._running:
-                            span.set_status(StatusCode.OK, "shutdown")
+                            span.set_status(StatusCode.OK)
                             break
                         logger.warning("receive_cancelled")
-                        span.set_status(StatusCode.OK, "cancelled")
+                        span.set_status(StatusCode.OK)
                         continue
                     except Exception as exc:
                         logger.error("receive_events_failed", exc_info=True)
@@ -146,7 +146,7 @@ class BaseWorker:
 
                     if not details:
                         _empty_polls.add(1, iter_attrs)
-                        span.set_status(StatusCode.OK, "no messages")
+                        span.set_status(StatusCode.OK)
                         logger.debug(
                             "poll_empty",
                             handler=self._handler_name,
@@ -216,7 +216,7 @@ class BaseWorker:
             try:
                 if await self._handler.is_already_processed(event_data):
                     log.info("event_already_processed")
-                    span.set_status(StatusCode.OK, "already_processed")
+                    span.set_status(StatusCode.OK)
                     await self._consumer.acknowledge([lock_token])
                     return
             except Exception:
