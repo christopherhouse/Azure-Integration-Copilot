@@ -19,7 +19,7 @@ from domains.projects.repository import project_repository
 from shared.cosmos import cosmos_service
 from shared.event_consumer import EventGridConsumer
 from shared.events import event_grid_publisher
-from shared.logging import setup_logging
+from shared.logging import setup_logging, setup_telemetry
 from workers.base import BaseWorker
 from workers.graph_builder.handler import GraphBuilderHandler
 
@@ -30,6 +30,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 async def main() -> None:
     setup_logging()
+    setup_telemetry(service_name="integrisight-worker-graph-builder")
 
     consumer = EventGridConsumer(
         endpoint=settings.event_grid_namespace_endpoint,

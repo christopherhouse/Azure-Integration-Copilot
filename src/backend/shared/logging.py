@@ -104,7 +104,7 @@ def _add_opentelemetry_context(
 # ---------------------------------------------------------------------------
 
 
-def setup_telemetry(app=None) -> None:
+def setup_telemetry(app=None, *, service_name: str = "integrisight-api") -> None:
     """Configure OpenTelemetry with Azure Monitor export.
 
     **Must be called at module level** — before any ASGI events are processed.
@@ -120,6 +120,10 @@ def setup_telemetry(app=None) -> None:
             because ``configure_azure_monitor`` only patches the FastAPI
             *class* — it does **not** retroactively instrument app instances
             that were created before it was called.
+        service_name: The OpenTelemetry ``service.name`` resource attribute.
+            Workers should pass their own name (e.g.
+            ``"integrisight-worker-scan-gate"``) so telemetry is correctly
+            attributed in Application Insights.
 
     When ``APPLICATIONINSIGHTS_CONNECTION_STRING`` is set, the Azure Monitor
     OpenTelemetry distro is used to configure:
@@ -138,7 +142,7 @@ def setup_telemetry(app=None) -> None:
 
     resource = Resource.create(
         {
-            "service.name": "integration-copilot-api",
+            "service.name": service_name,
             "service.version": "0.1.0",
         }
     )

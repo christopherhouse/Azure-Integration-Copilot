@@ -16,7 +16,7 @@ from config import settings
 from domains.artifacts.repository import artifact_repository
 from shared.event_consumer import EventGridConsumer
 from shared.events import event_grid_publisher
-from shared.logging import setup_logging
+from shared.logging import setup_logging, setup_telemetry
 from workers.base import BaseWorker
 from workers.scan_gate.handler import ScanGateHandler
 
@@ -27,6 +27,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 async def main() -> None:
     setup_logging()
+    setup_telemetry(service_name="integrisight-worker-scan-gate")
 
     consumer = EventGridConsumer(
         endpoint=settings.event_grid_namespace_endpoint,

@@ -7,10 +7,37 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 import structlog
+from opentelemetry import metrics, trace
+from opentelemetry.trace import StatusCode
 
 from shared.event_consumer import EventGridConsumer
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+tracer = trace.get_tracer(__name__)
+meter = metrics.get_meter(__name__)
+
+# -- OTel metrics instruments ------------------------------------------------
+_poll_counter = meter.create_counter(
+    "worker.poll.iterations",
+    description="Total number of poll-loop iterations",
+)
+_messages_received = meter.create_counter(
+    "worker.messages.received",
+    description="Total number of messages received from Event Grid",
+)
+_messages_processed = meter.create_counter(
+    "worker.messages.processed",
+    description="Total number of messages successfully processed",
+)
+_messages_failed = meter.create_counter(
+    "worker.messages.failed",
+    description="Total number of messages that failed processing",
+)
+_empty_polls = meter.create_counter(
+    "worker.poll.empty",
+    description="Total number of poll iterations that returned no messages",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -81,35 +108,74 @@ class BaseWorker:
         self._handler = handler
         self._poll_interval = poll_interval
         self._running = True
+        self._handler_name = type(handler).__name__
 
     async def run(self) -> None:
         """Main pull loop — runs until :meth:`stop` is called."""
-        logger.info("worker_started", handler=type(self._handler).__name__)
+        attrs = {"worker.handler": self._handler_name}
+        logger.info("worker_started", handler=self._handler_name)
+        poll_iteration = 0
         try:
             while self._running:
-                try:
-                    details = await self._consumer.receive_events()
-                except asyncio.CancelledError:
-                    if not self._running:
-                        break
-                    logger.warning("receive_cancelled")
-                    continue
-                except Exception:
-                    logger.error("receive_events_failed", exc_info=True)
-                    await asyncio.sleep(self._poll_interval)
-                    continue
+                poll_iteration += 1
+                iter_attrs = {**attrs, "worker.poll.iteration": poll_iteration}
+                _poll_counter.add(1, iter_attrs)
 
-                if not details:
-                    await asyncio.sleep(self._poll_interval)
-                    continue
+                with tracer.start_as_current_span(
+                    "worker poll",
+                    attributes=iter_attrs,
+                ) as span:
+                    try:
+                        details = await self._consumer.receive_events()
+                    except asyncio.CancelledError:
+                        if not self._running:
+                            span.set_status(StatusCode.OK, "shutdown")
+                            break
+                        logger.warning("receive_cancelled")
+                        span.set_status(StatusCode.OK, "cancelled")
+                        continue
+                    except Exception:
+                        logger.error("receive_events_failed", exc_info=True)
+                        span.set_status(StatusCode.ERROR, "receive_events_failed")
+                        span.record_exception(Exception("receive_events_failed"))
+                        await asyncio.sleep(self._poll_interval)
+                        continue
 
-                for detail in details:
-                    await self._process_event(detail)
+                    message_count = len(details) if details else 0
+                    span.set_attribute("worker.messages.count", message_count)
+
+                    if not details:
+                        _empty_polls.add(1, iter_attrs)
+                        span.set_status(StatusCode.OK, "no messages")
+                        logger.debug(
+                            "poll_empty",
+                            handler=self._handler_name,
+                            iteration=poll_iteration,
+                        )
+                        await asyncio.sleep(self._poll_interval)
+                        continue
+
+                    _messages_received.add(message_count, iter_attrs)
+                    logger.info(
+                        "poll_received",
+                        handler=self._handler_name,
+                        iteration=poll_iteration,
+                        message_count=message_count,
+                    )
+
+                    for detail in details:
+                        await self._process_event(detail)
+
+                    span.set_status(StatusCode.OK)
         except asyncio.CancelledError:
             logger.info("worker_cancelled", was_running=self._running)
         finally:
             await self._consumer.close()
-            logger.info("worker_stopped")
+            logger.info(
+                "worker_stopped",
+                handler=self._handler_name,
+                total_iterations=poll_iteration,
+            )
 
     def stop(self) -> None:
         """Signal the pull loop to exit after the current iteration."""
@@ -125,43 +191,66 @@ class BaseWorker:
         tenant_id = event_data.get("tenantId")
 
         log = logger.bind(event_id=event_id, event_type=event.type, tenant_id=tenant_id)
+        span_attrs = {
+            "worker.handler": self._handler_name,
+            "worker.event.id": event_id,
+            "worker.event.type": str(event.type),
+        }
 
-        # --- Tenant validation ---
-        if not tenant_id:
-            log.error("missing_tenant_id")
-            await self._consumer.acknowledge([lock_token])
-            return
-
-        # --- Idempotency check ---
-        try:
-            if await self._handler.is_already_processed(event_data):
-                log.info("event_already_processed")
+        with tracer.start_as_current_span(
+            "worker process event",
+            attributes=span_attrs,
+        ) as span:
+            # --- Tenant validation ---
+            if not tenant_id:
+                log.error("missing_tenant_id")
+                span.set_status(StatusCode.ERROR, "missing_tenant_id")
                 await self._consumer.acknowledge([lock_token])
                 return
-        except Exception:
-            log.error("idempotency_check_failed", exc_info=True)
-            await self._consumer.release([lock_token])
-            return
 
-        # --- Process ---
-        try:
-            log.info("event_processing_started")
-            await self._handler.handle(event_data)
-            await self._consumer.acknowledge([lock_token])
-            log.info("event_processing_succeeded")
+            span.set_attribute("worker.tenant.id", tenant_id)
 
-        except TransientError:
-            log.warning("transient_error", exc_info=True)
-            await self._consumer.release([lock_token])
-
-        except PermanentError as exc:
-            log.error("permanent_error", exc_info=True)
+            # --- Idempotency check ---
             try:
-                await self._handler.handle_failure(event_data, exc)
+                if await self._handler.is_already_processed(event_data):
+                    log.info("event_already_processed")
+                    span.set_status(StatusCode.OK, "already_processed")
+                    await self._consumer.acknowledge([lock_token])
+                    return
             except Exception:
-                log.error("handle_failure_callback_error", exc_info=True)
-            await self._consumer.acknowledge([lock_token])
+                log.error("idempotency_check_failed", exc_info=True)
+                span.set_status(StatusCode.ERROR, "idempotency_check_failed")
+                _messages_failed.add(1, {"worker.handler": self._handler_name})
+                await self._consumer.release([lock_token])
+                return
 
-        except Exception:
-            log.error("unexpected_error", exc_info=True)
-            await self._consumer.release([lock_token])
+            # --- Process ---
+            try:
+                log.info("event_processing_started")
+                await self._handler.handle(event_data)
+                await self._consumer.acknowledge([lock_token])
+                log.info("event_processing_succeeded")
+                span.set_status(StatusCode.OK)
+                _messages_processed.add(1, {"worker.handler": self._handler_name})
+
+            except TransientError:
+                log.warning("transient_error", exc_info=True)
+                span.set_status(StatusCode.ERROR, "transient_error")
+                _messages_failed.add(1, {"worker.handler": self._handler_name})
+                await self._consumer.release([lock_token])
+
+            except PermanentError as exc:
+                log.error("permanent_error", exc_info=True)
+                span.set_status(StatusCode.ERROR, "permanent_error")
+                _messages_failed.add(1, {"worker.handler": self._handler_name})
+                try:
+                    await self._handler.handle_failure(event_data, exc)
+                except Exception:
+                    log.error("handle_failure_callback_error", exc_info=True)
+                await self._consumer.acknowledge([lock_token])
+
+            except Exception:
+                log.error("unexpected_error", exc_info=True)
+                span.set_status(StatusCode.ERROR, "unexpected_error")
+                _messages_failed.add(1, {"worker.handler": self._handler_name})
+                await self._consumer.release([lock_token])
