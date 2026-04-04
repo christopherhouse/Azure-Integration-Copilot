@@ -253,19 +253,27 @@ Phase 1: Monorepo Scaffold
 **Task:** [010-foundry-agent-tools-and-analysis-flow.md](tasks/010-foundry-agent-tools-and-analysis-flow.md)
 
 **What gets built:**
+- AI Foundry infrastructure via Bicep (AI Services account, project, GPT-4o model deployment at 30K TPM, RBAC)
 - Analysis API endpoints
-- Analysis worker
-- Foundry Agent Service integration
-- Four custom tools (get_project_summary, get_graph_neighbors, get_component_details, run_impact_analysis)
+- Analysis worker using Microsoft Agent Framework SDK
+- Two agents: integration-analyst (with four FunctionTool definitions) and quality-evaluator (validates analyst responses)
+- Four custom tools (get_project_summary, get_graph_neighbors, get_component_details, run_impact_analysis) as typed Python functions
 - Tenant/project scoping enforcement in tools
-- Analysis result storage
+- Analyst → evaluator flow with up to 1 retry on failed evaluation
+- Analysis result storage with evaluation metadata
 - Notification worker + Web PubSub integration
 - Frontend analysis chat UI
 
 **Acceptance Criteria:**
+- [ ] AI Services account provisioned via Bicep with `kind: AIServices`
+- [ ] GPT-4o model deployed with GlobalStandard SKU at 30K TPM
+- [ ] Worker managed identity has `Cognitive Services User` on the AI Services account
 - [ ] `POST /api/v1/projects/{id}/analyses` creates an analysis request
-- [ ] Analysis worker invokes Foundry Agent Service
-- [ ] Agent calls custom tools that query the real graph
+- [ ] Microsoft Agent Framework SDK is used for agent orchestration
+- [ ] Integration-analyst agent calls custom tools that query the real graph
+- [ ] Quality-evaluator agent validates analyst responses against tool evidence
+- [ ] Failed evaluations trigger one analyst retry
+- [ ] Analysis results include evaluation metadata (verdict, confidence, issues)
 - [ ] Tools enforce tenant/project scoping
 - [ ] Analysis results are stored in Cosmos DB
 - [ ] Frontend shows analysis chat with results
