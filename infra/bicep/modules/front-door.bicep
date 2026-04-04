@@ -233,40 +233,6 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
         name: 'frontend-${name}'
         enabledState: 'Enabled'
         routes: [
-          // NextJS immutable static assets — content-hashed, safe to cache aggressively
-          {
-            name: 'route-frontend-static'
-            originGroupName: 'og-frontend'
-            customDomainNames: ['cd-frontend', 'cd-frontend-www']
-            supportedProtocols: ['Http', 'Https']
-            patternsToMatch: ['/_next/static/*']
-            forwardingProtocol: 'HttpsOnly'
-            httpsRedirect: 'Enabled'
-            linkToDefaultDomain: 'Disabled'
-            ruleSets: [
-              {
-                name: 'rsNextjsStaticCache'
-              }
-            ]
-            cacheConfiguration: {
-              queryStringCachingBehavior: 'IgnoreQueryString'
-              queryParameters: ''
-              compressionSettings: {
-                isCompressionEnabled: true
-                contentTypesToCompress: [
-                  'application/javascript'
-                  'application/x-javascript'
-                  'text/javascript'
-                  'text/css'
-                  'text/plain'
-                  'application/json'
-                  'image/svg+xml'
-                  'application/wasm'
-                ]
-              }
-            }
-          }
-          // Catch-all route — honour origin Cache-Control headers, enable compression
           {
             name: 'route-frontend'
             originGroupName: 'og-frontend'
@@ -276,23 +242,6 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
             forwardingProtocol: 'HttpsOnly'
             httpsRedirect: 'Enabled'
             linkToDefaultDomain: 'Disabled'
-            cacheConfiguration: {
-              queryStringCachingBehavior: 'UseQueryString'
-              queryParameters: ''
-              compressionSettings: {
-                isCompressionEnabled: true
-                contentTypesToCompress: [
-                  'application/javascript'
-                  'application/x-javascript'
-                  'text/javascript'
-                  'text/css'
-                  'text/html'
-                  'text/plain'
-                  'application/json'
-                  'image/svg+xml'
-                ]
-              }
-            }
           }
         ]
       }
@@ -325,35 +274,6 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
             forwardingProtocol: 'HttpsOnly'
             httpsRedirect: 'Enabled'
             linkToDefaultDomain: 'Disabled'
-          }
-        ]
-      }
-    ]
-
-    // -- Rule Sets --
-    ruleSets: [
-      {
-        name: 'rsNextjsStaticCache'
-        rules: [
-          {
-            name: 'CacheStaticAssets'
-            order: 1
-            actions: [
-              {
-                name: 'RouteConfigurationOverride'
-                parameters: {
-                  typeName: 'DeliveryRuleRouteConfigurationOverrideActionParameters'
-                  originGroupOverride: null
-                  cacheConfiguration: {
-                    queryStringCachingBehavior: 'IgnoreQueryString'
-                    cacheBehavior: 'OverrideAlways'
-                    cacheDuration: '365.00:00:00'
-                    isCompressionEnabled: 'Enabled'
-                  }
-                }
-              }
-            ]
-            matchProcessingBehavior: 'Stop'
           }
         ]
       }
