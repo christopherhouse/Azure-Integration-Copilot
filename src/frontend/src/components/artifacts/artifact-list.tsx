@@ -60,19 +60,17 @@ function EditableName({
   const [value, setValue] = useState(artifact.name);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const startEditing = useCallback(() => {
+    setValue(artifact.name);
+    setEditing(true);
+  }, [artifact.name]);
+
   useEffect(() => {
     if (editing) {
       inputRef.current?.focus();
       inputRef.current?.select();
     }
   }, [editing]);
-
-  // Sync value when artifact name changes externally
-  useEffect(() => {
-    if (!editing) {
-      setValue(artifact.name);
-    }
-  }, [artifact.name, editing]);
 
   const handleSave = useCallback(() => {
     const trimmed = value.trim();
@@ -140,7 +138,7 @@ function EditableName({
     <div className="group/name flex items-center gap-1">
       <span className="font-medium">{artifact.name}</span>
       <button
-        onClick={() => setEditing(true)}
+        onClick={startEditing}
         className="opacity-0 transition-opacity group-hover/name:opacity-100"
         title="Rename artifact"
       >
