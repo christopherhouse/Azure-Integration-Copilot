@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -8,7 +9,12 @@ import { ApiRequestError } from "@/lib/api";
 import { ArtifactUpload } from "@/components/artifacts/artifact-upload";
 import { ArtifactList } from "@/components/artifacts/artifact-list";
 import { useProject } from "@/hooks/use-projects";
-import { useArtifacts, useUploadArtifact } from "@/hooks/use-artifacts";
+import {
+  useArtifacts,
+  useUploadArtifact,
+  useDeleteArtifact,
+  useRenameArtifact,
+} from "@/hooks/use-artifacts";
 
 export default function ArtifactsPage() {
   const params = useParams<{ projectId: string }>();
@@ -22,6 +28,11 @@ export default function ArtifactsPage() {
   const { data: artifactData, isLoading: artifactsLoading } =
     useArtifacts(projectId);
   const uploadMutation = useUploadArtifact(projectId);
+  const deleteMutation = useDeleteArtifact(projectId);
+  const renameMutation = useRenameArtifact(projectId);
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
 
   const handleUpload = (file: File) => {
     uploadMutation.mutate(file, {
@@ -47,6 +58,41 @@ export default function ArtifactsPage() {
         toast.error(err instanceof Error ? err.message : "Upload failed");
       },
     });
+  };
+
+  const handleDelete = (artifactId: string) => {
+    setDeletingId(artifactId);
+    deleteMutation.mutate(artifactId, {
+      onSuccess: () => {
+        toast.success("Artifact deleted");
+        setDeletingId(null);
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to delete artifact",
+        );
+        setDeletingId(null);
+      },
+    });
+  };
+
+  const handleRename = (artifactId: string, newName: string) => {
+    setRenamingId(artifactId);
+    renameMutation.mutate(
+      { artifactId, name: newName },
+      {
+        onSuccess: () => {
+          toast.success("Artifact renamed");
+          setRenamingId(null);
+        },
+        onError: (err) => {
+          toast.error(
+            err instanceof Error ? err.message : "Failed to rename artifact",
+          );
+          setRenamingId(null);
+        },
+      },
+    );
   };
 
   if (projectLoading) {
@@ -102,7 +148,14 @@ export default function ArtifactsPage() {
       )}
 
       {artifactData && (
-        <ArtifactList artifacts={artifactData.data} projectId={projectId} />
+        <ArtifactList
+          artifacts={artifactData.data}
+          projectId={projectId}
+          onDelete={handleDelete}
+          onRename={handleRename}
+          isDeletingId={deletingId}
+          isRenamingId={renamingId}
+        />
       )}
     </div>
   );
