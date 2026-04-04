@@ -445,6 +445,31 @@ resource cosmosResource 'Microsoft.DocumentDB/databaseAccounts@2024-05-15' exist
   name: resourceNames.cosmosDb
 }
 
+resource cosmosSqlDatabase 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases@2024-05-15' existing = {
+  parent: cosmosResource
+  name: 'integration-copilot'
+}
+
+resource cosmosGraphContainer 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers@2024-05-15' existing = {
+  parent: cosmosSqlDatabase
+  name: 'graph'
+}
+
+// Stored procedure: server-side aggregation of graph component/edge counts
+resource graphCountByTypesSproc 'Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers/storedProcedures@2024-05-15' = {
+  parent: cosmosGraphContainer
+  name: 'graphCountByTypes'
+  properties: {
+    resource: {
+      id: 'graphCountByTypes'
+      body: loadTextContent('sprocs/graphCountByTypes.js')
+    }
+  }
+  dependsOn: [
+    cosmosDb
+  ]
+}
+
 resource storageResource 'Microsoft.Storage/storageAccounts@2023-05-01' existing = {
   name: resourceNames.storageAccount
 }
