@@ -245,7 +245,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
             linkToDefaultDomain: 'Disabled'
             ruleSets: [
               {
-                name: 'rs-nextjs-static-cache'
+                name: 'rsNextjsStaticCache'
               }
             ]
             cacheConfiguration: {
@@ -333,7 +333,7 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
     // -- Rule Sets --
     ruleSets: [
       {
-        name: 'rs-nextjs-static-cache'
+        name: 'rsNextjsStaticCache'
         rules: [
           {
             name: 'CacheStaticAssets'

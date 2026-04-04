@@ -197,10 +197,11 @@ class GraphBuilderHandler(WorkerHandler):
 
         # Compute and upsert graph summary
         try:
-            component_counts = await self._graph_repo.count_by_type(partition_key, "component")
-            edge_counts = await self._graph_repo.count_by_type(partition_key, "edge")
-            total_components = sum(component_counts.values())
-            total_edges = sum(edge_counts.values())
+            counts = await self._graph_repo.compute_summary_counts(partition_key)
+            component_counts: dict[str, int] = counts.get("componentCounts", {})
+            edge_counts: dict[str, int] = counts.get("edgeCounts", {})
+            total_components: int = counts.get("totalComponents", 0)
+            total_edges: int = counts.get("totalEdges", 0)
 
             summary_id = f"gs_{partition_key}"
             summary_doc = {

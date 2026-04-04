@@ -291,28 +291,21 @@ class GraphRepository:
 
     # -- Aggregation helpers --------------------------------------------------
 
-    async def count_by_type(self, partition_key: str, doc_type: str) -> dict[str, int]:
-        """Count documents of a given type grouped by their subtype field.
+    async def compute_summary_counts(self, partition_key: str) -> dict:
+        """Compute component and edge counts via the ``graphCountByTypes`` stored procedure.
 
-        For ``component`` documents, groups by ``componentType``.
-        For ``edge`` documents, groups by ``edgeType``.
+        The stored procedure runs server-side within the partition, avoiding
+        the need to transfer every document's subtype string over the network.
+
+        Returns a dict with keys:
+        ``componentCounts``, ``edgeCounts``, ``totalComponents``, ``totalEdges``.
         """
         container = await self._get_container()
-        type_field = "componentType" if doc_type == "component" else "edgeType"
-
-        query = (
-            f"SELECT c.{type_field} AS subtype, COUNT(1) AS cnt FROM c "
-            f"WHERE c.partitionKey = @pk AND c.type = @docType "
-            f"GROUP BY c.{type_field}"
+        result = await container.scripts.execute_stored_procedure(
+            sproc="graphCountByTypes",
+            partition_key=partition_key,
         )
-        params = [
-            {"name": "@pk", "value": partition_key},
-            {"name": "@docType", "value": doc_type},
-        ]
-        counts: dict[str, int] = {}
-        async for item in container.query_items(query=query, parameters=params):
-            counts[item["subtype"]] = item["cnt"]
-        return counts
+        return result
 
 
 graph_repository = GraphRepository()

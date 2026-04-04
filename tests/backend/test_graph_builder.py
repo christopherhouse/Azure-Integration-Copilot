@@ -144,12 +144,13 @@ def _make_handler(
         graph_repo.upsert_component = AsyncMock(return_value={})
         graph_repo.upsert_edge = AsyncMock(return_value={})
         graph_repo.upsert_summary = AsyncMock(return_value={})
-        graph_repo.count_by_type = AsyncMock(
-            side_effect=lambda pk, doc_type: (
-                {"logic_app_workflow": 1, "logic_app_action": 1, "external_service": 1}
-                if doc_type == "component"
-                else {"calls": 1}
-            )
+        graph_repo.compute_summary_counts = AsyncMock(
+            return_value={
+                "componentCounts": {"logic_app_workflow": 1, "logic_app_action": 1, "external_service": 1},
+                "edgeCounts": {"calls": 1},
+                "totalComponents": 3,
+                "totalEdges": 1,
+            }
         )
 
     if project_repo is None:
@@ -350,7 +351,12 @@ class TestGraphBuilderHandle:
     async def test_raises_transient_error_on_component_upsert_failure(self):
         graph_repo = AsyncMock()
         graph_repo.upsert_component = AsyncMock(side_effect=RuntimeError("cosmos error"))
-        graph_repo.count_by_type = AsyncMock(return_value={})
+        graph_repo.compute_summary_counts = AsyncMock(return_value={
+            "componentCounts": {},
+            "edgeCounts": {},
+            "totalComponents": 0,
+            "totalEdges": 0,
+        })
 
         handler, *_ = _make_handler(graph_repo=graph_repo)
 
