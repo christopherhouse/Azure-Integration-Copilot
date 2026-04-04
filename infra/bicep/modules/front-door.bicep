@@ -340,12 +340,16 @@ module frontDoor 'br/public:avm/res/cdn/profile:0.14.0' = {
             order: 1
             actions: [
               {
-                name: 'CacheExpiration'
+                name: 'RouteConfigurationOverride'
                 parameters: {
-                  typeName: 'DeliveryRuleCacheExpirationActionParameters'
-                  cacheBehavior: 'Override'
-                  cacheType: 'All'
-                  cacheDuration: '365.00:00:00'
+                  typeName: 'DeliveryRuleRouteConfigurationOverrideActionParameters'
+                  originGroupOverride: null
+                  cacheConfiguration: {
+                    queryStringCachingBehavior: 'IgnoreQueryString'
+                    cacheBehavior: 'OverrideAlways'
+                    cacheDuration: '365.00:00:00'
+                    isCompressionEnabled: 'Enabled'
+                  }
                 }
               }
             ]
