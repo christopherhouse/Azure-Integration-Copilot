@@ -38,6 +38,18 @@ class BlobService:
         )
         logger.info("blob_uploaded", blob_path=blob_path)
 
+    async def delete_blob(self, blob_path: str) -> None:
+        """Delete a blob from the artifacts container. No-op if blob does not exist."""
+        client = await self._get_client()
+        container_client = client.get_container_client(ARTIFACTS_CONTAINER)
+        blob_client = container_client.get_blob_client(blob_path)
+        try:
+            await blob_client.delete_blob()
+            logger.info("blob_deleted", blob_path=blob_path)
+        except Exception:
+            # Best-effort: blob may have already been removed or never uploaded.
+            logger.warning("blob_delete_failed", blob_path=blob_path, exc_info=True)
+
     async def download_blob(self, blob_path: str) -> bytes:
         """Download the full contents of a blob from the artifacts container."""
         client = await self._get_client()

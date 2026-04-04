@@ -264,6 +264,68 @@ async def test_delete_artifact_returns_404_when_not_found(client):
 
 
 # ---------------------------------------------------------------------------
+# PATCH /api/v1/projects/{projectId}/artifacts/{artifactId} — Rename
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_rename_artifact_returns_updated(client):
+    """PATCH /api/v1/projects/{id}/artifacts/{id} renames and returns artifact."""
+    tenant = _make_tenant()
+    artifact = _make_artifact()
+    renamed = _make_artifact(name="new-label.json")
+
+    mock1, mock2, mock3 = _setup_context_mocks(tenant)
+    with mock1, mock2, mock3:
+        with patch("domains.artifacts.router.artifact_service") as mock_svc:
+            mock_svc.rename_artifact = AsyncMock(return_value=renamed)
+
+            response = await client.patch(
+                "/api/v1/projects/prj-001/artifacts/art-001",
+                json={"name": "new-label.json"},
+            )
+            assert response.status_code == 200
+            body = response.json()
+            assert body["data"]["name"] == "new-label.json"
+            mock_svc.rename_artifact.assert_called_once_with(
+                "t-001", "prj-001", "art-001", "new-label.json"
+            )
+
+
+@pytest.mark.asyncio
+async def test_rename_artifact_returns_404_when_not_found(client):
+    """PATCH /api/v1/projects/{id}/artifacts/{id} returns 404 for missing artifact."""
+    tenant = _make_tenant()
+
+    mock1, mock2, mock3 = _setup_context_mocks(tenant)
+    with mock1, mock2, mock3:
+        with patch("domains.artifacts.router.artifact_service") as mock_svc:
+            mock_svc.rename_artifact = AsyncMock(return_value=None)
+
+            response = await client.patch(
+                "/api/v1/projects/prj-001/artifacts/art-nonexistent",
+                json={"name": "new-name.json"},
+            )
+            assert response.status_code == 404
+            body = response.json()
+            assert body["error"]["code"] == "RESOURCE_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_rename_artifact_rejects_empty_name(client):
+    """PATCH /api/v1/projects/{id}/artifacts/{id} rejects empty name."""
+    tenant = _make_tenant()
+
+    mock1, mock2, mock3 = _setup_context_mocks(tenant)
+    with mock1, mock2, mock3:
+        response = await client.patch(
+            "/api/v1/projects/prj-001/artifacts/art-001",
+            json={"name": ""},
+        )
+        assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # Route registration
 # ---------------------------------------------------------------------------
 
