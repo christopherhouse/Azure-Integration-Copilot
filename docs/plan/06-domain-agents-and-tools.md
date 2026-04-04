@@ -2,19 +2,20 @@
 
 ## Goals
 
-- Define the MVP agent strategy using Azure AI Foundry Agent Service.
-- Define the initial agent and its capabilities.
+- Define the MVP agent strategy using Microsoft Agent Framework on Azure AI Foundry.
+- Define the initial agents (analyst and quality evaluator) and their capabilities.
 - Define real custom tools with input/output contracts.
-- Define what the agent can do versus what must remain deterministic.
+- Define what agents can do versus what must remain deterministic.
 - Define tenant/project scoping rules for tool invocations.
+- Define the quality evaluation agent and its role in the analysis pipeline.
 - Define sample prompts and use cases.
 - Define the analysis flow from user request to stored result.
 
 ## Scope
 
-MVP: one agent, four custom tools, project-scoped analysis, results stored in Cosmos DB.
+MVP: two agents (integration-analyst + quality-evaluator), four custom tools, project-scoped analysis, results stored in Cosmos DB.
 
-Future: multiple specialized agents, agent-to-agent orchestration, custom user prompts.
+Future: additional specialized agents, agent-to-agent orchestration, custom user prompts.
 
 ---
 
@@ -23,34 +24,56 @@ Future: multiple specialized agents, agent-to-agent orchestration, custom user p
 ### Principles
 
 1. **Real tools only.** No simulated or mocked agent behavior. Every tool call hits real data.
-2. **Deterministic parsing first, agent reasoning second.** The graph is built by deterministic parsers. The agent reasons over the structured graph, not raw artifact files.
-3. **Single agent for MVP.** One agent handles all analysis use cases. Agent routing/specialization is future scope.
-4. **Tenant/project scoping is non-negotiable.** Every tool call is scoped to a specific tenant and project. The agent cannot access cross-tenant data.
+2. **Deterministic parsing first, agent reasoning second.** The graph is built by deterministic parsers. Agents reason over the structured graph, not raw artifact files.
+3. **Two agents for MVP.** One analyst agent with tools, one quality evaluator agent that validates analyst responses against tool call evidence. Additional agent specialization is future scope.
+4. **Tenant/project scoping is non-negotiable.** Every tool call is scoped to a specific tenant and project. Agents cannot access cross-tenant data.
+5. **Validate before returning.** Every analyst response is evaluated by the quality agent before being stored. This prevents hallucinated data from reaching users.
 
-### Why Foundry Agent Service
+### Why Microsoft Agent Framework
 
-| Concern | Custom LLM Integration | Foundry Agent Service (chosen) |
-|---------|----------------------|-------------------------------|
-| Tool calling | Must implement tool dispatch | Built-in tool calling with function definitions |
-| Conversation management | Must build conversation state | Managed by the service |
-| Hosting | Self-hosted inference | Managed service |
-| Iteration speed | High (custom code for every feature) | Medium (define tools, let service handle orchestration) |
+| Concern | Raw Foundry SDK (`AIProjectClient` thread/run) | Microsoft Agent Framework (chosen) |
+|---------|-----------------------------------------------|------------------------------------|
+| Tool calling | Manual JSON tool definitions + custom dispatch loop | `FunctionTool` auto-generates schemas from Python type hints |
+| Multi-agent | Must build custom orchestration | Built-in `AgentGroupChat` with selection/termination strategies |
+| Conversation management | Manual thread/run polling loop | Managed by framework via `AzureAIAgent` |
+| Hosting | Managed service | Managed service (same Foundry backend) |
+| Extensibility | High effort for each new pattern | Graph-based workflows, reflection, fan-out/fan-in built-in |
+| Post-MVP path | Significant refactor to add agents | Add agents to existing orchestration naturally |
 
 ---
 
-## Initial Agent
+## Infrastructure Requirements
 
-### Agent Definition
+The following Azure resources must be provisioned via Bicep as part of Task 010:
+
+| Resource | Type | Configuration |
+|----------|------|---------------|
+| AI Services account | `Microsoft.CognitiveServices/accounts` (kind: `AIServices`) | SKU: S0, public network access enabled (no private networking for MVP) |
+| AI Foundry project | Created within the AI Services account | Links to Log Analytics for telemetry |
+| GPT-4o model deployment | `Microsoft.CognitiveServices/accounts/deployments` | `GlobalStandard` SKU, 30K TPM capacity (fallback to `Standard` if quota unavailable) |
+| RBAC | `Cognitive Services User` | Assigned to worker managed identity on the AI Services account |
+
+Bicep module: `infra/bicep/modules/ai-foundry.bicep`
+
+> **Note:** Private networking is not configured for Foundry resources in the MVP. The AI Services account uses public network access. This can be locked down post-MVP by adding private endpoints and VNet integration.
+
+---
+
+## Agents
+
+### Agent 1: Integration Analyst
+
+#### Agent Definition
 
 | Property | Value |
 |----------|-------|
 | Agent Name | `integration-analyst` |
-| Model | GPT-4o (or latest available in Foundry) |
+| Model | GPT-4o (deployed via Bicep) |
 | Temperature | 0.3 (prefer precision over creativity) |
 | Max tokens | 4096 |
 | Tools | `get_project_summary`, `get_graph_neighbors`, `get_component_details`, `run_impact_analysis` |
 
-### System Prompt
+#### System Prompt
 
 ```
 You are an integration analyst for the Integrisight.ai platform.
@@ -73,6 +96,56 @@ Context:
 - Components: {totalComponents}
 - Edges: {totalEdges}
 ```
+
+### Agent 2: Quality Evaluator
+
+#### Agent Definition
+
+| Property | Value |
+|----------|-------|
+| Agent Name | `quality-evaluator` |
+| Model | GPT-4o (same deployment as analyst) |
+| Temperature | 0.1 (strict evaluation, minimal creativity) |
+| Max tokens | 2048 |
+| Tools | None (evaluates analyst output only) |
+
+#### System Prompt
+
+```
+You are a quality evaluator for Integrisight.ai analysis responses.
+
+You review the integration analyst's response and verify it against the tool call evidence provided.
+
+You receive:
+1. The user's original question.
+2. The analyst's response.
+3. The complete list of tool calls and their outputs.
+
+Rules:
+- Check that every component name, ID, count, and relationship cited in the response appears in the tool call outputs.
+- Check that the response actually answers the user's question.
+- If the response fabricates data not present in tool outputs, mark it as FAILED with specific citations of the fabricated claims.
+- If the response is accurate but incomplete, mark it as PASSED with a note about what was missed.
+- If the response is accurate and complete, mark it as PASSED.
+
+Return a JSON object:
+{
+  "verdict": "PASSED" | "FAILED",
+  "confidence": 0.0 to 1.0,
+  "issues": ["list of specific issues found, empty if PASSED"],
+  "summary": "one-sentence evaluation summary"
+}
+```
+
+#### Evaluation Flow
+
+1. Analyst produces a candidate response with tool call history.
+2. Worker invokes quality-evaluator with the user prompt, analyst response, and tool call outputs.
+3. Evaluator returns a structured verdict.
+4. If `FAILED` and retry count < 1: the evaluator's issues are fed back to the analyst as additional context, and the analyst is asked to revise. The revised response is re-evaluated.
+5. If `PASSED` or max retries reached: the final response is stored with evaluation metadata.
+
+This adds ~1 extra LLM call per analysis (cheap with GPT-4o). Failed retries add at most 2 more calls.
 
 ---
 
@@ -334,18 +407,22 @@ Performs a breadth-first traversal from a component to find all transitively dep
    e. Return 202 with analysis ID
 4. Analysis Worker pulls AnalysisRequested event.
 5. Worker loads project context (graph summary, component list).
-6. Worker invokes Foundry Agent Service:
+6. Worker creates integration-analyst agent via Microsoft Agent Framework:
    - System prompt with tenant/project context
    - User prompt from the analysis request
-   - Tool definitions for all four tools
-7. Agent reasons and calls tools as needed.
-8. Worker intercepts tool calls, injects tenant/project scope, executes against Cosmos DB.
-9. Agent produces final response.
-10. Worker stores analysis result in Cosmos DB (status: "completed").
-11. Worker publishes AnalysisCompleted event.
-12. Notification Worker sends realtime update via Web PubSub.
-13. Frontend receives notification, fetches analysis result from API.
-14. Frontend displays result to user.
+   - FunctionTool definitions for all four tools (auto-generated from Python type hints)
+7. Analyst agent reasons and calls tools as needed.
+8. FunctionTool execution injects tenant/project scope, queries Cosmos DB.
+9. Analyst produces candidate response.
+10. Worker invokes quality-evaluator agent with: user prompt + analyst response + tool call history.
+11. Evaluator returns verdict (PASSED/FAILED + issues + confidence).
+12. If FAILED and retry count < 1: feed issues back to analyst for revision, re-evaluate.
+13. If PASSED or max retries reached: store final result with eval metadata.
+14. Worker stores analysis result in Cosmos DB (status: "completed").
+15. Worker publishes AnalysisCompleted event.
+16. Notification Worker sends realtime update via Web PubSub.
+17. Frontend receives notification, fetches analysis result from API.
+18. Frontend displays result to user.
 ```
 
 ### Analysis Entity
@@ -365,6 +442,13 @@ Performs a breadth-first traversal from a component to find all transitively dep
       { "tool": "get_project_summary", "durationMs": 120 },
       { "tool": "run_impact_analysis", "input": { "componentId": "cmp_01HQ...", "direction": "downstream" }, "durationMs": 340 }
     ],
+    "evaluation": {
+      "verdict": "PASSED",
+      "confidence": 0.95,
+      "issues": [],
+      "summary": "Response accurately cites tool outputs and answers the user's question.",
+      "retryCount": 0
+    },
     "totalDurationMs": 2100,
     "modelTokensUsed": 1850
   },
@@ -389,17 +473,23 @@ Performs a breadth-first traversal from a component to find all transitively dep
 
 | Decision | Chosen | Rationale |
 |----------|--------|-----------|
-| Agent count (MVP) | 1 | Single agent with four tools covers all MVP use cases |
+| Agent count (MVP) | 2 (analyst + quality evaluator) | Analyst answers questions; evaluator validates responses against tool evidence to prevent hallucination |
+| Agent framework | Microsoft Agent Framework SDK | Built-in multi-agent support (`AgentGroupChat`), `FunctionTool` auto-schema, foundation for post-MVP patterns |
 | Tool scoping | Tenant/project injected by worker, not LLM | Security: LLM cannot choose to access other tenants |
-| Agent model | GPT-4o via Foundry | Best reasoning capability available |
+| Agent model | GPT-4o deployed via Bicep (GlobalStandard, 30K TPM) | Best reasoning capability available; single deployment shared by both agents |
+| Foundry infrastructure | Bicep IaC, no private networking | AI Services account + project + model deployment provisioned automatically; private endpoints deferred to post-MVP |
 | Analysis storage | Cosmos DB alongside other data | Consistent query patterns; tenant-scoped |
 | Traversal depth limit | 3 hops default, max 5 | Prevents runaway graph queries |
+| Eval retry policy | Max 1 retry on FAILED evaluation | Balances quality vs. cost; caps at 3 total LLM calls per analysis |
 
 ## Assumptions
 
-- Foundry Agent Service supports custom function/tool definitions callable from Python SDK.
+- Microsoft Agent Framework SDK (`agent-framework` package) supports `FunctionTool` with auto-generated schemas from Python type hints and docstrings.
+- `AIProjectClient` from `azure-ai-projects` integrates with Agent Framework for Foundry-hosted agent operations.
+- Async credentials from `azure.identity.aio` are required (Agent Framework uses async patterns).
 - Tool call latency to Cosmos DB is < 500ms per call.
-- The agent typically makes 2–5 tool calls per analysis.
+- The analyst agent typically makes 2–5 tool calls per analysis.
+- The quality evaluator adds ~1 extra LLM call per analysis (plus up to 2 more on retry).
 
 ## Open Questions
 
