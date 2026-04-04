@@ -87,8 +87,8 @@ function graphCountByTypes() {
         );
 
         if (!accepted) {
-            // Query was not accepted (budget exhausted).  Return partial result
-            // so the caller can retry.
+            // Query was not accepted (execution budget exhausted).  Throw so
+            // the caller receives a transient error and can retry.
             throw new Error("queryDocuments was not accepted by the server. Partition may be too large.");
         }
     }
