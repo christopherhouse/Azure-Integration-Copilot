@@ -1,3 +1,4 @@
+import time
 import uuid
 
 import httpx
@@ -16,15 +17,29 @@ _DEV_EXTERNAL_ID = "dev-user-001"
 _DEV_EMAIL = "dev@localhost"
 _DEV_DISPLAY_NAME = "Dev User"
 
-# JWKS cache
+# JWKS + OIDC metadata cache with TTL
+_JWKS_CACHE_TTL_SECONDS = 3600  # 60 minutes
+
 _jwks_cache: dict | None = None
+_jwks_cache_timestamp: float = 0.0
+_issuer_cache: str | None = None
 
 
-async def _fetch_jwks(tenant_subdomain: str) -> dict:
-    """Fetch JWKS from Microsoft Entra External ID (CIAM) discovery endpoint."""
-    global _jwks_cache  # noqa: PLW0603
-    if _jwks_cache is not None:
-        return _jwks_cache
+async def _fetch_oidc_metadata(tenant_subdomain: str) -> tuple[dict, str]:
+    """Fetch JWKS and issuer from Microsoft Entra External ID (CIAM) OIDC discovery endpoint.
+
+    Returns (jwks_dict, issuer_string).
+    """
+    global _jwks_cache, _jwks_cache_timestamp, _issuer_cache  # noqa: PLW0603
+
+    now = time.monotonic()
+    cache_valid = (
+        _jwks_cache is not None
+        and _issuer_cache is not None
+        and (now - _jwks_cache_timestamp) < _JWKS_CACHE_TTL_SECONDS
+    )
+    if cache_valid:
+        return _jwks_cache, _issuer_cache
 
     discovery_url = (
         f"https://{tenant_subdomain}.ciamlogin.com/{tenant_subdomain}.onmicrosoft.com/v2.0/.well-known/openid-configuration"
@@ -32,13 +47,35 @@ async def _fetch_jwks(tenant_subdomain: str) -> dict:
     async with httpx.AsyncClient() as client:
         discovery = await client.get(discovery_url)
         discovery.raise_for_status()
-        jwks_uri = discovery.json()["jwks_uri"]
+        discovery_data = discovery.json()
+        jwks_uri = discovery_data["jwks_uri"]
+        issuer = discovery_data["issuer"]
 
         jwks_response = await client.get(jwks_uri)
         jwks_response.raise_for_status()
         _jwks_cache = jwks_response.json()
+        _issuer_cache = issuer
+        _jwks_cache_timestamp = now
 
-    return _jwks_cache
+    return _jwks_cache, _issuer_cache
+
+
+async def _refresh_jwks(tenant_subdomain: str) -> dict:
+    """Force-refresh the JWKS cache (e.g. on KID miss) and return updated JWKS."""
+    global _jwks_cache, _jwks_cache_timestamp, _issuer_cache  # noqa: PLW0603
+    _jwks_cache = None
+    _issuer_cache = None
+    _jwks_cache_timestamp = 0.0
+    jwks, _ = await _fetch_oidc_metadata(tenant_subdomain)
+    return jwks
+
+
+def _find_signing_key(jwks: dict, kid: str) -> dict:
+    """Find a signing key by KID in the JWKS keyset."""
+    for key in jwks.get("keys", []):
+        if key.get("kid") == kid:
+            return key
+    return {}
 
 
 def _make_401_response(message: str, request_id: str) -> JSONResponse:
@@ -95,16 +132,17 @@ class AuthMiddleware(BaseHTTPMiddleware):
         token = auth_header[7:]
 
         try:
-            # Fetch JWKS and validate token
-            jwks = await _fetch_jwks(settings.entra_ciam_tenant_subdomain)
+            # Fetch JWKS and OIDC issuer, with TTL-based caching
+            jwks, issuer = await _fetch_oidc_metadata(settings.entra_ciam_tenant_subdomain)
             unverified_header = jwt.get_unverified_header(token)
+            kid = unverified_header.get("kid")
 
-            # Find the matching key
-            rsa_key: dict = {}
-            for key in jwks.get("keys", []):
-                if key.get("kid") == unverified_header.get("kid"):
-                    rsa_key = key
-                    break
+            # Find the matching key; on KID miss, refresh JWKS once before rejecting
+            rsa_key = _find_signing_key(jwks, kid)
+            if not rsa_key:
+                logger.info("jwks_kid_miss_refreshing", kid=kid)
+                jwks = await _refresh_jwks(settings.entra_ciam_tenant_subdomain)
+                rsa_key = _find_signing_key(jwks, kid)
 
             if not rsa_key:
                 return _make_401_response("Unable to find appropriate signing key.", request_id)
@@ -114,6 +152,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 rsa_key,
                 algorithms=["RS256"],
                 audience=settings.entra_ciam_client_id,
+                issuer=issuer,
             )
 
             request.state.external_id = payload.get("oid", payload.get("sub", ""))

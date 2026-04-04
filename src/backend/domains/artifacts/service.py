@@ -11,7 +11,7 @@ from domains.tenants.models import Tenant, TierDefinition
 from domains.tenants.repository import tenant_repository
 from shared.blob import blob_service
 from shared.events import ARTIFACT_UPLOADED, build_cloud_event, event_grid_publisher
-from shared.exceptions import QuotaExceededError
+from shared.exceptions import NotFoundError, QuotaExceededError
 
 from .content_hash import compute_hash
 from .models import Artifact, ArtifactStatus, transition_status
@@ -51,16 +51,20 @@ class ArtifactService:
 
         # --- Per-project artifact quota check ---
         project = await project_repository.get_by_id(tenant.id, project_id)
-        if project is not None:
-            if project.artifact_count >= tier.limits.max_artifacts_per_project:
-                raise QuotaExceededError(
-                    message="Artifact limit per project exceeded.",
-                    detail={
-                        "limit": "max_artifacts_per_project",
-                        "current": project.artifact_count,
-                        "max": tier.limits.max_artifacts_per_project,
-                    },
-                )
+        if project is None:
+            raise NotFoundError(
+                message="Project not found.",
+                detail={"project_id": project_id},
+            )
+        if project.artifact_count >= tier.limits.max_artifacts_per_project:
+            raise QuotaExceededError(
+                message="Artifact limit per project exceeded.",
+                detail={
+                    "limit": "max_artifacts_per_project",
+                    "current": project.artifact_count,
+                    "max": tier.limits.max_artifacts_per_project,
+                },
+            )
 
         # --- Generate artifact ID ---
         artifact_id = f"art_{uuid.uuid4().hex[:12]}"
