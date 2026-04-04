@@ -194,6 +194,56 @@ class GraphRepository:
 
     # -- Deletion helpers -----------------------------------------------------
 
+    async def delete_by_artifact_id(self, partition_key: str, artifact_id: str) -> int:
+        """Hard-delete all graph documents (components, edges) linked to a specific artifact.
+
+        Returns the number of documents deleted.
+        """
+        container = await self._get_container()
+
+        query = (
+            "SELECT c.id FROM c WHERE c.partitionKey = @pk "
+            "AND c.artifactId = @artifactId"
+        )
+        params = [
+            {"name": "@pk", "value": partition_key},
+            {"name": "@artifactId", "value": artifact_id},
+        ]
+
+        doc_ids: list[str] = []
+        try:
+            async for item in container.query_items(query=query, parameters=params):
+                doc_ids.append(item["id"])
+        except CosmosResourceNotFoundError:
+            logger.info(
+                "graph_container_not_found_skipping_artifact_delete",
+                partition_key=partition_key,
+                artifact_id=artifact_id,
+            )
+            return 0
+
+        count = 0
+        for doc_id in doc_ids:
+            try:
+                await container.delete_item(item=doc_id, partition_key=partition_key)
+                count += 1
+            except Exception as exc:
+                logger.warning(
+                    "failed_to_delete_graph_doc_for_artifact",
+                    doc_id=doc_id,
+                    partition_key=partition_key,
+                    artifact_id=artifact_id,
+                    error=str(exc),
+                )
+
+        logger.info(
+            "graph_docs_deleted_for_artifact",
+            partition_key=partition_key,
+            artifact_id=artifact_id,
+            count=count,
+        )
+        return count
+
     async def delete_all_by_project(self, partition_key: str) -> int:
         """Hard-delete all graph documents (components, edges, summaries) for a project.
 

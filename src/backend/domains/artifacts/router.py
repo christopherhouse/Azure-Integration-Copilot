@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import structlog
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel, Field
 
 from shared.models import Meta, PaginatedResponse, PaginationInfo, ResponseEnvelope
 
@@ -170,6 +171,63 @@ async def get_artifact(project_id: str, artifact_id: str, request: Request):
         )
 
     artifact = await artifact_service.get_artifact(tenant_id, project_id, artifact_id)
+    if artifact is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": {
+                    "code": "RESOURCE_NOT_FOUND",
+                    "message": "Artifact not found.",
+                    "request_id": req_id,
+                }
+            },
+        )
+
+    artifact_resp = ArtifactResponse.from_artifact(artifact)
+    envelope = ResponseEnvelope(
+        data=artifact_resp.model_dump(by_alias=True),
+        meta=Meta(request_id=req_id, timestamp=datetime.now(UTC)),
+    )
+    return envelope.model_dump(mode="json")
+
+
+# ---------------------------------------------------------------------------
+# PATCH — Rename artifact
+# ---------------------------------------------------------------------------
+
+
+class RenameArtifactRequest(BaseModel):
+    """Request body for renaming an artifact."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+
+
+@router.patch("/{artifact_id}")
+async def rename_artifact(
+    project_id: str,
+    artifact_id: str,
+    body: RenameArtifactRequest,
+    request: Request,
+):
+    """Rename an artifact (update its display label)."""
+    req_id = _request_id(request)
+    tenant_id = _get_tenant_id(request)
+
+    if tenant_id is None:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": {
+                    "code": "UNAUTHORIZED",
+                    "message": "Tenant context required.",
+                    "request_id": req_id,
+                }
+            },
+        )
+
+    artifact = await artifact_service.rename_artifact(
+        tenant_id, project_id, artifact_id, body.name
+    )
     if artifact is None:
         return JSONResponse(
             status_code=404,

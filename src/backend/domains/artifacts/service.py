@@ -5,6 +5,7 @@ import uuid
 import structlog
 from fastapi import UploadFile
 
+from domains.graph.repository import graph_repository
 from domains.projects.repository import project_repository
 from domains.tenants.models import Tenant, TierDefinition
 from domains.tenants.repository import tenant_repository
@@ -165,15 +166,42 @@ class ArtifactService:
     async def delete_artifact(
         self, tenant_id: str, project_id: str, artifact_id: str
     ) -> Artifact | None:
-        """Soft-delete an artifact and decrement usage counters."""
+        """Soft-delete an artifact and clean up associated resources.
+
+        Deletes the blob from storage, removes linked graph documents
+        (components, edges), and decrements usage counters.
+        """
         artifact = await artifact_repository.get_by_id(tenant_id, artifact_id)
         if artifact is None or artifact.project_id != project_id:
             return None
+
+        # Delete blob from storage (best-effort)
+        if artifact.blob_path:
+            await blob_service.delete_blob(artifact.blob_path)
+
+        # Delete graph documents linked to this artifact (best-effort)
+        partition_key = f"{tenant_id}:{project_id}"
+        await graph_repository.delete_by_artifact_id(partition_key, artifact_id)
+
+        # Soft-delete the artifact metadata
         deleted = await artifact_repository.soft_delete(tenant_id, artifact_id)
         if deleted is not None:
             await tenant_repository.increment_usage(tenant_id, "total_artifact_count", amount=-1)
             await project_repository.increment_artifact_count(tenant_id, project_id, amount=-1)
         return deleted
+
+    async def rename_artifact(
+        self, tenant_id: str, project_id: str, artifact_id: str, new_name: str
+    ) -> Artifact | None:
+        """Rename an artifact (update the display label).
+
+        Returns the updated artifact or None if not found.
+        """
+        artifact = await self.get_artifact(tenant_id, project_id, artifact_id)
+        if artifact is None:
+            return None
+        artifact.name = new_name
+        return await artifact_repository.update(artifact)
 
 
 artifact_service = ArtifactService()
