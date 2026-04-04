@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,13 +27,14 @@ export function EditProjectDialog({ project }: EditProjectDialogProps) {
   const [description, setDescription] = useState(project.description ?? "");
   const updateMutation = useUpdateProject(project.id);
 
-  // Keep fields in sync if the project prop changes (e.g. after another update).
-  useEffect(() => {
-    if (open) {
+  // Keep fields in sync when the dialog opens (e.g. after another update).
+  const handleOpenChange = (newOpen: boolean) => {
+    if (newOpen) {
       setName(project.name);
       setDescription(project.description ?? "");
     }
-  }, [open, project.name, project.description]);
+    setOpen(newOpen);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,7 +60,7 @@ export function EditProjectDialog({ project }: EditProjectDialogProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger render={<Button variant="outline" size="sm" />}>
         <Pencil className="size-4" data-icon="inline-start" />
         Edit
