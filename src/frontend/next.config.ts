@@ -29,22 +29,8 @@ const nextConfig: NextConfig = {
             key: "Strict-Transport-Security",
             value: "max-age=63072000; includeSubDomains; preload",
           },
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              // 'unsafe-inline' required for the RuntimeConfig inline script
-              // that injects window.__RUNTIME_CONFIG__ at request time.
-              "script-src 'self' 'unsafe-inline' https://www.clarity.ms https://www.googletagmanager.com",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: https://www.gravatar.com",
-              "font-src 'self'",
-              "connect-src 'self' https://www.clarity.ms https://www.google-analytics.com",
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-            ].join("; "),
-          },
+          // Content-Security-Policy is set dynamically in middleware.ts
+          // so that runtime values like API_BASE_URL are included.
         ],
       },
     ];
