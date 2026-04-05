@@ -69,13 +69,13 @@ MVP architecture only. Future evolution paths are noted but not designed in deta
 | **Backend API** | FastAPI Container App | REST API for all domain operations. Auth, quota enforcement, artifact management, graph queries, analysis orchestration. Publishes events. |
 | **Parser Worker** | Python Container App | Consumes `ArtifactUploaded` events. Parses raw artifacts into normalized component/edge structures. Publishes `ArtifactParsed` events. |
 | **Graph Builder Worker** | Python Container App | Consumes `ArtifactParsed` events. Upserts components and edges into Cosmos DB graph containers. Publishes `GraphUpdated` events. |
-| **Analysis Worker** | Python Container App | Consumes `AnalysisRequested` events. Invokes Foundry Agent Service with tenant/project-scoped tools. Publishes `AnalysisCompleted` events. |
+| **Analysis Worker** | Python Container App | Consumes `AnalysisRequested` events. Uses Microsoft Agent Framework with two agents: integration-analyst (with tenant/project-scoped tools) and quality-evaluator (validates response quality against tool evidence). Publishes `AnalysisCompleted` events. |
 | **Notification Worker** | Python Container App | Consumes all terminal events. Sends realtime status updates to Web PubSub groups. |
 | **Azure Blob Storage** | PaaS | Stores raw uploaded artifact files. Tenant/project-scoped container paths. |
 | **Azure Cosmos DB** | PaaS (NoSQL API) | Stores tenant metadata, project metadata, artifact metadata, graph components, graph edges, analysis results. |
 | **Event Grid Namespace** | PaaS | Single topic with multiple pull-delivery subscriptions. Decouples API from async processing. |
 | **Azure Web PubSub** | PaaS | Delivers realtime notifications to connected browser clients. |
-| **Azure AI Foundry Agent Service** | PaaS | Hosts the integration-analyst agent with custom tool definitions. |
+| **Azure AI Foundry Agent Service** | PaaS | AI Services account (kind: AIServices, S0) + project + GPT-4o model deployment (GlobalStandard, 30K TPM). Hosts integration-analyst and quality-evaluator agents. No private networking for MVP. |
 | **Azure Front Door Premium + WAF** | PaaS | TLS termination, WAF protection, routing to frontend/backend Container Apps via Private Link. |
 | **Azure Key Vault** | PaaS | Stores connection strings (where managed identity is not possible). |
 | **Defender for Storage** | PaaS | Scans uploaded blobs for malware before parsing proceeds. |
@@ -157,10 +157,13 @@ Browser → API POST /api/v1/projects/{id}/analyses
 
 Analysis Worker pulls AnalysisRequested event.
   → Load project context (graph summary, component list)
-  → Invoke Foundry Agent Service with user prompt + tools
-  → Agent calls tools (get_graph_neighbors, run_impact_analysis, etc.)
+  → Create integration-analyst agent via Microsoft Agent Framework with FunctionTool definitions
+  → Create quality-evaluator agent (no tools)
+  → Analyst agent calls tools (get_graph_neighbors, run_impact_analysis, etc.)
   → Tools query Cosmos DB with tenant/project scope
-  → Store analysis result in Cosmos DB (status: "completed")
+  → Evaluator validates analyst response against tool call evidence
+  → If evaluation FAILED (retry < 1): feed issues back to analyst, re-evaluate
+  → Store analysis result with evaluation metadata in Cosmos DB (status: "completed")
   → Publish AnalysisCompleted event
 ```
 
@@ -192,7 +195,7 @@ Notification Worker pulls terminal events (ArtifactParsed, GraphUpdated, Analysi
 | Azure Cosmos DB | Metadata + graph | Serverless |
 | Event Grid Namespace | Event routing | Standard |
 | Azure Web PubSub | Realtime messaging | Free (dev) / Standard (prod) |
-| Azure AI Foundry | Agent hosting | Standard |
+| Azure AI Foundry | Agent hosting | S0 (AIServices kind), GPT-4o GlobalStandard 30K TPM |
 | Azure Front Door Premium + WAF | Ingress | Premium |
 | Azure Key Vault | Secrets + certs | Standard |
 | Azure Container Registry | Image storage | Basic |
