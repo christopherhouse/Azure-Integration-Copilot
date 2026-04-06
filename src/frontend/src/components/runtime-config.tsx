@@ -1,15 +1,22 @@
 import { unstable_noStore as noStore } from "next/cache";
+import { headers } from "next/headers";
 
 /**
  * Server component that injects runtime configuration into the page via a
  * script tag.  This lets the client read environment values (like the API
  * base URL) that are only available at **request time** — not at Next.js
  * build time — avoiding the NEXT_PUBLIC_* build-time inlining problem.
+ *
+ * The inline script carries a per-request **nonce** (read from the
+ * `x-nonce` header set by the middleware) so that it is permitted by
+ * the nonce-based Content-Security-Policy.
  */
-export function RuntimeConfig() {
+export async function RuntimeConfig() {
   // Mark this component as dynamic so API_BASE_URL is read from the container
   // environment at request-time instead of being inlined at image build-time.
   noStore();
+
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
 
   const apiBaseUrl = process.env.API_BASE_URL;
   const clarityProjectId = process.env.CLARITY_PROJECT_ID;
@@ -34,6 +41,7 @@ export function RuntimeConfig() {
 
   return (
     <script
+      nonce={nonce}
       dangerouslySetInnerHTML={{
         __html: `window.__RUNTIME_CONFIG__=${serialized};`,
       }}
