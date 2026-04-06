@@ -296,7 +296,7 @@ jobs:
       # -- Build image (load locally for scanning) ----------------------------
       - name: Build ${{ matrix.image_name }} image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.context }}/${{ matrix.dockerfile }}
