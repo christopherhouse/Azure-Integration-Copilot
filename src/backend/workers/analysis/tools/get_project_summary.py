@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import structlog
-from azure.ai.projects.models import FunctionTool
 
 from domains.graph.repository import graph_repository
 
@@ -13,24 +12,12 @@ from .scoping import analysis_context
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-TOOL_GET_PROJECT_SUMMARY = FunctionTool(
-    name="get_project_summary",
-    description=(
-        "Get a summary of the integration project's dependency graph, "
-        "including total component and edge counts broken down by type."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {},
-        "required": [],
-        "additionalProperties": False,
-    },
-    strict=True,
-)
 
+async def get_project_summary() -> str:
+    """Get a summary of the integration project's dependency graph.
 
-async def execute_get_project_summary(**_kwargs: object) -> str:
-    """Execute get_project_summary scoped to the current tenant/project."""
+    Returns total component and edge counts broken down by type.
+    """
     ctx = analysis_context.get()
     pk = f"{ctx.tenant_id}:{ctx.project_id}"
 

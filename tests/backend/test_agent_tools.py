@@ -18,10 +18,10 @@ _test_env = {
 with patch.dict(os.environ, _test_env):
     from domains.graph.models import Component, Edge, GraphSummary
     from workers.analysis.tools.scoping import AnalysisContext, analysis_context
-    from workers.analysis.tools.get_project_summary import execute_get_project_summary
-    from workers.analysis.tools.get_graph_neighbors import execute_get_graph_neighbors
-    from workers.analysis.tools.get_component_details import execute_get_component_details
-    from workers.analysis.tools.run_impact_analysis import execute_run_impact_analysis
+    from workers.analysis.tools.get_project_summary import get_project_summary
+    from workers.analysis.tools.get_graph_neighbors import get_graph_neighbors
+    from workers.analysis.tools.get_component_details import get_component_details
+    from workers.analysis.tools.run_impact_analysis import run_impact_analysis
 
 
 def _make_component(
@@ -102,7 +102,7 @@ def _set_analysis_context():
 
 
 class TestGetProjectSummary:
-    """Tests for execute_get_project_summary."""
+    """Tests for get_project_summary."""
 
     @pytest.mark.asyncio
     async def test_returns_summary_data(self):
@@ -111,7 +111,7 @@ class TestGetProjectSummary:
             "workers.analysis.tools.get_project_summary.graph_repository"
         ) as mock_repo:
             mock_repo.get_summary = AsyncMock(return_value=summary)
-            result = await execute_get_project_summary()
+            result = await get_project_summary()
 
         data = json.loads(result)
         assert data["totalComponents"] == 10
@@ -125,7 +125,7 @@ class TestGetProjectSummary:
             "workers.analysis.tools.get_project_summary.graph_repository"
         ) as mock_repo:
             mock_repo.get_summary = AsyncMock(return_value=None)
-            result = await execute_get_project_summary()
+            result = await get_project_summary()
 
         data = json.loads(result)
         assert "error" in data
@@ -138,13 +138,13 @@ class TestGetProjectSummary:
             "workers.analysis.tools.get_project_summary.graph_repository"
         ) as mock_repo:
             mock_repo.get_summary = AsyncMock(return_value=summary)
-            await execute_get_project_summary()
+            await get_project_summary()
 
         mock_repo.get_summary.assert_awaited_once_with("t1:p1")
 
 
 class TestGetGraphNeighbors:
-    """Tests for execute_get_graph_neighbors."""
+    """Tests for get_graph_neighbors."""
 
     @pytest.mark.asyncio
     async def test_returns_neighbors(self):
@@ -157,7 +157,7 @@ class TestGetGraphNeighbors:
             "workers.analysis.tools.get_graph_neighbors.graph_repository"
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(return_value=neighbors)
-            result = await execute_get_graph_neighbors(component_id="cmp_001")
+            result = await get_graph_neighbors(component_id="cmp_001")
 
         data = json.loads(result)
         assert data["count"] == 1
@@ -172,7 +172,7 @@ class TestGetGraphNeighbors:
             "workers.analysis.tools.get_graph_neighbors.graph_repository"
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(return_value=[])
-            result = await execute_get_graph_neighbors(component_id="cmp_isolated")
+            result = await get_graph_neighbors(component_id="cmp_isolated")
 
         data = json.loads(result)
         assert data["count"] == 0
@@ -184,7 +184,7 @@ class TestGetGraphNeighbors:
             "workers.analysis.tools.get_graph_neighbors.graph_repository"
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(return_value=[])
-            await execute_get_graph_neighbors(
+            await get_graph_neighbors(
                 component_id="cmp_001", direction="incoming"
             )
 
@@ -196,13 +196,13 @@ class TestGetGraphNeighbors:
             "workers.analysis.tools.get_graph_neighbors.graph_repository"
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(return_value=[])
-            await execute_get_graph_neighbors(component_id="cmp_001")
+            await get_graph_neighbors(component_id="cmp_001")
 
         mock_repo.get_neighbors.assert_awaited_once_with("t1:p1", "cmp_001", "both")
 
 
 class TestGetComponentDetails:
-    """Tests for execute_get_component_details."""
+    """Tests for get_component_details."""
 
     @pytest.mark.asyncio
     async def test_returns_component_details(self):
@@ -211,7 +211,7 @@ class TestGetComponentDetails:
             "workers.analysis.tools.get_component_details.graph_repository"
         ) as mock_repo:
             mock_repo.get_component = AsyncMock(return_value=component)
-            result = await execute_get_component_details(component_id="cmp_001")
+            result = await get_component_details(component_id="cmp_001")
 
         data = json.loads(result)
         assert data["id"] == "cmp_001"
@@ -226,7 +226,7 @@ class TestGetComponentDetails:
             "workers.analysis.tools.get_component_details.graph_repository"
         ) as mock_repo:
             mock_repo.get_component = AsyncMock(return_value=None)
-            result = await execute_get_component_details(component_id="cmp_missing")
+            result = await get_component_details(component_id="cmp_missing")
 
         data = json.loads(result)
         assert "error" in data
@@ -239,13 +239,13 @@ class TestGetComponentDetails:
             "workers.analysis.tools.get_component_details.graph_repository"
         ) as mock_repo:
             mock_repo.get_component = AsyncMock(return_value=component)
-            await execute_get_component_details(component_id="cmp_001")
+            await get_component_details(component_id="cmp_001")
 
         mock_repo.get_component.assert_awaited_once_with("t1:p1", "cmp_001")
 
 
 class TestRunImpactAnalysis:
-    """Tests for execute_run_impact_analysis."""
+    """Tests for run_impact_analysis."""
 
     @pytest.mark.asyncio
     async def test_bfs_traversal_downstream(self):
@@ -273,7 +273,7 @@ class TestRunImpactAnalysis:
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(side_effect=mock_get_neighbors)
             mock_repo.get_component = AsyncMock(return_value=root)
-            result = await execute_run_impact_analysis(
+            result = await run_impact_analysis(
                 component_id="cmp_root", direction="downstream", max_depth=3
             )
 
@@ -309,7 +309,7 @@ class TestRunImpactAnalysis:
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(side_effect=mock_get_neighbors)
             mock_repo.get_component = AsyncMock(return_value=root)
-            result = await execute_run_impact_analysis(
+            result = await run_impact_analysis(
                 component_id="cmp_root", direction="downstream", max_depth=1
             )
 
@@ -328,7 +328,7 @@ class TestRunImpactAnalysis:
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(return_value=[])
             mock_repo.get_component = AsyncMock(return_value=root)
-            result = await execute_run_impact_analysis(
+            result = await run_impact_analysis(
                 component_id="cmp_root", direction="downstream", max_depth=100
             )
 
@@ -345,7 +345,7 @@ class TestRunImpactAnalysis:
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(return_value=[])
             mock_repo.get_component = AsyncMock(return_value=root)
-            await execute_run_impact_analysis(
+            await run_impact_analysis(
                 component_id="cmp_root", direction="upstream"
             )
 
@@ -361,7 +361,7 @@ class TestRunImpactAnalysis:
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(return_value=[])
             mock_repo.get_component = AsyncMock(return_value=root)
-            result = await execute_run_impact_analysis(
+            result = await run_impact_analysis(
                 component_id="cmp_root", direction="downstream"
             )
 
@@ -391,7 +391,7 @@ class TestRunImpactAnalysis:
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(side_effect=mock_get_neighbors)
             mock_repo.get_component = AsyncMock(return_value=root)
-            result = await execute_run_impact_analysis(
+            result = await run_impact_analysis(
                 component_id="cmp_root", direction="downstream", max_depth=5
             )
 
@@ -422,7 +422,7 @@ class TestRunImpactAnalysis:
         ) as mock_repo:
             mock_repo.get_neighbors = AsyncMock(side_effect=mock_get_neighbors)
             mock_repo.get_component = AsyncMock(return_value=root)
-            result = await execute_run_impact_analysis(
+            result = await run_impact_analysis(
                 component_id="cmp_root", direction="downstream", max_depth=3
             )
 

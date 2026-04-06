@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from collections import deque
+from typing import Annotated
 
 import structlog
-from azure.ai.projects.models import FunctionTool
+from pydantic import Field
 
 from domains.graph.repository import graph_repository
 
@@ -14,41 +15,19 @@ from .scoping import analysis_context
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-TOOL_RUN_IMPACT_ANALYSIS = FunctionTool(
-    name="run_impact_analysis",
-    description=(
-        "Perform a breadth-first traversal from a component to find all "
-        "transitively dependent components. Returns the root component, "
-        "list of impacted components, and total count."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "component_id": {
-                "type": "string",
-                "description": "The component ID to start traversal from.",
-            },
-            "direction": {
-                "type": "string",
-                "enum": ["downstream", "upstream"],
-                "description": "Traversal direction — 'downstream' (outgoing) or 'upstream' (incoming).",
-            },
-            "max_depth": {
-                "type": "integer",
-                "description": "Maximum traversal depth (default 3, capped at 5).",
-            },
-        },
-        "required": ["component_id", "direction"],
-        "additionalProperties": False,
-    },
-    strict=False,
-)
 
-
-async def execute_run_impact_analysis(
-    component_id: str, direction: str, max_depth: int = 3, **_kwargs: object
+async def run_impact_analysis(
+    component_id: Annotated[str, Field(description="The component ID to start traversal from.")],
+    direction: Annotated[
+        str,
+        Field(description="Traversal direction — 'downstream' (outgoing) or 'upstream' (incoming)."),
+    ],
+    max_depth: Annotated[int, Field(description="Maximum traversal depth (default 3, capped at 5).")] = 3,
 ) -> str:
-    """Execute run_impact_analysis scoped to the current tenant/project."""
+    """Perform a breadth-first traversal from a component to find all transitively dependent components.
+
+    Returns the root component, list of impacted components, and total count.
+    """
     ctx = analysis_context.get()
     pk = f"{ctx.tenant_id}:{ctx.project_id}"
     max_depth = min(int(max_depth), 5)

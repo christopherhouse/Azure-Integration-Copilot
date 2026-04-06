@@ -1,29 +1,28 @@
 """Agent Framework integration — analyst + evaluator agent setup.
 
-Uses the latest Microsoft Foundry SDK (azure-ai-projects >= 2.0.0):
-- ``create_version()`` with ``PromptAgentDefinition`` (not the deprecated
-  ``create_agent()``).
-- ``openai_client.responses.create()`` with ``agent_reference`` (not the
-  deprecated threads/runs API).
-- ``FunctionTool`` with explicit JSON schemas (not auto-generated from
-  type hints).
+Uses the Microsoft Agent Framework (``agent-framework`` package) with
+``FoundryChatClient`` for Azure AI Foundry integration:
+
+- ``Agent(client=..., tools=[...])`` — agents with typed function tools.
+- ``await agent.run(prompt)`` — run the agent and get a response.
+- Tools are plain Python async functions; the framework auto-generates
+  JSON schemas from type annotations and docstrings.
 """
 
 from __future__ import annotations
 
 import json
 import os
-from typing import Any
 
 import structlog
-from azure.ai.projects import AIProjectClient
-from azure.ai.projects.models import PromptAgentDefinition, Tool
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
 
 from domains.analysis.models import AnalysisResult, EvaluationResult, EvaluationVerdict, ToolCallRecord
 from shared.credential import create_credential
 
 from .evaluator import EVALUATOR_SYSTEM_PROMPT, build_evaluator_prompt
-from .tools import ALL_TOOLS, TOOL_DISPATCH
+from .tools import ALL_TOOLS
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
@@ -48,105 +47,85 @@ def _get_model_deployment() -> str:
 
 
 class AgentOrchestrator:
-    """Manages analyst and evaluator agents via Microsoft Foundry SDK.
+    """Manages analyst and evaluator agents via Microsoft Agent Framework.
 
-    Agents are created on first use and cleaned up via :meth:`close`.
+    Uses ``FoundryChatClient`` + ``Agent`` from the ``agent-framework``
+    package. Agents are created on first use and cleaned up via :meth:`close`.
     """
 
     def __init__(self) -> None:
-        self._project_client: AIProjectClient | None = None
-        self._analyst_agent: Any | None = None
-        self._evaluator_agent: Any | None = None
+        self._client: FoundryChatClient | None = None
+        self._analyst: Agent | None = None
+        self._evaluator: Agent | None = None
 
-    def _get_project_client(self) -> AIProjectClient:
-        if self._project_client is None:
+    def _get_client(self) -> FoundryChatClient:
+        if self._client is None:
             endpoint = os.environ["FOUNDRY_PROJECT_ENDPOINT"]
+            model = _get_model_deployment()
             credential = create_credential()
-            self._project_client = AIProjectClient(
-                endpoint=endpoint,
+            self._client = FoundryChatClient(
+                project_endpoint=endpoint,
+                model=model,
                 credential=credential,
             )
-        return self._project_client
+        return self._client
 
     def _ensure_agents(self) -> None:
         """Create analyst and evaluator agents if not already created."""
-        if self._analyst_agent is not None:
+        if self._analyst is not None:
             return
 
-        client = self._get_project_client()
-        model = _get_model_deployment()
+        client = self._get_client()
 
-        tools: list[Tool] = list(ALL_TOOLS)
+        self._analyst = Agent(
+            client=client,
+            name="integration-analyst",
+            instructions=ANALYST_SYSTEM_PROMPT,
+            tools=ALL_TOOLS,
+        )
+        logger.info("analyst_agent_created", agent_name="integration-analyst")
 
-        self._analyst_agent = client.agents.create_version(
-            agent_name="integration-analyst",
-            definition=PromptAgentDefinition(
-                model=model,
-                instructions=ANALYST_SYSTEM_PROMPT,
-                tools=tools,
-                temperature=0.3,
-            ),
+        self._evaluator = Agent(
+            client=client,
+            name="quality-evaluator",
+            instructions=EVALUATOR_SYSTEM_PROMPT,
         )
-        logger.info(
-            "analyst_agent_created",
-            agent_id=self._analyst_agent.id,
-            agent_name=self._analyst_agent.name,
-        )
-
-        self._evaluator_agent = client.agents.create_version(
-            agent_name="quality-evaluator",
-            definition=PromptAgentDefinition(
-                model=model,
-                instructions=EVALUATOR_SYSTEM_PROMPT,
-                temperature=0.1,
-            ),
-        )
-        logger.info(
-            "evaluator_agent_created",
-            agent_id=self._evaluator_agent.id,
-            agent_name=self._evaluator_agent.name,
-        )
+        logger.info("evaluator_agent_created", agent_name="quality-evaluator")
 
     async def run_analysis(self, user_prompt: str) -> AnalysisResult:
         """Run the full analyst → evaluator flow with up to 1 retry.
 
         1. Send user prompt to the analyst agent.
-        2. Process any function_call tool requests.
+        2. The framework handles function-call dispatch automatically.
         3. Evaluate the analyst response with the evaluator agent.
         4. On FAILED verdict, feed issues back to analyst and retry once.
         """
         self._ensure_agents()
-        client = self._get_project_client()
-        openai = client.get_openai_client()
+        assert self._analyst is not None
+        assert self._evaluator is not None
 
-        tool_call_records: list[ToolCallRecord] = []
         retry_count = 0
 
-        with openai:
-            # --- Step 1: Run analyst ---
-            analyst_response, tool_call_records = await self._run_analyst(
-                openai, user_prompt, tool_call_records
-            )
+        # --- Step 1: Run analyst ---
+        analyst_response, tool_call_records = await self._run_analyst(user_prompt)
 
-            # --- Step 2: Evaluate ---
+        # --- Step 2: Evaluate ---
+        eval_result = await self._run_evaluator(
+            user_prompt, analyst_response, tool_call_records
+        )
+
+        # --- Step 3: Retry once on FAILED ---
+        if eval_result.verdict == EvaluationVerdict.FAILED and retry_count < 1:
+            retry_count += 1
+            issues_text = "; ".join(eval_result.issues) if eval_result.issues else eval_result.summary
+            revision_prompt = (
+                f"Your previous response had issues: {issues_text}. "
+                f"Please revise your answer using the tools to verify your claims."
+            )
+            analyst_response, tool_call_records = await self._run_analyst(revision_prompt)
             eval_result = await self._run_evaluator(
-                openai, user_prompt, analyst_response, tool_call_records
+                user_prompt, analyst_response, tool_call_records
             )
-
-            # --- Step 3: Retry once on FAILED ---
-            if eval_result.verdict == EvaluationVerdict.FAILED and retry_count < 1:
-                retry_count += 1
-                issues_text = "; ".join(eval_result.issues) if eval_result.issues else eval_result.summary
-                revision_prompt = (
-                    f"Your previous response had issues: {issues_text}. "
-                    f"Please revise your answer using the tools to verify your claims."
-                )
-                analyst_response, tool_call_records = await self._run_analyst(
-                    openai, revision_prompt, tool_call_records
-                )
-                eval_result = await self._run_evaluator(
-                    openai, user_prompt, analyst_response, tool_call_records
-                )
 
         return AnalysisResult(
             response=analyst_response,
@@ -157,113 +136,60 @@ class AgentOrchestrator:
 
     async def _run_analyst(
         self,
-        openai: Any,
         prompt: str,
-        existing_tool_calls: list[ToolCallRecord],
     ) -> tuple[str, list[ToolCallRecord]]:
-        """Send a prompt to the analyst and handle function call loops."""
-        from openai.types.responses.response_input_param import FunctionCallOutput
+        """Send a prompt to the analyst agent.
 
-        tool_calls = list(existing_tool_calls)
+        The Agent Framework handles function-call dispatch automatically —
+        it invokes the tool functions and feeds results back to the model.
+        """
+        assert self._analyst is not None
 
-        # Initial call
-        response = openai.responses.create(
-            input=prompt,
-            extra_body={
-                "agent_reference": {
-                    "name": self._analyst_agent.name,
-                    "type": "agent_reference",
-                }
-            },
-        )
+        response = await self._analyst.run(prompt)
 
-        # Process tool calls in a loop
-        max_iterations = 10
-        iteration = 0
-        while iteration < max_iterations:
-            iteration += 1
-            function_calls = [
-                item for item in response.output if item.type == "function_call"
-            ]
-            if not function_calls:
-                break
+        # Extract tool call records from the response messages
+        tool_call_records: list[ToolCallRecord] = []
+        for message in response.messages:
+            for content in message.contents:
+                if content.type == "function_call":
+                    tool_call_records.append(ToolCallRecord(
+                        toolName=content.name if hasattr(content, "name") else "unknown",
+                        arguments=content.arguments if hasattr(content, "arguments") else {},
+                        output=None,
+                    ))
+                elif content.type == "function_result":
+                    # Update the last matching tool call with its result
+                    result_str = content.result if hasattr(content, "result") else ""
+                    if tool_call_records:
+                        tool_call_records[-1].output = result_str
 
-            # Execute all requested function calls
-            outputs = []
-            for fc in function_calls:
-                tool_name = fc.name
-                try:
-                    arguments = json.loads(fc.arguments) if fc.arguments else {}
-                except (json.JSONDecodeError, TypeError):
-                    arguments = {}
-
-                executor = TOOL_DISPATCH.get(tool_name)
-                if executor is None:
-                    output = json.dumps({"error": f"Unknown tool: {tool_name}"})
-                else:
-                    try:
-                        output = await executor(**arguments)
-                    except Exception as exc:
-                        logger.warning("tool_execution_failed", tool=tool_name, error=str(exc))
-                        output = json.dumps({"error": f"Tool execution failed: {exc}"})
-
-                tool_calls.append(ToolCallRecord(
-                    toolName=tool_name,
-                    arguments=arguments,
-                    output=output,
-                ))
-
-                outputs.append(
-                    FunctionCallOutput(
-                        type="function_call_output",
-                        call_id=fc.call_id,
-                        output=output,
-                    )
-                )
-
-            # Submit tool outputs and get next response
-            response = openai.responses.create(
-                input=outputs,
-                previous_response_id=response.id,
-                extra_body={
-                    "agent_reference": {
-                        "name": self._analyst_agent.name,
-                        "type": "agent_reference",
-                    }
-                },
-            )
-
-        # Extract text response
-        analyst_text = response.output_text if hasattr(response, "output_text") else ""
-        return analyst_text, tool_calls
+        analyst_text = response.text or ""
+        return analyst_text, tool_call_records
 
     async def _run_evaluator(
         self,
-        openai: Any,
         user_prompt: str,
         analyst_response: str,
         tool_calls: list[ToolCallRecord],
     ) -> EvaluationResult:
         """Run the evaluator agent to validate the analyst response."""
+        assert self._evaluator is not None
+
         eval_prompt = build_evaluator_prompt(
             user_prompt=user_prompt,
             analyst_response=analyst_response,
             tool_calls=[tc.model_dump(by_alias=True) for tc in tool_calls],
         )
 
-        response = openai.responses.create(
-            input=eval_prompt,
-            extra_body={
-                "agent_reference": {
-                    "name": self._evaluator_agent.name,
-                    "type": "agent_reference",
-                }
-            },
-        )
-
-        eval_text = response.output_text if hasattr(response, "output_text") else ""
+        response = await self._evaluator.run(eval_prompt)
+        eval_text = response.text or ""
 
         # Parse structured JSON from evaluator
+        return self._parse_evaluation(eval_text)
+
+    @staticmethod
+    def _parse_evaluation(eval_text: str) -> EvaluationResult:
+        """Parse the evaluator's JSON response into an EvaluationResult."""
         try:
             # Strip any markdown code fences
             cleaned = eval_text.strip()
@@ -288,23 +214,15 @@ class AgentOrchestrator:
             )
 
     async def close(self) -> None:
-        """Clean up agent versions and close the project client."""
-        if self._project_client is not None:
-            try:
-                if self._analyst_agent is not None:
-                    self._project_client.agents.delete_version(
-                        agent_name=self._analyst_agent.name,
-                        agent_version=self._analyst_agent.version,
-                    )
-                if self._evaluator_agent is not None:
-                    self._project_client.agents.delete_version(
-                        agent_name=self._evaluator_agent.name,
-                        agent_version=self._evaluator_agent.version,
-                    )
-            except Exception:
-                logger.warning("agent_cleanup_failed", exc_info=True)
-            finally:
-                self._project_client.close()
-                self._project_client = None
-                self._analyst_agent = None
-                self._evaluator_agent = None
+        """Clean up agents and close the client."""
+        try:
+            if self._analyst is not None:
+                await self._analyst.__aexit__(None, None, None)
+            if self._evaluator is not None:
+                await self._evaluator.__aexit__(None, None, None)
+        except Exception:
+            logger.warning("agent_cleanup_failed", exc_info=True)
+        finally:
+            self._client = None
+            self._analyst = None
+            self._evaluator = None

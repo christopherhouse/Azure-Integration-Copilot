@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from typing import Annotated
 
 import structlog
-from azure.ai.projects.models import FunctionTool
+from pydantic import Field
 
 from domains.graph.repository import graph_repository
 
@@ -13,29 +14,14 @@ from .scoping import analysis_context
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
-TOOL_GET_COMPONENT_DETAILS = FunctionTool(
-    name="get_component_details",
-    description=(
-        "Get detailed information about a specific component in the dependency graph, "
-        "including its type, properties, and tags."
-    ),
-    parameters={
-        "type": "object",
-        "properties": {
-            "component_id": {
-                "type": "string",
-                "description": "The component ID to look up.",
-            },
-        },
-        "required": ["component_id"],
-        "additionalProperties": False,
-    },
-    strict=True,
-)
 
+async def get_component_details(
+    component_id: Annotated[str, Field(description="The component ID to look up.")],
+) -> str:
+    """Get detailed information about a specific component in the dependency graph.
 
-async def execute_get_component_details(component_id: str, **_kwargs: object) -> str:
-    """Execute get_component_details scoped to the current tenant/project."""
+    Returns the component's type, properties, and tags.
+    """
     ctx = analysis_context.get()
     pk = f"{ctx.tenant_id}:{ctx.project_id}"
 
