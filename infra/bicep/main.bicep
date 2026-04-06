@@ -92,6 +92,9 @@ param aiModelDeploymentSku string = 'GlobalStandard'
 @description('Capacity (K TPM) for GPT-4o model deployment')
 param aiModelDeploymentCapacity int = 30
 
+@description('Azure region for AI Foundry (may differ from primary location due to service availability)')
+param aiFoundryLocation string = location
+
 @description('Additional tags to apply to all resources')
 param tags object = {}
 
@@ -554,7 +557,7 @@ module webPubSub 'modules/web-pubsub.bicep' = {
 module aiFoundry 'modules/ai-foundry.bicep' = {
   name: 'ai-foundry'
   params: {
-    location: location
+    location: aiFoundryLocation
     name: resourceNames.aiServices
     modelDeploymentSkuName: aiModelDeploymentSku
     modelDeploymentCapacity: aiModelDeploymentCapacity

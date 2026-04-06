@@ -54,6 +54,7 @@ jobs:
       worker_identity_client_id: ${{ steps.bicep-outputs.outputs.worker_identity_client_id }}
       frontend_custom_domain: ${{ steps.bicep-outputs.outputs.frontend_custom_domain }}
       backend_custom_domain: ${{ steps.bicep-outputs.outputs.backend_custom_domain }}
+      ai_services_endpoint: ${{ steps.bicep-outputs.outputs.ai_services_endpoint }}
 
     steps:
       - name: Checkout code
@@ -113,6 +114,7 @@ jobs:
           echo "worker_identity_client_id=$(echo "$OUTPUTS" | jq -r '.workerIdentityClientId.value')" >> "$GITHUB_OUTPUT"
           echo "frontend_custom_domain=$(echo "$OUTPUTS" | jq -r '.frontendCustomDomain.value')" >> "$GITHUB_OUTPUT"
           echo "backend_custom_domain=$(echo "$OUTPUTS" | jq -r '.backendCustomDomain.value')" >> "$GITHUB_OUTPUT"
+          echo "ai_services_endpoint=$(echo "$OUTPUTS" | jq -r '.aiServicesEndpoint.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Dev — Promote Containers (GHCR → ACR)
@@ -147,12 +149,16 @@ jobs:
           WORKER_SCAN_GATE_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-scan-gate") | .full_image' container-metadata.json)
           WORKER_PARSER_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-parser") | .full_image' container-metadata.json)
           WORKER_GRAPH_BUILDER_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-graph-builder") | .full_image' container-metadata.json)
+          WORKER_ANALYSIS_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-analysis") | .full_image' container-metadata.json)
+          WORKER_NOTIFICATION_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-notification") | .full_image' container-metadata.json)
           TAG=$(jq -r '.containers[] | select(.name=="integrisight-frontend") | .tag' container-metadata.json)
           echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "worker_scan_gate_image=${WORKER_SCAN_GATE_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "worker_parser_image=${WORKER_PARSER_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "worker_graph_builder_image=${WORKER_GRAPH_BUILDER_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "worker_analysis_image=${WORKER_ANALYSIS_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "worker_notification_image=${WORKER_NOTIFICATION_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Import frontend image to ACR
@@ -211,6 +217,30 @@ jobs:
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.worker_graph_builder_image }}" \
             --image "integrisight-worker-graph-builder:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import worker-analysis image to ACR
+        env:
+          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
+        run: |
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.worker_analysis_image }}" \
+            --image "integrisight-worker-analysis:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import worker-notification image to ACR
+        env:
+          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
+        run: |
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.worker_notification_image }}" \
+            --image "integrisight-worker-notification:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -406,6 +436,67 @@ jobs:
             --scale-rule-metadata "type=Utilization value=70" \
             --env-vars "${WORKER_GRAPH_BUILDER_ENV_VARS}"
 
+      - name: Deploy worker-analysis Container App
+        env:
+          WORKER_ANALYSIS_ENV_VARS: >-
+            ENVIRONMENT=dev
+            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}
+            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}
+            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}
+            EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
+            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.web_pubsub_endpoint }}
+            AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
+            FOUNDRY_PROJECT_ENDPOINT=${{ needs.deploy-infra-dev.outputs.ai_services_endpoint }}
+            WORKER_MODULE=workers.analysis.main
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-worker-analysis" \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-analysis:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --no-ingress \
+            --identity "${{ steps.identities.outputs.worker_id }}" \
+            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
+            --env-vars "${WORKER_ANALYSIS_ENV_VARS}"
+
+      - name: Deploy worker-notification Container App
+        env:
+          WORKER_NOTIFICATION_ENV_VARS: >-
+            ENVIRONMENT=dev
+            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}
+            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}
+            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}
+            EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
+            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.web_pubsub_endpoint }}
+            AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
+            WORKER_MODULE=workers.notification.main
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-worker-notification" \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-notification:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --no-ingress \
+            --identity "${{ steps.identities.outputs.worker_id }}" \
+            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
+            --env-vars "${WORKER_NOTIFICATION_ENV_VARS}"
+
   # ---------------------------------------------------------------------------
   # Dev — Deploy Azure Front Door (after Container Apps exist)
   # ---------------------------------------------------------------------------
@@ -569,6 +660,7 @@ jobs:
       worker_identity_client_id: ${{ steps.bicep-outputs.outputs.worker_identity_client_id }}
       frontend_custom_domain: ${{ steps.bicep-outputs.outputs.frontend_custom_domain }}
       backend_custom_domain: ${{ steps.bicep-outputs.outputs.backend_custom_domain }}
+      ai_services_endpoint: ${{ steps.bicep-outputs.outputs.ai_services_endpoint }}
 
     steps:
       - name: Checkout code
@@ -628,6 +720,7 @@ jobs:
           echo "worker_identity_client_id=$(echo "$OUTPUTS" | jq -r '.workerIdentityClientId.value')" >> "$GITHUB_OUTPUT"
           echo "frontend_custom_domain=$(echo "$OUTPUTS" | jq -r '.frontendCustomDomain.value')" >> "$GITHUB_OUTPUT"
           echo "backend_custom_domain=$(echo "$OUTPUTS" | jq -r '.backendCustomDomain.value')" >> "$GITHUB_OUTPUT"
+          echo "ai_services_endpoint=$(echo "$OUTPUTS" | jq -r '.aiServicesEndpoint.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Prod — Promote Containers (GHCR → ACR)
@@ -662,12 +755,16 @@ jobs:
           WORKER_SCAN_GATE_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-scan-gate") | .full_image' container-metadata.json)
           WORKER_PARSER_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-parser") | .full_image' container-metadata.json)
           WORKER_GRAPH_BUILDER_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-graph-builder") | .full_image' container-metadata.json)
+          WORKER_ANALYSIS_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-analysis") | .full_image' container-metadata.json)
+          WORKER_NOTIFICATION_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-notification") | .full_image' container-metadata.json)
           TAG=$(jq -r '.containers[] | select(.name=="integrisight-frontend") | .tag' container-metadata.json)
           echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "worker_scan_gate_image=${WORKER_SCAN_GATE_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "worker_parser_image=${WORKER_PARSER_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "worker_graph_builder_image=${WORKER_GRAPH_BUILDER_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "worker_analysis_image=${WORKER_ANALYSIS_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "worker_notification_image=${WORKER_NOTIFICATION_IMAGE}" >> "$GITHUB_OUTPUT"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Import frontend image to ACR
@@ -726,6 +823,30 @@ jobs:
             --name "${ACR_NAME}" \
             --source "${{ steps.metadata.outputs.worker_graph_builder_image }}" \
             --image "integrisight-worker-graph-builder:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import worker-analysis image to ACR
+        env:
+          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
+        run: |
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.worker_analysis_image }}" \
+            --image "integrisight-worker-analysis:${{ steps.metadata.outputs.tag }}" \
+            --username "${{ github.actor }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --force
+
+      - name: Import worker-notification image to ACR
+        env:
+          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
+        run: |
+          az acr import \
+            --name "${ACR_NAME}" \
+            --source "${{ steps.metadata.outputs.worker_notification_image }}" \
+            --image "integrisight-worker-notification:${{ steps.metadata.outputs.tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -920,6 +1041,67 @@ jobs:
             --scale-rule-type cpu \
             --scale-rule-metadata "type=Utilization value=70" \
             --env-vars "${WORKER_GRAPH_BUILDER_ENV_VARS}"
+
+      - name: Deploy worker-analysis Container App
+        env:
+          WORKER_ANALYSIS_ENV_VARS: >-
+            ENVIRONMENT=prod
+            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}
+            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}
+            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}
+            EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
+            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.web_pubsub_endpoint }}
+            AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
+            FOUNDRY_PROJECT_ENDPOINT=${{ needs.deploy-infra-prod.outputs.ai_services_endpoint }}
+            WORKER_MODULE=workers.analysis.main
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-worker-analysis" \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-analysis:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --no-ingress \
+            --identity "${{ steps.identities.outputs.worker_id }}" \
+            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
+            --env-vars "${WORKER_ANALYSIS_ENV_VARS}"
+
+      - name: Deploy worker-notification Container App
+        env:
+          WORKER_NOTIFICATION_ENV_VARS: >-
+            ENVIRONMENT=prod
+            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}
+            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}
+            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}
+            EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
+            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.web_pubsub_endpoint }}
+            AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
+            WORKER_MODULE=workers.notification.main
+        run: |
+          ./infra/scripts/deploy-container-app.sh \
+            --name "ca-worker-notification" \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-notification:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --no-ingress \
+            --identity "${{ steps.identities.outputs.worker_id }}" \
+            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
+            --cpu 0.25 \
+            --memory 0.5Gi \
+            --min-replicas 1 \
+            --max-replicas 5 \
+            --scale-rule-name cpu-scaling \
+            --scale-rule-type cpu \
+            --scale-rule-metadata "type=Utilization value=70" \
+            --env-vars "${WORKER_NOTIFICATION_ENV_VARS}"
 
   # ---------------------------------------------------------------------------
   # Prod — Deploy Azure Front Door (after Container Apps exist)
