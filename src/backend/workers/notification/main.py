@@ -1,7 +1,7 @@
 """Notification worker entry point.
 
 Runs as a standalone async process (not inside FastAPI).
-Pulls terminal events from the ``notifications`` subscription
+Pulls terminal events from the ``notification`` subscription
 and sends realtime messages via Web PubSub.
 """
 
@@ -20,7 +20,7 @@ from workers.base import BaseWorker
 
 from .handler import NotificationHandler
 
-SUBSCRIPTION_NAME = "notifications"
+SUBSCRIPTION_NAME = "notification"
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
