@@ -37,9 +37,9 @@ export function middleware(request: NextRequest) {
 
   const csp = [
     "default-src 'self' https://*.clarity.ms https://c.bing.com",
-    `script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com https://www.clarity.ms`,
+    `script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com https://*.clarity.ms`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://*.clarity.ms https://c.bing.com https://www.google-analytics.com https://www.googletagmanager.com",
+    "img-src 'self' data: https://*.clarity.ms https://c.bing.com https://www.google-analytics.com https://www.googletagmanager.com https://www.gravatar.com",
     "font-src 'self'",
     `connect-src ${connectSources.join(" ")}`,
     "frame-src 'self'",
