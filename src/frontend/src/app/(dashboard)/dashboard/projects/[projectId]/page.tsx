@@ -4,7 +4,9 @@ import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { ApiRequestError } from "@/lib/api";
+import Link from "next/link";
 import {
+  BrainCircuit,
   FileText,
   FolderKanban,
   GitBranch,
@@ -140,16 +142,28 @@ export default function ProjectDetailPage() {
   return (
     <div className="flex flex-col gap-6">
       {/* Project header */}
-      <div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">{project.name}</h1>
-          <Badge variant="secondary">{project.status}</Badge>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold">{project.name}</h1>
+            <Badge variant="secondary">{project.status}</Badge>
+          </div>
+          {project.description && (
+            <p className="mt-1 text-sm text-muted-foreground">
+              {project.description}
+            </p>
+          )}
         </div>
-        {project.description && (
-          <p className="mt-1 text-sm text-muted-foreground">
-            {project.description}
-          </p>
-        )}
+        <Button
+          render={
+            <Link
+              href={`/dashboard/projects/${projectId}/analysis`}
+            />
+          }
+        >
+          <BrainCircuit className="size-4" data-icon="inline-start" />
+          Analyze
+        </Button>
       </div>
 
       {/* Tabs */}
