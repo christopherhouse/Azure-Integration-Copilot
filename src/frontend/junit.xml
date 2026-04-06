@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="jest tests" tests="12" failures="0" errors="0" time="4.619">
+  <testsuite name="Home page" errors="0" failures="0" skipped="0" timestamp="2026-04-06T16:20:05" time="0.478" tests="2">
+    <testcase classname="Home page redirects to /login when there is no session" name="Home page redirects to /login when there is no session" time="0.014">
+    </testcase>
+    <testcase classname="Home page redirects to /dashboard when there is an active session" name="Home page redirects to /dashboard when there is an active session" time="0.002">
+    </testcase>
+  </testsuite>
+  <testsuite name="apiFetch" errors="0" failures="0" skipped="0" timestamp="2026-04-06T16:20:05" time="0.07" tests="5">
+    <testcase classname="apiFetch prepends the API base URL to the request path" name="apiFetch prepends the API base URL to the request path" time="0.001">
+    </testcase>
+    <testcase classname="apiFetch adds Authorization header when session has accessToken" name="apiFetch adds Authorization header when session has accessToken" time="0.001">
+    </testcase>
+    <testcase classname="apiFetch omits Authorization header when no session" name="apiFetch omits Authorization header when no session" time="0.001">
+    </testcase>
+    <testcase classname="apiFetch forwards caller-supplied headers" name="apiFetch forwards caller-supplied headers" time="0">
+    </testcase>
+    <testcase classname="apiFetch returns the raw response object" name="apiFetch returns the raw response object" time="0.001">
+    </testcase>
+  </testsuite>
+  <testsuite name="LoginPage" errors="0" failures="0" skipped="0" timestamp="2026-04-06T16:20:05" time="0.61" tests="2">
+    <testcase classname="LoginPage production mode renders the sign-in button" name="LoginPage production mode renders the sign-in button" time="0.077">
+    </testcase>
+    <testcase classname="LoginPage production mode calls signIn with &apos;azure-ad&apos; provider and dashboard callbackUrl" name="LoginPage production mode calls signIn with &apos;azure-ad&apos; provider and dashboard callbackUrl" time="0.024">
+    </testcase>
+  </testsuite>
+  <testsuite name="useTenant" errors="0" failures="0" skipped="0" timestamp="2026-04-06T16:20:05" time="3.651" tests="3">
+    <testcase classname="useTenant fetches tenant data from GET /api/v1/tenants/me" name="useTenant fetches tenant data from GET /api/v1/tenants/me" time="0.082">
+    </testcase>
+    <testcase classname="useTenant returns the tenant object on success" name="useTenant returns the tenant object on success" time="0.057">
+    </testcase>
+    <testcase classname="useTenant surfaces an error when the API call fails" name="useTenant surfaces an error when the API call fails" time="3.031">
+    </testcase>
+  </testsuite>
+</testsuites>
