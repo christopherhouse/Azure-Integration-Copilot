@@ -30,11 +30,16 @@ def _make_detail(event_data: dict, event_type: str = "test.event", lock_token: s
 class StubHandler(WorkerHandler):
     """Stub handler for testing."""
 
-    def __init__(self):
+    def __init__(self, *, accepted_types=None):
         self.handled = []
         self.failures = []
         self._already_processed = False
         self._handle_side_effect = None
+        self._accepted_types = accepted_types
+
+    @property
+    def accepted_event_types(self):
+        return self._accepted_types
 
     async def is_already_processed(self, event_data):
         return self._already_processed
@@ -239,3 +244,84 @@ class TestBaseWorker:
         await worker.run()
 
         consumer.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_acknowledges_unexpected_event_type(self):
+        """Events with types not in accepted_event_types are acknowledged and skipped."""
+        consumer = AsyncMock()
+        handler = StubHandler(accepted_types=frozenset({"expected.type"}))
+        detail = _make_detail(
+            {"tenantId": "t1", "artifactId": "a1"},
+            event_type="unexpected.type",
+        )
+
+        call_count = 0
+
+        async def receive_then_stop(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [detail]
+            worker.stop()
+            return []
+
+        consumer.receive_events = receive_then_stop
+        worker = BaseWorker(consumer, handler, poll_interval=0.01)
+        await worker.run()
+
+        consumer.acknowledge.assert_awaited_with(["lock-1"])
+        assert len(handler.handled) == 0
+
+    @pytest.mark.asyncio
+    async def test_processes_accepted_event_type(self):
+        """Events whose type is in accepted_event_types are processed normally."""
+        consumer = AsyncMock()
+        handler = StubHandler(accepted_types=frozenset({"expected.type"}))
+        detail = _make_detail(
+            {"tenantId": "t1", "artifactId": "a1"},
+            event_type="expected.type",
+        )
+
+        call_count = 0
+
+        async def receive_then_stop(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [detail]
+            worker.stop()
+            return []
+
+        consumer.receive_events = receive_then_stop
+        worker = BaseWorker(consumer, handler, poll_interval=0.01)
+        await worker.run()
+
+        consumer.acknowledge.assert_awaited_with(["lock-1"])
+        assert len(handler.handled) == 1
+
+    @pytest.mark.asyncio
+    async def test_accepts_all_types_when_accepted_is_none(self):
+        """When accepted_event_types is None, all event types are processed."""
+        consumer = AsyncMock()
+        handler = StubHandler(accepted_types=None)
+        detail = _make_detail(
+            {"tenantId": "t1", "artifactId": "a1"},
+            event_type="any.type",
+        )
+
+        call_count = 0
+
+        async def receive_then_stop(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [detail]
+            worker.stop()
+            return []
+
+        consumer.receive_events = receive_then_stop
+        worker = BaseWorker(consumer, handler, poll_interval=0.01)
+        await worker.run()
+
+        consumer.acknowledge.assert_awaited_with(["lock-1"])
+        assert len(handler.handled) == 1

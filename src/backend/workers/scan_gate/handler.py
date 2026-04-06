@@ -9,7 +9,11 @@ import structlog
 
 from domains.artifacts.models import ArtifactError, ArtifactStatus
 from domains.artifacts.repository import ArtifactRepository
-from shared.event_types import EVENT_ARTIFACT_SCAN_FAILED, EVENT_ARTIFACT_SCAN_PASSED
+from shared.event_types import (
+    EVENT_ARTIFACT_SCAN_FAILED,
+    EVENT_ARTIFACT_SCAN_PASSED,
+    EVENT_ARTIFACT_UPLOADED,
+)
 from shared.events import EventGridPublisher, build_cloud_event
 from workers.base import PermanentError, TransientError, WorkerHandler
 
@@ -39,6 +43,10 @@ class ScanGateHandler(WorkerHandler):
     ``True`` the handler will integrate with Microsoft Defender for
     Storage (not yet implemented).
     """
+
+    @property
+    def accepted_event_types(self) -> frozenset[str]:
+        return frozenset({EVENT_ARTIFACT_UPLOADED})
 
     def __init__(
         self,

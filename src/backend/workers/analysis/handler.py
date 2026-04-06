@@ -9,7 +9,11 @@ import structlog
 
 from domains.analysis.models import AnalysisStatus
 from domains.analysis.repository import AnalysisRepository
-from shared.event_types import EVENT_ANALYSIS_COMPLETED, EVENT_ANALYSIS_FAILED
+from shared.event_types import (
+    EVENT_ANALYSIS_COMPLETED,
+    EVENT_ANALYSIS_FAILED,
+    EVENT_ANALYSIS_REQUESTED,
+)
 from shared.events import EventGridPublisher, build_cloud_event
 from shared.pubsub import PubSubService
 from workers.base import PermanentError, TransientError, WorkerHandler
@@ -22,6 +26,10 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 class AnalysisHandler(WorkerHandler):
     """Process ``AnalysisRequested`` events by running the agent analysis flow."""
+
+    @property
+    def accepted_event_types(self) -> frozenset[str]:
+        return frozenset({EVENT_ANALYSIS_REQUESTED})
 
     def __init__(
         self,

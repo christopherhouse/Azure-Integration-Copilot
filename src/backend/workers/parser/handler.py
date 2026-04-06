@@ -12,7 +12,11 @@ from domains.artifacts.models import ArtifactError, ArtifactStatus
 from domains.artifacts.repository import ArtifactRepository
 from shared.blob import BlobService
 from shared.cosmos import CosmosService
-from shared.event_types import EVENT_ARTIFACT_PARSE_FAILED, EVENT_ARTIFACT_PARSED
+from shared.event_types import (
+    EVENT_ARTIFACT_PARSE_FAILED,
+    EVENT_ARTIFACT_PARSED,
+    EVENT_ARTIFACT_SCAN_PASSED,
+)
 from shared.events import EventGridPublisher, build_cloud_event
 from workers.base import PermanentError, TransientError, WorkerHandler
 from workers.parser.parsers import UnsupportedArtifactType, get_parser
@@ -38,6 +42,10 @@ class ParserHandler(WorkerHandler):
     """Process ``ArtifactScanPassed`` events by parsing the raw artifact
     and storing a structured parse result in Cosmos DB.
     """
+
+    @property
+    def accepted_event_types(self) -> frozenset[str]:
+        return frozenset({EVENT_ARTIFACT_SCAN_PASSED})
 
     def __init__(
         self,

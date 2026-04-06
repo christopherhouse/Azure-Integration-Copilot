@@ -38,6 +38,10 @@ NOTIFICATION_MAP: dict[str, str] = {
 class NotificationHandler(WorkerHandler):
     """Process terminal events and send Web PubSub notifications."""
 
+    @property
+    def accepted_event_types(self) -> frozenset[str]:
+        return frozenset(NOTIFICATION_MAP.keys())
+
     def __init__(self, pubsub_service: PubSubService) -> None:
         self._pubsub = pubsub_service
 

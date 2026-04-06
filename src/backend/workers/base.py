@@ -62,6 +62,16 @@ class PermanentError(Exception):
 class WorkerHandler(ABC):
     """Interface that each domain-specific worker handler must implement."""
 
+    @property
+    def accepted_event_types(self) -> frozenset[str] | None:
+        """Return the set of CloudEvent types this handler can process.
+
+        If ``None`` (the default), all event types are accepted.  Override
+        this in subclasses so that the :class:`BaseWorker` can discard
+        events delivered by misconfigured subscriptions instead of crashing.
+        """
+        return None
+
     @abstractmethod
     async def is_already_processed(self, event_data: dict[str, Any]) -> bool:
         """Return ``True`` if the event has already been handled (idempotency)."""
@@ -211,6 +221,17 @@ class BaseWorker:
                 return
 
             span.set_attribute("worker.tenant.id", tenant_id)
+
+            # --- Event type validation ---
+            accepted = self._handler.accepted_event_types
+            if accepted is not None and str(event.type) not in accepted:
+                log.warning(
+                    "unexpected_event_type",
+                    accepted_types=sorted(accepted),
+                )
+                span.set_status(StatusCode.OK)
+                await self._consumer.acknowledge([lock_token])
+                return
 
             # --- Idempotency check ---
             try:
