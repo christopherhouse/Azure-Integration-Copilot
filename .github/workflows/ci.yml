@@ -42,6 +42,10 @@ jobs:
         working-directory: src/frontend
         run: npm ci
 
+      - name: Audit production dependencies
+        working-directory: src/frontend
+        run: npm audit --audit-level=high --omit=dev || true
+
       - name: Lint
         working-directory: src/frontend
         run: npm run lint
@@ -89,6 +93,10 @@ jobs:
         working-directory: src/backend
         run: uv sync --frozen
 
+      - name: Audit Python dependencies
+        working-directory: src/backend
+        run: uv run pip-audit --strict --desc || true
+
       - name: Lint
         working-directory: src/backend
         run: uv run ruff check .
@@ -131,6 +139,12 @@ jobs:
             src/worker-parser-rust/target
           key: rust-${{ runner.os }}-${{ hashFiles('src/worker-parser-rust/Cargo.lock') }}
           restore-keys: rust-${{ runner.os }}-
+
+      - name: Audit Rust dependencies
+        working-directory: src/worker-parser-rust
+        run: |
+          cargo install cargo-audit --quiet
+          cargo audit || true
 
       - name: Lint (clippy)
         working-directory: src/worker-parser-rust
