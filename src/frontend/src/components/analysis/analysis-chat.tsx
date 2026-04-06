@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Send, Loader2, Bot, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -21,26 +21,23 @@ export function AnalysisChat({
   selectedAnalysis,
 }: AnalysisChatProps) {
   const [prompt, setPrompt] = useState("");
-  const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(
-    selectedAnalysis?.id ?? null,
-  );
+  const [submittedAnalysisId, setSubmittedAnalysisId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const createMutation = useCreateAnalysis(projectId);
+
+  // The active analysis ID is the selected sidebar item, or the one we just submitted
+  const activeAnalysisId = useMemo(
+    () => selectedAnalysis?.id ?? submittedAnalysisId,
+    [selectedAnalysis?.id, submittedAnalysisId],
+  );
 
   // Poll for the active analysis while it's running
   const { data: activeAnalysis } = useAnalysis(
     projectId,
     activeAnalysisId ?? "",
   );
-
-  // Sync selected analysis from sidebar
-  useEffect(() => {
-    if (selectedAnalysis) {
-      setActiveAnalysisId(selectedAnalysis.id);
-    }
-  }, [selectedAnalysis]);
 
   // Scroll to bottom on new content
   useEffect(() => {
@@ -57,7 +54,7 @@ export function AnalysisChat({
 
       createMutation.mutate(trimmed, {
         onSuccess: (analysis) => {
-          setActiveAnalysisId(analysis.id);
+          setSubmittedAnalysisId(analysis.id);
           setPrompt("");
         },
         onError: (err) => {

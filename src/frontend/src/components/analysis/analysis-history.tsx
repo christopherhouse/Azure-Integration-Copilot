@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Loader2, CheckCircle2, XCircle, MessageSquare } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, MessageSquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAnalyses } from "@/hooks/use-analysis";

@@ -3,8 +3,6 @@
 import {
   createContext,
   useEffect,
-  useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -36,12 +34,12 @@ interface RealtimeProviderProps {
  */
 export function RealtimeProvider({ children }: RealtimeProviderProps) {
   const [connected, setConnected] = useState(false);
-  const clientRef = useRef<RealtimeClient | null>(null);
+  // Lazy init: create the client once on first render. The client itself
+  // is not reactive state — it's a mutable imperative object that lives
+  // for the lifetime of the provider mount.
+  const [client] = useState<RealtimeClient>(() => new RealtimeClient());
 
   useEffect(() => {
-    const client = new RealtimeClient();
-    clientRef.current = client;
-
     // Attempt connection — failures are silently caught inside the client.
     void client.connect();
 
@@ -53,17 +51,11 @@ export function RealtimeProvider({ children }: RealtimeProviderProps) {
     return () => {
       clearInterval(interval);
       client.dispose();
-      clientRef.current = null;
     };
-  }, []);
-
-  const value = useMemo<RealtimeContextValue>(
-    () => ({ connected, client: clientRef.current }),
-    [connected],
-  );
+  }, [client]);
 
   return (
-    <RealtimeContext.Provider value={value}>
+    <RealtimeContext.Provider value={{ connected, client }}>
       {children}
     </RealtimeContext.Provider>
   );

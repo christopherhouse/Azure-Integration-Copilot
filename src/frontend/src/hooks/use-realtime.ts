@@ -16,7 +16,9 @@ export function useRealtimeEvent(
   const { client, connected } = useContext(RealtimeContext);
   // Keep the latest callback in a ref to avoid re-subscribing on every render
   const callbackRef = useRef(callback);
-  callbackRef.current = callback;
+  useEffect(() => {
+    callbackRef.current = callback;
+  });
 
   useEffect(() => {
     if (!client) return;
