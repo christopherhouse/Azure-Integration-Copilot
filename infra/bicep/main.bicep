@@ -86,6 +86,12 @@ param cosmosSqlDatabases array = []
 @description('Public IP addresses allowed to access Cosmos DB')
 param cosmosAllowedIpAddresses array = []
 
+@description('SKU name for GPT-4o model deployment')
+param aiModelDeploymentSku string = 'GlobalStandard'
+
+@description('Capacity (K TPM) for GPT-4o model deployment')
+param aiModelDeploymentCapacity int = 30
+
 @description('Additional tags to apply to all resources')
 param tags object = {}
 
@@ -112,6 +118,7 @@ var resourceNames = {
   idBackend: 'id-backend-${namePrefix}'
   idWorker: 'id-worker-${namePrefix}'
   bastion: 'bas-${namePrefix}'
+  aiServices: 'ais-${namePrefix}'
 }
 
 var commonTags = union(tags, {
@@ -432,6 +439,28 @@ resource workerEventGridDataReceiver 'Microsoft.Authorization/roleAssignments@20
   }
 }
 
+// Cognitive Services User for worker identity (AI Foundry agent invocation)
+resource workerCognitiveServicesUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.aiServices, resourceNames.idWorker, 'CognitiveServicesUser')
+  scope: aiServicesResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')
+    principalId: identityWorker.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// Web PubSub Service Owner for worker identity (notification worker)
+resource workerWebPubSubOwner 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.webPubSub, resourceNames.idWorker, 'WebPubSubServiceOwner')
+  scope: webPubSubResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '12cf5a90-567b-43ae-8102-96cf46c7d9b4')
+    principalId: identityWorker.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // Existing resource references for RBAC scoping
 resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: resourceNames.containerRegistry
@@ -482,6 +511,10 @@ resource webPubSubResource 'Microsoft.SignalRService/webPubSub@2024-03-01' exist
   name: resourceNames.webPubSub
 }
 
+resource aiServicesResource 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
+  name: resourceNames.aiServices
+}
+
 // ---------------------------------------------------------------------------
 // Container Apps Environment
 // ---------------------------------------------------------------------------
@@ -513,6 +546,22 @@ module webPubSub 'modules/web-pubsub.bicep' = {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// AI Foundry (AI Services)
+// ---------------------------------------------------------------------------
+
+module aiFoundry 'modules/ai-foundry.bicep' = {
+  name: 'ai-foundry'
+  params: {
+    location: location
+    name: resourceNames.aiServices
+    modelDeploymentSkuName: aiModelDeploymentSku
+    modelDeploymentCapacity: aiModelDeploymentCapacity
+    logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
+    tags: commonTags
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Azure Bastion
@@ -645,3 +694,9 @@ output frontendCustomDomain string = frontendHostname
 
 @description('Custom domain hostname for the backend API (e.g. dev.api.integrisight.ai)')
 output backendCustomDomain string = backendHostname
+
+@description('Endpoint of the AI Services account')
+output aiServicesEndpoint string = aiFoundry.outputs.endpoint
+
+@description('Name of the AI Services account')
+output aiServicesName string = aiFoundry.outputs.name

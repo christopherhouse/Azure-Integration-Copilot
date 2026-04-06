@@ -12,9 +12,11 @@ from opentelemetry import trace
 from opentelemetry.trace import StatusCode
 
 from config import settings
+from domains.analysis.router import router as analysis_router
 from domains.artifacts.router import router as artifact_router
 from domains.graph.router import router as graph_router
 from domains.projects.router import router as project_router
+from domains.realtime.router import router as realtime_router
 from domains.tenants.router import router as tenant_router
 from domains.users.router import router as user_router
 from middleware.auth import AuthMiddleware
@@ -79,6 +81,14 @@ app = FastAPI(
             "name": "graph",
             "description": "Dependency graph query operations.",
         },
+        {
+            "name": "analyses",
+            "description": "AI-powered analysis of integration landscapes.",
+        },
+        {
+            "name": "realtime",
+            "description": "Web PubSub token negotiation for realtime updates.",
+        },
     ],
 )
 
@@ -124,6 +134,8 @@ app.include_router(user_router)
 app.include_router(project_router)
 app.include_router(artifact_router)
 app.include_router(graph_router)
+app.include_router(analysis_router)
+app.include_router(realtime_router)
 
 
 

@@ -46,6 +46,10 @@ param cosmosSqlDatabases = [
         name: 'graph'
         paths: ['/partitionKey']
       }
+      {
+        name: 'analyses'
+        paths: ['/partitionKey']
+      }
     ]
   }
 ]
