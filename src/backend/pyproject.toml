@@ -35,6 +35,7 @@ dev = [
     "pytest-asyncio",
     "httpx",
     "pip-audit",
+    "pip-audit",
 ]
 
 [tool.pytest.ini_options]

@@ -143,9 +143,9 @@ Overall security posture is **moderate** with a solid baseline (JWT-based auth m
    - Additional tests added: Content-Disposition sanitization (6 tests), streaming upload size enforcement (2 tests).
 
 ## Next 2–4 weeks
-9. Add security logging improvements (auth failures by reason, rate telemetry, anomaly detection signals).
-10. Add threat-model document and STRIDE-style abuse cases for tenant isolation and artifact pipeline.
-11. Add SAST/dep scanning gates in CI (Python + Node lockfile checks) and periodic dependency update cadence.
+9. ~~Add security logging improvements (auth failures by reason, rate telemetry, anomaly detection signals).~~ ✅ **Remediated** — Auth middleware now logs all failure paths with structured `auth.failure_reason` field and sets OTel span attributes (`auth.result`, `auth.failure_reason`). Added `auth.attempts` counter, `quota.checks` counter, and `quota.usage_ratio` histogram via OTel metrics module. Sliding-window anomaly detection tracks auth brute-force and quota burst patterns with configurable thresholds.
+10. ~~Add threat-model document and STRIDE-style abuse cases for tenant isolation and artifact pipeline.~~ ✅ **Remediated** — Created `docs/threat-model.md` with comprehensive STRIDE analysis per component (58 threats), data flow diagrams (Mermaid), 5 tenant isolation abuse cases, 5 artifact pipeline abuse cases, and mitigations matrix.
+11. ~~Add SAST/dep scanning gates in CI (Python + Node lockfile checks) and periodic dependency update cadence.~~ ✅ **Remediated** — Added `npm audit`, `pip-audit`, and `cargo audit` steps to CI jobs. Created CodeQL SAST workflow for Python and JavaScript/TypeScript. Configured Dependabot for pip, npm, cargo, and GitHub Actions ecosystems with weekly/monthly schedules.
 
 ---
 

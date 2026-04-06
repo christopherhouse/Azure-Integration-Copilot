@@ -144,7 +144,7 @@ jobs:
       - name: Audit Rust dependencies
         working-directory: src/worker-parser-rust
         run: |
-          cargo install cargo-audit --quiet
+          command -v cargo-audit || cargo install cargo-audit --quiet
           cargo audit || true
 
       - name: Lint (clippy)
