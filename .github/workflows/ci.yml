@@ -136,6 +136,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            ~/.cargo/bin
             src/worker-parser-rust/target
           key: rust-${{ runner.os }}-${{ hashFiles('src/worker-parser-rust/Cargo.lock') }}
           restore-keys: rust-${{ runner.os }}-

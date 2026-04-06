@@ -46,6 +46,11 @@ updates:
     labels:
       - "dependencies"
       - "rust"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
 
   - package-ecosystem: "github-actions"
     directory: "/"
