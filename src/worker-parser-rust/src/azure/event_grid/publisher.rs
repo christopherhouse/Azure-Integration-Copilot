@@ -3,6 +3,8 @@
 //! Mirrors the Python `shared/events.py` — publishes CloudEvents to an
 //! Event Grid Namespace topic using the REST API.
 
+use std::time::Duration;
+
 use chrono::{DateTime, Utc};
 use reqwest::Client;
 use serde::Serialize;
@@ -16,6 +18,9 @@ const EVENTGRID_RESOURCE: &str = "https://eventgrid.azure.net/";
 
 /// Event Grid Namespace API version.
 const API_VERSION: &str = "2024-06-01";
+
+/// HTTP request timeout for Event Grid publish operations.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// CloudEvents v1.0 envelope for publishing.
 #[derive(Debug, Clone, Serialize)]
@@ -65,7 +70,10 @@ impl EventGridPublisher {
         credential: ManagedIdentityCredential,
     ) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(REQUEST_TIMEOUT)
+                .build()
+                .expect("failed to build HTTP client"),
             credential,
             endpoint: endpoint.trim_end_matches('/').to_owned(),
             topic,

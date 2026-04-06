@@ -124,19 +124,55 @@ impl WorkerHandler for ParserHandler {
         let tenant_id = str_field(event_data, "tenantId")?;
         let project_id = str_field(event_data, "projectId")?;
         let artifact_id = str_field(event_data, "artifactId")?;
-        let artifact_type = event_data
-            .get("artifactType")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        let blob_path = event_data
-            .get("blobPath")
+
+        // Fetch artifact record from Cosmos and transition scan_passed → parsing.
+        // If the artifact is already in PARSING (retry after a transient failure),
+        // skip the status transition and continue with the parse attempt.
+        let artifact = self
+            .cosmos
+            .read_item(DATABASE_NAME, CONTAINER_NAME, artifact_id, tenant_id)
+            .await
+            .map_err(|e| WorkerError::Transient(format!("Failed to fetch artifact: {e}")))?
+            .ok_or_else(|| {
+                WorkerError::Permanent(format!(
+                    "Artifact {artifact_id} not found for tenant {tenant_id}"
+                ))
+            })?;
+
+        let current_status = artifact
+            .get("status")
             .and_then(Value::as_str)
             .unwrap_or("");
 
-        // scan_passed → parsing
-        self.update_status(tenant_id, artifact_id, "parsing")
-            .await
-            .map_err(|e| WorkerError::Transient(format!("Failed to transition to parsing: {e}")))?;
+        if current_status != "parsing" {
+            self.update_status(tenant_id, artifact_id, "parsing")
+                .await
+                .map_err(|e| {
+                    WorkerError::Transient(format!("Failed to transition to parsing: {e}"))
+                })?;
+        }
+
+        // Use artifact record as source of truth for blob_path and artifact_type,
+        // since upstream events may not include these fields.
+        let blob_path = artifact
+            .get("blobPath")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let artifact_type = artifact
+            .get("artifactType")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+
+        if blob_path.is_empty() {
+            return Err(WorkerError::Permanent(format!(
+                "Artifact {artifact_id} has no blob path"
+            )));
+        }
+        if artifact_type.is_empty() {
+            return Err(WorkerError::Permanent(format!(
+                "Artifact {artifact_id} has no artifact type"
+            )));
+        }
 
         // Download raw artifact from Blob Storage
         let content = self

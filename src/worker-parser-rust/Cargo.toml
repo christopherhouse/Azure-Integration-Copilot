@@ -2,7 +2,7 @@
 name = "integrisight-worker-parser-rust"
 version = "0.1.0"
 edition = "2024"
-description = "Spike: Rust-based artifact parser worker for Integrisight.ai"
+description = "Rust-based artifact parser worker for Integrisight.ai"
 license = "MIT"
 
 [dependencies]
