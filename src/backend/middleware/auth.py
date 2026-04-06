@@ -4,13 +4,27 @@ import uuid
 import httpx
 import structlog
 from jose import JWTError, jwt
+from opentelemetry import trace
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from config import settings
+from shared.metrics import auth_attempts_counter
+from shared.security_signals import auth_failure_tracker
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _set_auth_span_attributes(*, result: str, failure_reason: str = "", token_issuer: str = "") -> None:
+    """Set authentication-related attributes on the current OpenTelemetry span."""
+    span = trace.get_current_span()
+    if span and span.is_recording():
+        span.set_attribute("auth.result", result)
+        if failure_reason:
+            span.set_attribute("auth.failure_reason", failure_reason)
+        if token_issuer:
+            span.set_attribute("auth.token_issuer", token_issuer)
 
 # Dev-mode identity used when SKIP_AUTH=true
 _DEV_EXTERNAL_ID = "dev-user-001"
@@ -127,6 +141,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
         # Extract Bearer token
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
+            logger.warning(
+                "auth_failure",
+                auth_failure_reason="missing_header",
+                auth_request_path=request.url.path,
+            )
+            _set_auth_span_attributes(result="failure", failure_reason="missing_header")
+            auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "missing_header"})
+            auth_failure_tracker.record(request.client.host if request.client else "unknown")
             return _make_401_response("Missing or invalid Authorization header.", request_id)
 
         token = auth_header[7:]
@@ -145,6 +167,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 rsa_key = _find_signing_key(jwks, kid)
 
             if not rsa_key:
+                logger.warning(
+                    "auth_failure",
+                    auth_failure_reason="key_not_found",
+                    auth_request_path=request.url.path,
+                    kid=kid,
+                )
+                _set_auth_span_attributes(result="failure", failure_reason="key_not_found")
+                auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "key_not_found"})
+                auth_failure_tracker.record(request.client.host if request.client else "unknown")
                 return _make_401_response("Unable to find appropriate signing key.", request_id)
 
             payload = jwt.decode(
@@ -173,14 +204,30 @@ class AuthMiddleware(BaseHTTPMiddleware):
             )
 
             if not request.state.external_id:
+                logger.warning(
+                    "auth_failure",
+                    auth_failure_reason="missing_claims",
+                    auth_request_path=request.url.path,
+                )
+                _set_auth_span_attributes(result="failure", failure_reason="missing_claims")
+                auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "missing_claims"})
+                auth_failure_tracker.record(request.client.host if request.client else "unknown")
                 return _make_401_response("Token missing required claims.", request_id)
 
         except JWTError as exc:
-            logger.warning("jwt_validation_failed", error=str(exc))
+            logger.warning("auth_failure", auth_failure_reason="invalid_token", error=str(exc))
+            _set_auth_span_attributes(result="failure", failure_reason="invalid_token")
+            auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "invalid_token"})
+            auth_failure_tracker.record(request.client.host if request.client else "unknown")
             return _make_401_response("Invalid or expired token.", request_id)
         except httpx.HTTPError as exc:
-            logger.error("jwks_fetch_failed", error=str(exc))
+            logger.error("auth_failure", auth_failure_reason="jwks_fetch_failed", error=str(exc))
+            _set_auth_span_attributes(result="failure", failure_reason="jwks_fetch_failed")
+            auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "jwks_fetch_failed"})
+            auth_failure_tracker.record(request.client.host if request.client else "unknown")
             return _make_401_response("Unable to validate token at this time.", request_id)
 
+        _set_auth_span_attributes(result="success")
+        auth_attempts_counter.add(1, {"result": "success", "failure_reason": ""})
         return await call_next(request)
 
