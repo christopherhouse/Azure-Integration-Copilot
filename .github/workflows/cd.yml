@@ -354,28 +354,93 @@ jobs:
             --max-replicas 10 \
             --env-vars "${FRONTEND_ENV_VARS}"
 
-      - name: Deploy worker-scan-gate Container App
+  # ---------------------------------------------------------------------------
+  # Dev — Deploy Workers (matrix — runs in parallel with FE/BE)
+  # ---------------------------------------------------------------------------
+  deploy-workers-dev:
+    name: "Dev — Deploy Worker (${{ matrix.worker.name }})"
+    needs: [deploy-infra-dev, promote-containers-dev]
+    runs-on: ubuntu-latest
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        worker:
+          - name: scan-gate
+            app_name: ca-worker-scan-gate
+            image_name: integrisight-worker-scan-gate
+            worker_module: workers.scan_gate.main
+          - name: parser
+            app_name: ca-worker-parser
+            image_name: integrisight-worker-parser
+            worker_module: workers.parser.main
+          - name: graph-builder
+            app_name: ca-worker-graph-builder
+            image_name: integrisight-worker-graph-builder
+            worker_module: workers.graph_builder.main
+          - name: analysis
+            app_name: ca-worker-analysis
+            image_name: integrisight-worker-analysis
+            worker_module: workers.analysis.main
+          - name: notification
+            app_name: ca-worker-notification
+            image_name: integrisight-worker-notification
+            worker_module: workers.notification.main
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve worker identity resource ID
+        id: identity
         env:
-          WORKER_SCAN_GATE_ENV_VARS: >-
-            ENVIRONMENT=dev
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
-            WORKER_MODULE=workers.scan_gate.main
+          RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
+        run: |
+          WORKER_ID=$(az identity show --name "${{ needs.deploy-infra-dev.outputs.worker_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          echo "worker_id=${WORKER_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Build worker environment variables
+        id: worker-env
+        run: |
+          ENV_VARS="ENVIRONMENT=dev"
+          ENV_VARS="${ENV_VARS} COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}"
+          ENV_VARS="${ENV_VARS} BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}"
+          ENV_VARS="${ENV_VARS} EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}"
+          ENV_VARS="${ENV_VARS} EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}"
+          ENV_VARS="${ENV_VARS} AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}"
+          ENV_VARS="${ENV_VARS} APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}"
+
+          if [[ "${{ matrix.worker.name }}" == "analysis" || "${{ matrix.worker.name }}" == "notification" ]]; then
+            ENV_VARS="${ENV_VARS} WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.web_pubsub_endpoint }}"
+          fi
+
+          if [[ "${{ matrix.worker.name }}" == "analysis" ]]; then
+            ENV_VARS="${ENV_VARS} FOUNDRY_PROJECT_ENDPOINT=${{ needs.deploy-infra-dev.outputs.ai_services_endpoint }}"
+          fi
+
+          ENV_VARS="${ENV_VARS} WORKER_MODULE=${{ matrix.worker.worker_module }}"
+          echo "env_vars=${ENV_VARS}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy ${{ matrix.worker.name }} Container App
         # min-replicas=1: CPU scaler cannot activate from 0 replicas (no CPU to
         # measure). A native KEDA scaler for Event Grid Namespace pull delivery
         # does not exist yet; switch to min=0 if one ships.
         run: |
+          chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-scan-gate" \
+            --name "${{ matrix.worker.app_name }}" \
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-scan-gate:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/${{ matrix.worker.image_name }}:${{ needs.promote-containers-dev.outputs.image_tag }}" \
             --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
+            --identity "${{ steps.identity.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
@@ -384,133 +449,14 @@ jobs:
             --scale-rule-name cpu-scaling \
             --scale-rule-type cpu \
             --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
-
-      - name: Deploy worker-parser Container App
-        env:
-          WORKER_PARSER_ENV_VARS: >-
-            ENVIRONMENT=dev
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
-            WORKER_MODULE=workers.parser.main
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-parser" \
-            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-parser:${{ needs.promote-containers-dev.outputs.image_tag }}" \
-            --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 5 \
-            --scale-rule-name cpu-scaling \
-            --scale-rule-type cpu \
-            --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_PARSER_ENV_VARS}"
-
-      - name: Deploy worker-graph-builder Container App
-        env:
-          WORKER_GRAPH_BUILDER_ENV_VARS: >-
-            ENVIRONMENT=dev
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
-            WORKER_MODULE=workers.graph_builder.main
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-graph-builder" \
-            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-graph-builder:${{ needs.promote-containers-dev.outputs.image_tag }}" \
-            --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 5 \
-            --scale-rule-name cpu-scaling \
-            --scale-rule-type cpu \
-            --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_GRAPH_BUILDER_ENV_VARS}"
-
-      - name: Deploy worker-analysis Container App
-        env:
-          WORKER_ANALYSIS_ENV_VARS: >-
-            ENVIRONMENT=dev
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
-            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.web_pubsub_endpoint }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
-            FOUNDRY_PROJECT_ENDPOINT=${{ needs.deploy-infra-dev.outputs.ai_services_endpoint }}
-            WORKER_MODULE=workers.analysis.main
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-analysis" \
-            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-analysis:${{ needs.promote-containers-dev.outputs.image_tag }}" \
-            --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 5 \
-            --scale-rule-name cpu-scaling \
-            --scale-rule-type cpu \
-            --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_ANALYSIS_ENV_VARS}"
-
-      - name: Deploy worker-notification Container App
-        env:
-          WORKER_NOTIFICATION_ENV_VARS: >-
-            ENVIRONMENT=dev
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}
-            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.web_pubsub_endpoint }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
-            WORKER_MODULE=workers.notification.main
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-notification" \
-            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-notification:${{ needs.promote-containers-dev.outputs.image_tag }}" \
-            --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 5 \
-            --scale-rule-name cpu-scaling \
-            --scale-rule-type cpu \
-            --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_NOTIFICATION_ENV_VARS}"
+            --env-vars "${{ steps.worker-env.outputs.env_vars }}"
 
   # ---------------------------------------------------------------------------
   # Dev — Deploy Azure Front Door (after Container Apps exist)
   # ---------------------------------------------------------------------------
   deploy-afd-dev:
     name: "Dev — Deploy Azure Front Door"
-    needs: [deploy-infra-dev, deploy-apps-dev]
+    needs: [deploy-infra-dev, deploy-apps-dev, deploy-workers-dev]
     runs-on: ubuntu-latest
     environment: dev
 
@@ -961,28 +907,93 @@ jobs:
             --max-replicas 10 \
             --env-vars "${FRONTEND_ENV_VARS}"
 
-      - name: Deploy worker-scan-gate Container App
+  # ---------------------------------------------------------------------------
+  # Prod — Deploy Workers (matrix — runs in parallel with FE/BE)
+  # ---------------------------------------------------------------------------
+  deploy-workers-prod:
+    name: "Prod — Deploy Worker (${{ matrix.worker.name }})"
+    needs: [deploy-infra-prod, promote-containers-prod]
+    runs-on: ubuntu-latest
+    environment: prod
+    strategy:
+      fail-fast: false
+      matrix:
+        worker:
+          - name: scan-gate
+            app_name: ca-worker-scan-gate
+            image_name: integrisight-worker-scan-gate
+            worker_module: workers.scan_gate.main
+          - name: parser
+            app_name: ca-worker-parser
+            image_name: integrisight-worker-parser
+            worker_module: workers.parser.main
+          - name: graph-builder
+            app_name: ca-worker-graph-builder
+            image_name: integrisight-worker-graph-builder
+            worker_module: workers.graph_builder.main
+          - name: analysis
+            app_name: ca-worker-analysis
+            image_name: integrisight-worker-analysis
+            worker_module: workers.analysis.main
+          - name: notification
+            app_name: ca-worker-notification
+            image_name: integrisight-worker-notification
+            worker_module: workers.notification.main
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve worker identity resource ID
+        id: identity
         env:
-          WORKER_SCAN_GATE_ENV_VARS: >-
-            ENVIRONMENT=prod
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
-            WORKER_MODULE=workers.scan_gate.main
+          RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
+        run: |
+          WORKER_ID=$(az identity show --name "${{ needs.deploy-infra-prod.outputs.worker_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          echo "worker_id=${WORKER_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Build worker environment variables
+        id: worker-env
+        run: |
+          ENV_VARS="ENVIRONMENT=prod"
+          ENV_VARS="${ENV_VARS} COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}"
+          ENV_VARS="${ENV_VARS} BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}"
+          ENV_VARS="${ENV_VARS} EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}"
+          ENV_VARS="${ENV_VARS} EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}"
+          ENV_VARS="${ENV_VARS} AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}"
+          ENV_VARS="${ENV_VARS} APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}"
+
+          if [[ "${{ matrix.worker.name }}" == "analysis" || "${{ matrix.worker.name }}" == "notification" ]]; then
+            ENV_VARS="${ENV_VARS} WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.web_pubsub_endpoint }}"
+          fi
+
+          if [[ "${{ matrix.worker.name }}" == "analysis" ]]; then
+            ENV_VARS="${ENV_VARS} FOUNDRY_PROJECT_ENDPOINT=${{ needs.deploy-infra-prod.outputs.ai_services_endpoint }}"
+          fi
+
+          ENV_VARS="${ENV_VARS} WORKER_MODULE=${{ matrix.worker.worker_module }}"
+          echo "env_vars=${ENV_VARS}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy ${{ matrix.worker.name }} Container App
         # min-replicas=1: CPU scaler cannot activate from 0 replicas (no CPU to
         # measure). A native KEDA scaler for Event Grid Namespace pull delivery
         # does not exist yet; switch to min=0 if one ships.
         run: |
+          chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-scan-gate" \
+            --name "${{ matrix.worker.app_name }}" \
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-scan-gate:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/${{ matrix.worker.image_name }}:${{ needs.promote-containers-prod.outputs.image_tag }}" \
             --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
+            --identity "${{ steps.identity.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
             --cpu 0.25 \
             --memory 0.5Gi \
@@ -991,133 +1002,14 @@ jobs:
             --scale-rule-name cpu-scaling \
             --scale-rule-type cpu \
             --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_SCAN_GATE_ENV_VARS}"
-
-      - name: Deploy worker-parser Container App
-        env:
-          WORKER_PARSER_ENV_VARS: >-
-            ENVIRONMENT=prod
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
-            WORKER_MODULE=workers.parser.main
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-parser" \
-            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-parser:${{ needs.promote-containers-prod.outputs.image_tag }}" \
-            --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 5 \
-            --scale-rule-name cpu-scaling \
-            --scale-rule-type cpu \
-            --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_PARSER_ENV_VARS}"
-
-      - name: Deploy worker-graph-builder Container App
-        env:
-          WORKER_GRAPH_BUILDER_ENV_VARS: >-
-            ENVIRONMENT=prod
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
-            WORKER_MODULE=workers.graph_builder.main
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-graph-builder" \
-            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-graph-builder:${{ needs.promote-containers-prod.outputs.image_tag }}" \
-            --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 5 \
-            --scale-rule-name cpu-scaling \
-            --scale-rule-type cpu \
-            --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_GRAPH_BUILDER_ENV_VARS}"
-
-      - name: Deploy worker-analysis Container App
-        env:
-          WORKER_ANALYSIS_ENV_VARS: >-
-            ENVIRONMENT=prod
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
-            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.web_pubsub_endpoint }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
-            FOUNDRY_PROJECT_ENDPOINT=${{ needs.deploy-infra-prod.outputs.ai_services_endpoint }}
-            WORKER_MODULE=workers.analysis.main
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-analysis" \
-            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-analysis:${{ needs.promote-containers-prod.outputs.image_tag }}" \
-            --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 5 \
-            --scale-rule-name cpu-scaling \
-            --scale-rule-type cpu \
-            --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_ANALYSIS_ENV_VARS}"
-
-      - name: Deploy worker-notification Container App
-        env:
-          WORKER_NOTIFICATION_ENV_VARS: >-
-            ENVIRONMENT=prod
-            COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}
-            BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}
-            EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}
-            EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}
-            WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.web_pubsub_endpoint }}
-            AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}
-            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
-            WORKER_MODULE=workers.notification.main
-        run: |
-          ./infra/scripts/deploy-container-app.sh \
-            --name "ca-worker-notification" \
-            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
-            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-notification:${{ needs.promote-containers-prod.outputs.image_tag }}" \
-            --no-ingress \
-            --identity "${{ steps.identities.outputs.worker_id }}" \
-            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
-            --cpu 0.25 \
-            --memory 0.5Gi \
-            --min-replicas 1 \
-            --max-replicas 5 \
-            --scale-rule-name cpu-scaling \
-            --scale-rule-type cpu \
-            --scale-rule-metadata "type=Utilization value=70" \
-            --env-vars "${WORKER_NOTIFICATION_ENV_VARS}"
+            --env-vars "${{ steps.worker-env.outputs.env_vars }}"
 
   # ---------------------------------------------------------------------------
   # Prod — Deploy Azure Front Door (after Container Apps exist)
   # ---------------------------------------------------------------------------
   deploy-afd-prod:
     name: "Prod — Deploy Azure Front Door"
-    needs: [deploy-infra-prod, deploy-apps-prod]
+    needs: [deploy-infra-prod, deploy-apps-prod, deploy-workers-prod]
     runs-on: ubuntu-latest
     environment: prod
 
