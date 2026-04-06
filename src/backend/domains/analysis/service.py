@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 import structlog
-from python_ulid import ULID
+from ulid import ULID
 
 from shared.event_types import EVENT_ANALYSIS_REQUESTED
 from shared.events import EventGridPublisher, build_cloud_event

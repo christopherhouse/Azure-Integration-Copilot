@@ -269,7 +269,7 @@ class AgentOrchestrator:
             cleaned = eval_text.strip()
             if cleaned.startswith("```"):
                 lines = cleaned.split("\n")
-                lines = [l for l in lines if not l.strip().startswith("```")]
+                lines = [line for line in lines if not line.strip().startswith("```")]
                 cleaned = "\n".join(lines)
             eval_data = json.loads(cleaned)
             return EvaluationResult(
