@@ -23,6 +23,7 @@ export function middleware(request: NextRequest) {
     "https://c.bing.com",
     "https://www.google-analytics.com",
     "https://region1.google-analytics.com",
+    "wss://*.webpubsub.azure.com",
   ];
 
   const apiBaseUrl = process.env.API_BASE_URL;
