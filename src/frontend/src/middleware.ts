@@ -6,16 +6,24 @@ import type { NextRequest } from "next/server";
  * that runtime-only environment values (such as `API_BASE_URL`) are
  * included in the policy.
  *
- * This replaces the static CSP that was previously defined in
- * `next.config.ts` – the static approach bakes values at **build time**,
- * which does not work for `output: "standalone"` deployments where the
- * API origin varies per environment.
+ * A per-request **nonce** is generated and embedded in `script-src` so
+ * that only inline scripts carrying the matching `nonce` attribute are
+ * executed.  The nonce is forwarded to server components via the
+ * `x-nonce` request header; Next.js also parses the CSP header
+ * automatically and applies the nonce to its own framework scripts.
  */
 export function middleware(request: NextRequest) {
-  const response = NextResponse.next();
+  // Generate a unique nonce for this request
+  const nonce = btoa(crypto.randomUUID());
 
   // --- Build connect-src dynamically ----------------------------------------
-  const connectSources = ["'self'", "https://www.clarity.ms", "https://www.google-analytics.com"];
+  const connectSources = [
+    "'self'",
+    "https://*.clarity.ms",
+    "https://c.bing.com",
+    "https://www.google-analytics.com",
+    "https://region1.google-analytics.com",
+  ];
 
   const apiBaseUrl = process.env.API_BASE_URL;
   if (apiBaseUrl) {
@@ -28,19 +36,26 @@ export function middleware(request: NextRequest) {
   }
 
   const csp = [
-    "default-src 'self'",
-    // 'unsafe-inline' required for the RuntimeConfig inline script
-    // that injects window.__RUNTIME_CONFIG__ at request time,
-    // and for the Google Analytics inline gtag snippet.
-    "script-src 'self' 'unsafe-inline' https://www.clarity.ms https://scripts.clarity.ms https://www.googletagmanager.com",
+    "default-src 'self' https://*.clarity.ms https://c.bing.com",
+    `script-src 'self' 'nonce-${nonce}' https://www.googletagmanager.com https://www.clarity.ms`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: https://www.gravatar.com https://c.clarity.ms",
+    "img-src 'self' data: https://*.clarity.ms https://c.bing.com https://www.google-analytics.com https://www.googletagmanager.com",
     "font-src 'self'",
     `connect-src ${connectSources.join(" ")}`,
+    "frame-src 'self'",
+    "object-src 'none'",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
   ].join("; ");
+
+  // Forward the nonce to server components via a request header.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-nonce", nonce);
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   response.headers.set("Content-Security-Policy", csp);
 

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import "./globals.css";
 import { ClarityAnalytics } from "@/components/clarity-analytics";
 import { GoogleAnalytics } from "@/components/google-analytics";
@@ -22,11 +23,13 @@ export const metadata: Metadata = {
   description: "Azure Integration Services management and analysis platform",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html
       lang="en"
@@ -34,7 +37,7 @@ export default function RootLayout({
     >
       <head>
         <RuntimeConfig />
-        <GoogleAnalytics />
+        <GoogleAnalytics nonce={nonce} />
       </head>
       <body className="min-h-full flex flex-col">
         <ClarityAnalytics />
