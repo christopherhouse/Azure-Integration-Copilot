@@ -6,6 +6,7 @@ using '../main.bicep'
 param location = 'centralus'
 param environment = 'dev'
 param workload = 'aic'
+param aiFoundryLocation = 'eastus2'
 
 // Networking
 param vnetAddressSpace = ['10.0.0.0/16']
