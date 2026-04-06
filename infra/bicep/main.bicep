@@ -121,7 +121,7 @@ var resourceNames = {
   idBackend: 'id-backend-${namePrefix}'
   idWorker: 'id-worker-${namePrefix}'
   bastion: 'bas-${namePrefix}'
-  aiServices: 'ais-${namePrefix}'
+  aiServices: 'ais-${workload}-${environment}-${aiFoundryLocation}'
 }
 
 var commonTags = union(tags, {
