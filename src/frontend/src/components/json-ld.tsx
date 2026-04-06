@@ -20,12 +20,15 @@ export async function JsonLd({ data }: JsonLdProps) {
   );
 }
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.integrisight.ai";
+
 /** Organization schema for Integrisight.ai */
 export const organizationJsonLd = {
   "@context": "https://schema.org",
   "@type": "Organization",
   name: "Integrisight.ai",
-  url: "https://www.integrisight.ai",
+  url: siteUrl,
   description:
     "AI-powered platform for understanding, managing, and evolving Azure Integration Services.",
 };
@@ -35,7 +38,7 @@ export const softwareAppJsonLd = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   name: "Integrisight.ai",
-  url: "https://www.integrisight.ai",
+  url: siteUrl,
   applicationCategory: "DeveloperApplication",
   operatingSystem: "Web",
   description:
