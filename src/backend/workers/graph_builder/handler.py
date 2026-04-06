@@ -13,7 +13,7 @@ from domains.graph.id_generation import generate_component_id, generate_edge_id
 from domains.graph.repository import GraphRepository
 from domains.projects.repository import ProjectRepository
 from shared.cosmos import CosmosService
-from shared.event_types import EVENT_GRAPH_BUILD_FAILED, EVENT_GRAPH_UPDATED
+from shared.event_types import EVENT_ARTIFACT_PARSED, EVENT_GRAPH_BUILD_FAILED, EVENT_GRAPH_UPDATED
 from shared.events import EventGridPublisher, build_cloud_event
 from workers.base import PermanentError, TransientError, WorkerHandler
 
@@ -33,6 +33,10 @@ _POST_GRAPH_STATUSES: frozenset[ArtifactStatus] = frozenset(
 
 class GraphBuilderHandler(WorkerHandler):
     """Process ``ArtifactParsed`` events by building graph data from parse results."""
+
+    @property
+    def accepted_event_types(self) -> frozenset[str]:
+        return frozenset({EVENT_ARTIFACT_PARSED})
 
     def __init__(
         self,
