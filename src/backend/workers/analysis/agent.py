@@ -152,11 +152,12 @@ class AgentOrchestrator:
         for message in response.messages:
             for content in message.contents:
                 if content.type == "function_call":
-                    raw_args = getattr(content, "arguments", {})
+                    raw_args = getattr(content, "arguments", None) or {}
                     if isinstance(raw_args, str):
                         try:
                             raw_args = json.loads(raw_args)
-                        except (json.JSONDecodeError, TypeError):
+                        except json.JSONDecodeError:
+                            logger.warning("malformed_tool_arguments", raw=raw_args)
                             raw_args = {}
                     tool_call_records.append(ToolCallRecord(
                         toolName=getattr(content, "name", "unknown"),
