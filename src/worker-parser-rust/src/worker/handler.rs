@@ -16,10 +16,20 @@ use crate::worker::{WorkerError, WorkerHandler};
 const DATABASE_NAME: &str = "integration-copilot";
 const CONTAINER_NAME: &str = "projects";
 
+// -- Artifact status constants -----------------------------------------------
+const STATUS_PARSING: &str = "parsing";
+const STATUS_PARSED: &str = "parsed";
+const STATUS_PARSE_FAILED: &str = "parse_failed";
+
+// -- Cosmos document field names ---------------------------------------------
+const FIELD_STATUS: &str = "status";
+const FIELD_BLOB_PATH: &str = "blobPath";
+const FIELD_ARTIFACT_TYPE: &str = "artifactType";
+
 /// Statuses that indicate the artifact has already progressed past the parse stage.
 const POST_PARSE_STATUSES: &[&str] = &[
-    "parsed",
-    "parse_failed",
+    STATUS_PARSED,
+    STATUS_PARSE_FAILED,
     "graph_building",
     "graph_built",
     "graph_failed",
@@ -59,7 +69,7 @@ impl ParserHandler {
             .map_err(|e| WorkerError::Transient(format!("cosmos read failed: {e}")))?;
 
         Ok(doc
-            .and_then(|d| d.get("status").and_then(Value::as_str).map(String::from)))
+            .and_then(|d| d.get(FIELD_STATUS).and_then(Value::as_str).map(String::from)))
     }
 
     /// Transition artifact status via a patch (read-modify-write).
@@ -82,7 +92,7 @@ impl ParserHandler {
         let etag = doc.get("_etag").and_then(Value::as_str).map(String::from);
 
         if let Some(obj) = doc.as_object_mut() {
-            obj.insert("status".into(), json!(new_status));
+            obj.insert(FIELD_STATUS.into(), json!(new_status));
             obj.insert("updatedAt".into(), json!(Utc::now().to_rfc3339()));
         }
 
@@ -124,19 +134,55 @@ impl WorkerHandler for ParserHandler {
         let tenant_id = str_field(event_data, "tenantId")?;
         let project_id = str_field(event_data, "projectId")?;
         let artifact_id = str_field(event_data, "artifactId")?;
-        let artifact_type = event_data
-            .get("artifactType")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        let blob_path = event_data
-            .get("blobPath")
+
+        // Fetch artifact record from Cosmos and transition scan_passed → parsing.
+        // If the artifact is already in PARSING (retry after a transient failure),
+        // skip the status transition and continue with the parse attempt.
+        let artifact = self
+            .cosmos
+            .read_item(DATABASE_NAME, CONTAINER_NAME, artifact_id, tenant_id)
+            .await
+            .map_err(|e| WorkerError::Transient(format!("Failed to fetch artifact: {e}")))?
+            .ok_or_else(|| {
+                WorkerError::Permanent(format!(
+                    "Artifact {artifact_id} not found for tenant {tenant_id}"
+                ))
+            })?;
+
+        let current_status = artifact
+            .get(FIELD_STATUS)
             .and_then(Value::as_str)
             .unwrap_or("");
 
-        // scan_passed → parsing
-        self.update_status(tenant_id, artifact_id, "parsing")
-            .await
-            .map_err(|e| WorkerError::Transient(format!("Failed to transition to parsing: {e}")))?;
+        if current_status != STATUS_PARSING {
+            self.update_status(tenant_id, artifact_id, STATUS_PARSING)
+                .await
+                .map_err(|e| {
+                    WorkerError::Transient(format!("Failed to transition to parsing: {e}"))
+                })?;
+        }
+
+        // Use artifact record as source of truth for blob_path and artifact_type,
+        // since upstream events may not include these fields.
+        let blob_path = artifact
+            .get(FIELD_BLOB_PATH)
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let artifact_type = artifact
+            .get(FIELD_ARTIFACT_TYPE)
+            .and_then(Value::as_str)
+            .unwrap_or("");
+
+        if blob_path.is_empty() {
+            return Err(WorkerError::Permanent(format!(
+                "Artifact {artifact_id} has no blob path"
+            )));
+        }
+        if artifact_type.is_empty() {
+            return Err(WorkerError::Permanent(format!(
+                "Artifact {artifact_id} has no artifact type"
+            )));
+        }
 
         // Download raw artifact from Blob Storage
         let content = self
@@ -178,7 +224,7 @@ impl WorkerHandler for ParserHandler {
             .map_err(|e| WorkerError::Transient(format!("Failed to store parse result: {e}")))?;
 
         // parsing → parsed
-        self.update_status(tenant_id, artifact_id, "parsed")
+        self.update_status(tenant_id, artifact_id, STATUS_PARSED)
             .await
             .map_err(|e| WorkerError::Transient(format!("Failed to transition to parsed: {e}")))?;
 
@@ -225,7 +271,7 @@ impl WorkerHandler for ParserHandler {
         if let Ok(Some(status)) = self.get_artifact_status(tenant_id, artifact_id).await
             && !POST_PARSE_STATUSES.contains(&status.as_str())
             && let Err(e) = self
-                .update_status(tenant_id, artifact_id, "parse_failed")
+                .update_status(tenant_id, artifact_id, STATUS_PARSE_FAILED)
                 .await
         {
             tracing::error!(error = %e, "update_status_to_parse_failed_error");

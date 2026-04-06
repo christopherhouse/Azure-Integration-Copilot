@@ -3,6 +3,8 @@
 //! Provides read/write operations for the projects container using the
 //! Cosmos DB REST API with managed identity authentication.
 
+use std::time::Duration;
+
 use reqwest::Client;
 use serde_json::Value;
 
@@ -13,6 +15,9 @@ const API_VERSION: &str = "2018-12-31";
 
 /// Cosmos DB resource scope for token acquisition.
 const COSMOS_RESOURCE: &str = "https://cosmos.azure.com/";
+
+/// HTTP request timeout for Cosmos DB operations.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Async wrapper around Azure Cosmos DB REST API.
 #[derive(Clone)]
@@ -25,7 +30,10 @@ pub struct CosmosService {
 impl CosmosService {
     pub fn new(endpoint: String, credential: ManagedIdentityCredential) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(REQUEST_TIMEOUT)
+                .build()
+                .expect("failed to build HTTP client"),
             credential,
             endpoint: endpoint.trim_end_matches('/').to_owned(),
         }

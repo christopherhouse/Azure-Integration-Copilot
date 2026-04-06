@@ -1,8 +1,10 @@
 //! Managed identity credential provider.
 //!
 //! Acquires OAuth2 access tokens from the Azure Instance Metadata Service (IMDS)
-//! or the Container App managed identity endpoint, caching them until near-expiry.
+//! or the Container App managed identity endpoint, caching them per-resource
+//! until near-expiry.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -16,6 +18,9 @@ const DEFAULT_RESOURCE: &str = "https://management.azure.com/";
 /// How many seconds before actual expiry we consider the token stale.
 const EXPIRY_BUFFER_SECS: u64 = 120;
 
+/// HTTP request timeout for token acquisition.
+const TOKEN_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// An access token with its expiration time.
 #[derive(Debug, Clone)]
 pub struct AccessToken {
@@ -24,11 +29,14 @@ pub struct AccessToken {
 }
 
 /// Acquires tokens via Azure Managed Identity (IMDS or Container Apps).
+///
+/// Tokens are cached per-resource so that different Azure services (Storage,
+/// Cosmos DB, Event Grid) each keep their own cached token.
 #[derive(Clone)]
 pub struct ManagedIdentityCredential {
     client: Client,
     client_id: Option<String>,
-    cache: Arc<Mutex<Option<AccessToken>>>,
+    cache: Arc<Mutex<HashMap<String, AccessToken>>>,
 }
 
 #[derive(Deserialize)]
@@ -42,9 +50,12 @@ impl ManagedIdentityCredential {
     /// as the `client_id` query parameter (user-assigned managed identity).
     pub fn new(client_id: Option<String>) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(TOKEN_REQUEST_TIMEOUT)
+                .build()
+                .expect("failed to build HTTP client"),
             client_id: client_id.filter(|s| !s.is_empty()),
-            cache: Arc::new(Mutex::new(None)),
+            cache: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -52,7 +63,7 @@ impl ManagedIdentityCredential {
     pub async fn get_token(&self, resource: &str) -> Result<String, CredentialError> {
         {
             let guard = self.cache.lock().await;
-            if let Some(ref tok) = *guard
+            if let Some(tok) = guard.get(resource)
                 && Instant::now() < tok.expires_at
             {
                 return Ok(tok.token.clone());
@@ -62,7 +73,7 @@ impl ManagedIdentityCredential {
         let token_str = tok.token.clone();
         {
             let mut guard = self.cache.lock().await;
-            *guard = Some(tok);
+            guard.insert(resource.to_owned(), tok);
         }
         Ok(token_str)
     }

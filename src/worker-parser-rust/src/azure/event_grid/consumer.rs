@@ -3,6 +3,8 @@
 //! Mirrors the Python `shared/event_consumer.py` — receives, acknowledges, and
 //! releases events from an Event Grid Namespace subscription using the REST API.
 
+use std::time::Duration;
+
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -14,6 +16,9 @@ const EVENTGRID_RESOURCE: &str = "https://eventgrid.azure.net/";
 
 /// Event Grid Namespace API version.
 const API_VERSION: &str = "2024-06-01";
+
+/// HTTP request timeout for Event Grid operations.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// A single received event with its broker metadata.
 #[derive(Debug, Clone, Deserialize)]
@@ -71,7 +76,10 @@ impl EventGridConsumer {
         credential: ManagedIdentityCredential,
     ) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(REQUEST_TIMEOUT)
+                .build()
+                .expect("failed to build HTTP client"),
             credential,
             endpoint: endpoint.trim_end_matches('/').to_owned(),
             topic,

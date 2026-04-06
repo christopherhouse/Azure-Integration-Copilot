@@ -3,6 +3,8 @@
 //! Provides download capability for artifact blobs using the Blob Storage
 //! REST API with managed identity authentication.
 
+use std::time::Duration;
+
 use reqwest::Client;
 
 use super::credential::ManagedIdentityCredential;
@@ -16,6 +18,9 @@ const API_VERSION: &str = "2023-11-03";
 /// Storage resource scope for token acquisition.
 const STORAGE_RESOURCE: &str = "https://storage.azure.com/";
 
+/// HTTP request timeout for blob operations.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+
 /// Async wrapper around Azure Blob Storage REST API.
 #[derive(Clone)]
 pub struct BlobService {
@@ -27,7 +32,10 @@ pub struct BlobService {
 impl BlobService {
     pub fn new(account_url: String, credential: ManagedIdentityCredential) -> Self {
         Self {
-            client: Client::new(),
+            client: Client::builder()
+                .timeout(REQUEST_TIMEOUT)
+                .build()
+                .expect("failed to build HTTP client"),
             credential,
             account_url: account_url.trim_end_matches('/').to_owned(),
         }
