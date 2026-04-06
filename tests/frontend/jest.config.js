@@ -7,7 +7,7 @@ const config = {
     "^.+\\.tsx?$": [
       "ts-jest",
       {
-        tsconfig: "../../src/frontend/tsconfig.json",
+        tsconfig: "../../src/frontend/tsconfig.test.json",
         jsx: "react-jsx",
       },
     ],

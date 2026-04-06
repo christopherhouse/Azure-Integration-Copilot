@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "../../",
+    "module": "commonjs",
+    "moduleResolution": "bundler",
+    "types": ["node", "jest"],
+    "ignoreDeprecations": "6.0"
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "../../tests/frontend/**/*.ts",
+    "../../tests/frontend/**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next"
+  ]
+}
