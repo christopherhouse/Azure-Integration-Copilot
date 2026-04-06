@@ -14,6 +14,12 @@ name: CD
 
 on:
   workflow_call:
+    inputs:
+      deploy_with_delete_lock:
+        description: "Manage resource locks during deployment (remove before, add after)"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -23,6 +29,7 @@ permissions:
 
 env:
   LOCK_NAME: aic-rg-cannotdelete
+  DEPLOY_WITH_DELETE_LOCK: ${{ inputs.deploy_with_delete_lock }}
 
 # =============================================================================
 # DEV ENVIRONMENT
@@ -68,6 +75,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Remove resource lock (if exists)
+        if: ${{ inputs.deploy_with_delete_lock }}
         env:
           RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
@@ -612,7 +620,7 @@ jobs:
   restore-lock-dev:
     name: "Dev — Restore Resource Lock"
     needs: [deploy-infra-dev, deploy-afd-dev]
-    if: ${{ always() && needs.deploy-infra-dev.result != 'skipped' }}
+    if: ${{ always() && inputs.deploy_with_delete_lock && needs.deploy-infra-dev.result != 'skipped' }}
     runs-on: ubuntu-latest
     environment: dev
 
@@ -674,6 +682,7 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Remove resource lock (if exists)
+        if: ${{ inputs.deploy_with_delete_lock }}
         env:
           RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
@@ -1218,7 +1227,7 @@ jobs:
   restore-lock-prod:
     name: "Prod — Restore Resource Lock"
     needs: [deploy-infra-prod, deploy-afd-prod]
-    if: ${{ always() && needs.deploy-infra-prod.result != 'skipped' }}
+    if: ${{ always() && inputs.deploy_with_delete_lock && needs.deploy-infra-prod.result != 'skipped' }}
     runs-on: ubuntu-latest
     environment: prod
 

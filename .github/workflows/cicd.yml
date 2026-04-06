@@ -13,6 +13,12 @@ name: CI/CD
 
 on:
   workflow_dispatch:
+    inputs:
+      deploy_with_delete_lock:
+        description: "Manage resource locks during deployment"
+        type: boolean
+        required: false
+        default: false
   pull_request:
     branches: [main]
   push:
@@ -36,6 +42,8 @@ jobs:
     if: github.event_name != 'pull_request'
     needs: [ci]
     uses: ./.github/workflows/cd.yml
+    with:
+      deploy_with_delete_lock: ${{ inputs.deploy_with_delete_lock || false }}
     permissions:
       contents: read
       id-token: write
