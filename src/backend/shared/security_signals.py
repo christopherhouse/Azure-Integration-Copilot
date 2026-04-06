@@ -2,6 +2,34 @@
 
 Tracks event counts per source (tenant ID or IP) over configurable time
 windows and emits structured log events when thresholds are exceeded.
+
+Architecture note — per-instance vs. distributed tracking
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+This tracker is **intentionally in-memory and per-instance**.  It serves as
+a fast, zero-latency signal emitter (defense-in-depth), not a distributed
+rate limiter.  Cross-instance aggregation is handled by two complementary
+mechanisms that already exist in the pipeline:
+
+1. **OTel metrics** (``shared/metrics.py``):  The ``auth.attempts`` and
+   ``quota.checks`` counters are exported to Azure Monitor Application
+   Insights, which aggregates them across *all* Container App replicas.
+   Azure Monitor alert rules on these metrics provide cluster-wide
+   anomaly detection with no additional infrastructure.
+
+2. **Structured logs**:  Every ``security_anomaly`` log event is shipped
+   to Application Insights via the OpenTelemetry log exporter.  KQL
+   queries and alert rules can correlate events across instances.
+
+Adding a shared store (e.g. Azure Cache for Redis) would provide true
+distributed counting but introduces:
+- ~1-2 ms network latency **per auth check** (currently 0 ms)
+- A new PaaS dependency, cost, and operational surface
+- A failure mode where cache unavailability could block auth entirely
+
+The recommended upgrade path, if distributed real-time blocking is
+needed, is to enable Azure Front Door WAF custom rate-limit rules at
+the edge — which already sits in front of the Container Apps and can
+enforce global rate limits without touching the application layer.
 """
 
 import threading
