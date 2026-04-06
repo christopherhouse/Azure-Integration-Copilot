@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import {
   Card,
   CardContent,
@@ -21,6 +22,20 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Privacy & Security",
+  description:
+    "Learn how Integrisight.ai protects your data with enterprise-grade security, tenant isolation, encrypted storage, and strict privacy commitments. Your data is never shared, sold, or used for AI training.",
+  openGraph: {
+    title: "Privacy & Security | Integrisight.ai",
+    description:
+      "Enterprise-grade security and privacy for your Azure integration artifacts. Your data is never shared, sold, or used for AI training.",
+  },
+  alternates: {
+    canonical: "/privacy",
+  },
+};
 
 function CommitmentItem({
   icon: Icon,
