@@ -1,7 +1,7 @@
 """Analysis worker entry point.
 
 Runs as a standalone async process (not inside FastAPI).
-Pulls ``AnalysisRequested`` events from the ``analysis``
+Pulls ``AnalysisRequested`` events from the ``analysis-execution``
 subscription and runs the AI agent analysis flow.
 """
 
@@ -23,7 +23,7 @@ from workers.base import BaseWorker
 from .agent import AgentOrchestrator
 from .handler import AnalysisHandler
 
-SUBSCRIPTION_NAME = "analysis"
+SUBSCRIPTION_NAME = "analysis-execution"
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
