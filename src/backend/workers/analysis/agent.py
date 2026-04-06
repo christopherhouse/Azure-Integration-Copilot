@@ -153,13 +153,12 @@ class AgentOrchestrator:
             for content in message.contents:
                 if content.type == "function_call":
                     tool_call_records.append(ToolCallRecord(
-                        toolName=content.name if hasattr(content, "name") else "unknown",
-                        arguments=content.arguments if hasattr(content, "arguments") else {},
+                        toolName=getattr(content, "name", "unknown"),
+                        arguments=getattr(content, "arguments", {}),
                         output=None,
                     ))
                 elif content.type == "function_result":
-                    # Update the last matching tool call with its result
-                    result_str = content.result if hasattr(content, "result") else ""
+                    result_str = getattr(content, "result", "")
                     if tool_call_records:
                         tool_call_records[-1].output = result_str
 
@@ -217,9 +216,15 @@ class AgentOrchestrator:
         """Clean up agents and close the client."""
         try:
             if self._analyst is not None:
-                await self._analyst.__aexit__(None, None, None)
+                if hasattr(self._analyst, "close"):
+                    await self._analyst.close()
+                elif hasattr(self._analyst, "__aexit__"):
+                    await self._analyst.__aexit__(None, None, None)
             if self._evaluator is not None:
-                await self._evaluator.__aexit__(None, None, None)
+                if hasattr(self._evaluator, "close"):
+                    await self._evaluator.close()
+                elif hasattr(self._evaluator, "__aexit__"):
+                    await self._evaluator.__aexit__(None, None, None)
         except Exception:
             logger.warning("agent_cleanup_failed", exc_info=True)
         finally:
