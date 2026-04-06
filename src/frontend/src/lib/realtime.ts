@@ -56,7 +56,8 @@ export class RealtimeClient {
         console.warn("[realtime] negotiate failed:", res.status);
         return;
       }
-      const { url } = (await res.json()) as { url: string };
+      const body = (await res.json()) as { data?: { url?: string } };
+      const url = body.data?.url;
       if (!url) {
         console.warn("[realtime] negotiate returned no url");
         return;
