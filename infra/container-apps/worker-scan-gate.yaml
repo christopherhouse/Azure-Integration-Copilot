@@ -1,0 +1,67 @@
+# =============================================================================
+# Container App YAML template — scan-gate worker with ClamAV sidecar
+# =============================================================================
+# This template is used by the CD pipeline to deploy the scan-gate worker
+# as a Container App with a ClamAV sidecar container for malware scanning.
+#
+# Placeholder tokens (replaced at deploy time by deploy-scan-gate-worker.sh):
+#   __APP_NAME__              — Container App name (e.g. ca-worker-scan-gate)
+#   __ENVIRONMENT_ID__        — Container Apps Environment resource ID
+#   __WORKER_IMAGE__          — Full image reference for the scan-gate worker
+#   __IDENTITY_RESOURCE_ID__  — User-assigned managed identity resource ID
+#   __REGISTRY_SERVER__       — ACR login server (e.g. myacr.azurecr.io)
+#   __ENV_VARS_YAML__         — Injected dynamically by the deploy script
+# =============================================================================
+
+type: Microsoft.App/containerApps
+location: __LOCATION__
+identity:
+  type: UserAssigned
+  userAssignedIdentities:
+    __IDENTITY_RESOURCE_ID__: {}
+properties:
+  environmentId: __ENVIRONMENT_ID__
+  configuration:
+    activeRevisionsMode: Single
+    registries:
+      - server: __REGISTRY_SERVER__
+        identity: __IDENTITY_RESOURCE_ID__
+  template:
+    volumes:
+      - name: clamav-db
+        storageType: EmptyDir
+    containers:
+      # --- Main container: scan-gate worker ---
+      - name: scan-gate-worker
+        image: __WORKER_IMAGE__
+        resources:
+          cpu: 0.25
+          memory: 0.5Gi
+        env:
+          __ENV_VARS_YAML__
+      # --- Sidecar: ClamAV daemon with freshclam ---
+      # Image pinned to ClamAV 1.5.2 by SHA digest for reproducibility.
+      # freshclam runs automatically on startup and periodically to keep
+      # virus definitions up to date.
+      - name: clamav-sidecar
+        # ClamAV 1.5.2 — pinned by SHA digest per convention #8
+        image: docker.io/clamav/clamav@sha256:427d4ce9cd3ad25f80b1be3461b94b04fbba18c6ad38ea6d93bb7ffc19f22475
+        resources:
+          cpu: 0.5
+          memory: 1.0Gi
+        volumeMounts:
+          - volumeName: clamav-db
+            mountPath: /var/lib/clamav
+        env:
+          - name: CLAMAV_NO_MILTERD
+            value: "true"
+    scale:
+      minReplicas: 1
+      maxReplicas: 5
+      rules:
+        - name: cpu-scaling
+          custom:
+            type: cpu
+            metadata:
+              type: Utilization
+              value: "70"

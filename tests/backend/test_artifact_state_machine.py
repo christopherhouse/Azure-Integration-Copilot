@@ -72,6 +72,11 @@ class TestValidTransitions:
         result = transition_status(ArtifactStatus.SCANNING, ArtifactStatus.SCANNING)
         assert result == ArtifactStatus.SCANNING
 
+    def test_scanning_to_quarantined(self):
+        """Malware detection transitions scanning → quarantined."""
+        result = transition_status(ArtifactStatus.SCANNING, ArtifactStatus.QUARANTINED)
+        assert result == ArtifactStatus.QUARANTINED
+
     def test_parsing_to_parsing_idempotent(self):
         """Self-transition allows idempotent retries during parsing."""
         result = transition_status(ArtifactStatus.PARSING, ArtifactStatus.PARSING)
@@ -126,6 +131,11 @@ class TestInvalidTransitions:
         with pytest.raises(InvalidStatusTransition):
             transition_status(ArtifactStatus.UNSUPPORTED, ArtifactStatus.SCANNING)
 
+    def test_quarantined_is_terminal(self):
+        """Quarantined artifacts cannot transition to any other status."""
+        with pytest.raises(InvalidStatusTransition):
+            transition_status(ArtifactStatus.QUARANTINED, ArtifactStatus.SCANNING)
+
     def test_backward_transition_raises(self):
         """Cannot go backwards in the pipeline."""
         with pytest.raises(InvalidStatusTransition):
@@ -140,14 +150,14 @@ class TestInvalidTransitions:
 class TestArtifactStatusEnum:
     """Test ArtifactStatus enum has all expected values."""
 
-    def test_all_12_statuses_defined(self):
-        assert len(ArtifactStatus) == 12
+    def test_all_13_statuses_defined(self):
+        assert len(ArtifactStatus) == 13
 
     def test_expected_status_values(self):
         expected = {
             "uploading", "uploaded", "scanning", "scan_passed", "scan_failed",
-            "parsing", "parsed", "parse_failed", "graph_building", "graph_built",
-            "graph_failed", "unsupported",
+            "quarantined", "parsing", "parsed", "parse_failed", "graph_building",
+            "graph_built", "graph_failed", "unsupported",
         }
         actual = {s.value for s in ArtifactStatus}
         assert actual == expected
@@ -156,6 +166,7 @@ class TestArtifactStatusEnum:
         """Every non-terminal status should have at least one outgoing transition."""
         terminal_statuses = {
             ArtifactStatus.SCAN_FAILED,
+            ArtifactStatus.QUARANTINED,
             ArtifactStatus.PARSE_FAILED,
             ArtifactStatus.GRAPH_FAILED,
             ArtifactStatus.GRAPH_BUILT,

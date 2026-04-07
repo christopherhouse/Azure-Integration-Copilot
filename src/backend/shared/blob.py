@@ -60,6 +60,41 @@ class BlobService:
         downloader = await blob_client.download_blob()
         return await downloader.readall()
 
+    async def move_blob(self, source_path: str, dest_path: str) -> None:
+        """Move a blob from *source_path* to *dest_path* (download, upload, delete).
+
+        Uses authenticated download+upload rather than server-side copy because
+        the artifacts container has ``publicAccess: None`` — a URL-based copy
+        would fail with 403.
+        """
+        client = await self._get_client()
+        container_client = client.get_container_client(ARTIFACTS_CONTAINER)
+
+        # Download source blob content
+        source_client = container_client.get_blob_client(source_path)
+        downloader = await source_client.download_blob()
+        data = await downloader.readall()
+
+        # Upload to destination
+        dest_client = container_client.get_blob_client(dest_path)
+        await dest_client.upload_blob(data, overwrite=True)
+        logger.info("blob_copied", source=source_path, dest=dest_path)
+
+        # Delete the source blob
+        try:
+            await source_client.delete_blob()
+            logger.info("blob_moved", source=source_path, dest=dest_path)
+        except ResourceNotFoundError:
+            logger.info("blob_move_source_already_deleted", source=source_path)
+
+    async def set_blob_metadata(self, blob_path: str, metadata: dict[str, str]) -> None:
+        """Set custom metadata on a blob in the artifacts container."""
+        client = await self._get_client()
+        container_client = client.get_container_client(ARTIFACTS_CONTAINER)
+        blob_client = container_client.get_blob_client(blob_path)
+        await blob_client.set_blob_metadata(metadata)
+        logger.info("blob_metadata_set", blob_path=blob_path, keys=list(metadata.keys()))
+
     async def download_blob_stream(self, blob_path: str) -> AsyncIterator[bytes]:
         """Stream blob contents as an async iterator of chunks."""
         client = await self._get_client()

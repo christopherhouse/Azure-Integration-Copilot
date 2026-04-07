@@ -39,6 +39,7 @@ export type ArtifactStatus =
   | "scanning"
   | "scan_passed"
   | "scan_failed"
+  | "quarantined"
   | "parsing"
   | "parsed"
   | "parse_failed"

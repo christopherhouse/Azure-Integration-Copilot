@@ -366,10 +366,6 @@ jobs:
       fail-fast: false
       matrix:
         worker:
-          - name: scan-gate
-            app_name: ca-worker-scan-gate
-            image_name: integrisight-worker-scan-gate
-            worker_module: workers.scan_gate.main
           - name: parser
             app_name: ca-worker-parser
             image_name: integrisight-worker-parser
@@ -452,11 +448,64 @@ jobs:
             --env-vars "${{ steps.worker-env.outputs.env_vars }}"
 
   # ---------------------------------------------------------------------------
+  # Dev — Deploy Scan-Gate Worker (with ClamAV sidecar — separate from matrix)
+  # ---------------------------------------------------------------------------
+  deploy-scan-gate-dev:
+    name: "Dev — Deploy Scan-Gate Worker (ClamAV sidecar)"
+    needs: [deploy-infra-dev, promote-containers-dev]
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve worker identity resource ID
+        id: identity
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-dev.outputs.resource_group }}
+        run: |
+          WORKER_ID=$(az identity show --name "${{ needs.deploy-infra-dev.outputs.worker_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          echo "worker_id=${WORKER_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Build scan-gate environment variables
+        id: worker-env
+        run: |
+          ENV_VARS="ENVIRONMENT=dev"
+          ENV_VARS="${ENV_VARS} COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.cosmos_db_endpoint }}"
+          ENV_VARS="${ENV_VARS} BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.blob_storage_endpoint }}"
+          ENV_VARS="${ENV_VARS} EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-dev.outputs.event_grid_endpoint }}"
+          ENV_VARS="${ENV_VARS} EVENT_GRID_TOPIC=${{ needs.deploy-infra-dev.outputs.event_grid_topic_name }}"
+          ENV_VARS="${ENV_VARS} AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.worker_identity_client_id }}"
+          ENV_VARS="${ENV_VARS} APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}"
+          ENV_VARS="${ENV_VARS} WORKER_MODULE=workers.scan_gate.main"
+          echo "env_vars=${ENV_VARS}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy scan-gate Container App with ClamAV sidecar
+        run: |
+          chmod +x infra/scripts/deploy-scan-gate-worker.sh
+          ./infra/scripts/deploy-scan-gate-worker.sh \
+            --name "ca-worker-scan-gate" \
+            --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-scan-gate:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --identity "${{ steps.identity.outputs.worker_id }}" \
+            --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
+            --env-vars "${{ steps.worker-env.outputs.env_vars }}"
+
+  # ---------------------------------------------------------------------------
   # Dev — Deploy Azure Front Door (after Container Apps exist)
   # ---------------------------------------------------------------------------
   deploy-afd-dev:
     name: "Dev — Deploy Azure Front Door"
-    needs: [deploy-infra-dev, deploy-apps-dev, deploy-workers-dev]
+    needs: [deploy-infra-dev, deploy-apps-dev, deploy-workers-dev, deploy-scan-gate-dev]
     runs-on: ubuntu-latest
     environment: dev
 
@@ -919,10 +968,6 @@ jobs:
       fail-fast: false
       matrix:
         worker:
-          - name: scan-gate
-            app_name: ca-worker-scan-gate
-            image_name: integrisight-worker-scan-gate
-            worker_module: workers.scan_gate.main
           - name: parser
             app_name: ca-worker-parser
             image_name: integrisight-worker-parser
@@ -1005,11 +1050,64 @@ jobs:
             --env-vars "${{ steps.worker-env.outputs.env_vars }}"
 
   # ---------------------------------------------------------------------------
+  # Prod — Deploy Scan-Gate Worker (with ClamAV sidecar — separate from matrix)
+  # ---------------------------------------------------------------------------
+  deploy-scan-gate-prod:
+    name: "Prod — Deploy Scan-Gate Worker (ClamAV sidecar)"
+    needs: [deploy-infra-prod, promote-containers-prod]
+    runs-on: ubuntu-latest
+    environment: prod
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Resolve worker identity resource ID
+        id: identity
+        env:
+          RESOURCE_GROUP: ${{ needs.deploy-infra-prod.outputs.resource_group }}
+        run: |
+          WORKER_ID=$(az identity show --name "${{ needs.deploy-infra-prod.outputs.worker_identity_name }}" --resource-group "${RESOURCE_GROUP}" --query id --output tsv)
+          echo "worker_id=${WORKER_ID}" >> "$GITHUB_OUTPUT"
+
+      - name: Build scan-gate environment variables
+        id: worker-env
+        run: |
+          ENV_VARS="ENVIRONMENT=prod"
+          ENV_VARS="${ENV_VARS} COSMOS_DB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.cosmos_db_endpoint }}"
+          ENV_VARS="${ENV_VARS} BLOB_STORAGE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.blob_storage_endpoint }}"
+          ENV_VARS="${ENV_VARS} EVENT_GRID_NAMESPACE_ENDPOINT=${{ needs.deploy-infra-prod.outputs.event_grid_endpoint }}"
+          ENV_VARS="${ENV_VARS} EVENT_GRID_TOPIC=${{ needs.deploy-infra-prod.outputs.event_grid_topic_name }}"
+          ENV_VARS="${ENV_VARS} AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.worker_identity_client_id }}"
+          ENV_VARS="${ENV_VARS} APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}"
+          ENV_VARS="${ENV_VARS} WORKER_MODULE=workers.scan_gate.main"
+          echo "env_vars=${ENV_VARS}" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy scan-gate Container App with ClamAV sidecar
+        run: |
+          chmod +x infra/scripts/deploy-scan-gate-worker.sh
+          ./infra/scripts/deploy-scan-gate-worker.sh \
+            --name "ca-worker-scan-gate" \
+            --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
+            --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-scan-gate:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --identity "${{ steps.identity.outputs.worker_id }}" \
+            --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
+            --env-vars "${{ steps.worker-env.outputs.env_vars }}"
+
+  # ---------------------------------------------------------------------------
   # Prod — Deploy Azure Front Door (after Container Apps exist)
   # ---------------------------------------------------------------------------
   deploy-afd-prod:
     name: "Prod — Deploy Azure Front Door"
-    needs: [deploy-infra-prod, deploy-apps-prod, deploy-workers-prod]
+    needs: [deploy-infra-prod, deploy-apps-prod, deploy-workers-prod, deploy-scan-gate-prod]
     runs-on: ubuntu-latest
     environment: prod
 

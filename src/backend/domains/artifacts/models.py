@@ -28,6 +28,7 @@ class ArtifactStatus(StrEnum):
     SCANNING = "scanning"
     SCAN_PASSED = "scan_passed"
     SCAN_FAILED = "scan_failed"
+    QUARANTINED = "quarantined"
     PARSING = "parsing"
     PARSED = "parsed"
     PARSE_FAILED = "parse_failed"
@@ -44,6 +45,7 @@ VALID_TRANSITIONS: dict[ArtifactStatus, set[ArtifactStatus]] = {
         ArtifactStatus.SCANNING,
         ArtifactStatus.SCAN_PASSED,
         ArtifactStatus.SCAN_FAILED,
+        ArtifactStatus.QUARANTINED,
     },
     ArtifactStatus.SCAN_PASSED: {ArtifactStatus.PARSING},
     ArtifactStatus.PARSING: {
@@ -57,6 +59,7 @@ VALID_TRANSITIONS: dict[ArtifactStatus, set[ArtifactStatus]] = {
         ArtifactStatus.GRAPH_BUILT,
         ArtifactStatus.GRAPH_FAILED,
     },
+    # QUARANTINED is a terminal state — no outbound transitions
 }
 
 
@@ -81,6 +84,17 @@ class ArtifactError(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class ScanResult(BaseModel):
+    """Malware scan result metadata."""
+
+    scanner: str
+    is_clean: bool = Field(alias="isClean")
+    signature: str | None = None
+    scanned_at: datetime = Field(alias="scannedAt")
+
+    model_config = {"populate_by_name": True}
+
+
 class Artifact(BaseModel):
     """Artifact document stored in Cosmos DB."""
 
@@ -95,6 +109,7 @@ class Artifact(BaseModel):
     file_size_bytes: int | None = Field(default=None, alias="fileSizeBytes")
     blob_path: str | None = Field(default=None, alias="blobPath")
     content_hash: str | None = Field(default=None, alias="contentHash")
+    scan_result: ScanResult | None = Field(default=None, alias="scanResult")
     error: ArtifactError | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC), alias="createdAt")
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC), alias="updatedAt")

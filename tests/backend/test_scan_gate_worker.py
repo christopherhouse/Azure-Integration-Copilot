@@ -1,8 +1,8 @@
-"""Tests for the scan-gate worker handler."""
+"""Tests for the scan-gate worker handler with ClamAV scanning."""
 
 import os
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -15,8 +15,9 @@ _test_env = {
 
 with patch.dict(os.environ, _test_env):
     from domains.artifacts.models import Artifact, ArtifactStatus
+    from shared.clamav import ClamScanResult
     from workers.base import PermanentError, TransientError
-    from workers.scan_gate.handler import ScanGateHandler
+    from workers.scan_gate.handler import ScanGateHandler, _quarantine_blob_path
 
 
 def _make_artifact(
@@ -24,8 +25,11 @@ def _make_artifact(
     tenant_id: str = "t1",
     project_id: str = "p1",
     status: ArtifactStatus = ArtifactStatus.UPLOADED,
+    blob_path: str | None = None,
 ) -> Artifact:
     now = datetime.now(UTC)
+    if blob_path is None:
+        blob_path = f"tenants/{tenant_id}/projects/{project_id}/artifacts/{artifact_id}/test.json"
     return Artifact(
         id=artifact_id,
         partitionKey=tenant_id,
@@ -35,6 +39,7 @@ def _make_artifact(
         artifactType="openapi",
         status=status,
         fileSizeBytes=1024,
+        blobPath=blob_path,
         createdAt=now,
         updatedAt=now,
     )
@@ -56,6 +61,44 @@ def _make_event_data(
     }
 
 
+def _make_handler(
+    repo: AsyncMock | None = None,
+    publisher: AsyncMock | None = None,
+    blob_service: AsyncMock | None = None,
+    scanner: AsyncMock | None = None,
+) -> ScanGateHandler:
+    return ScanGateHandler(
+        artifact_repository=repo or AsyncMock(),
+        event_publisher=publisher or AsyncMock(),
+        blob_service=blob_service or AsyncMock(),
+        clamav_scanner=scanner or AsyncMock(),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Quarantine path helper
+# ---------------------------------------------------------------------------
+
+
+class TestQuarantineBlobPath:
+    """Tests for the _quarantine_blob_path helper."""
+
+    def test_standard_path(self):
+        original = "tenants/t1/projects/p1/artifacts/art_123/test.json"
+        expected = "tenants/t1/artifacts/quarantine/p1/art_123/test.json"
+        assert _quarantine_blob_path(original) == expected
+
+    def test_fallback_for_unexpected_format(self):
+        original = "some/other/path.json"
+        result = _quarantine_blob_path(original)
+        assert result == "quarantine/some/other/path.json"
+
+
+# ---------------------------------------------------------------------------
+# Idempotency checks
+# ---------------------------------------------------------------------------
+
+
 class TestScanGateIsAlreadyProcessed:
     """Tests for the idempotency check."""
 
@@ -63,9 +106,8 @@ class TestScanGateIsAlreadyProcessed:
     async def test_returns_false_when_artifact_not_found(self):
         repo = AsyncMock()
         repo.get_by_id = AsyncMock(return_value=None)
-        publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo)
         result = await handler.is_already_processed(_make_event_data())
 
         assert result is False
@@ -75,9 +117,8 @@ class TestScanGateIsAlreadyProcessed:
         artifact = _make_artifact(status=ArtifactStatus.UPLOADED)
         repo = AsyncMock()
         repo.get_by_id = AsyncMock(return_value=artifact)
-        publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo)
         result = await handler.is_already_processed(_make_event_data())
 
         assert result is False
@@ -87,9 +128,8 @@ class TestScanGateIsAlreadyProcessed:
         artifact = _make_artifact(status=ArtifactStatus.SCAN_PASSED)
         repo = AsyncMock()
         repo.get_by_id = AsyncMock(return_value=artifact)
-        publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo)
         result = await handler.is_already_processed(_make_event_data())
 
         assert result is True
@@ -99,9 +139,8 @@ class TestScanGateIsAlreadyProcessed:
         artifact = _make_artifact(status=ArtifactStatus.PARSED)
         repo = AsyncMock()
         repo.get_by_id = AsyncMock(return_value=artifact)
-        publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo)
         result = await handler.is_already_processed(_make_event_data())
 
         assert result is True
@@ -111,76 +150,251 @@ class TestScanGateIsAlreadyProcessed:
         artifact = _make_artifact(status=ArtifactStatus.SCAN_FAILED)
         repo = AsyncMock()
         repo.get_by_id = AsyncMock(return_value=artifact)
-        publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo)
+        result = await handler.is_already_processed(_make_event_data())
+
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_status_is_quarantined(self):
+        artifact = _make_artifact(status=ArtifactStatus.QUARANTINED)
+        repo = AsyncMock()
+        repo.get_by_id = AsyncMock(return_value=artifact)
+
+        handler = _make_handler(repo=repo)
         result = await handler.is_already_processed(_make_event_data())
 
         assert result is True
 
 
-class TestScanGateHandle:
-    """Tests for the scan-gate handler ``handle`` method."""
+# ---------------------------------------------------------------------------
+# Handle — clean scan
+# ---------------------------------------------------------------------------
+
+
+class TestScanGateHandleClean:
+    """Tests for the handler when ClamAV returns OK (clean scan)."""
 
     @pytest.mark.asyncio
-    async def test_transitions_to_scan_passed_and_publishes_event(self):
-        artifact_uploaded = _make_artifact(status=ArtifactStatus.UPLOADED)
+    async def test_clean_scan_transitions_to_scan_passed_and_publishes_event(self):
         artifact_scanning = _make_artifact(status=ArtifactStatus.SCANNING)
         artifact_passed = _make_artifact(status=ArtifactStatus.SCAN_PASSED)
 
         repo = AsyncMock()
+        # First call: uploaded → scanning; second call: scanning → scan_passed
         repo.update_status = AsyncMock(side_effect=[artifact_scanning, artifact_passed])
+        repo.update = AsyncMock(return_value=artifact_passed)
+
+        blob = AsyncMock()
+        blob.download_blob = AsyncMock(return_value=b"clean file data")
+        blob.set_blob_metadata = AsyncMock()
+
+        scanner = AsyncMock()
+        scanner.scan = AsyncMock(
+            return_value=ClamScanResult(is_clean=True, signature=None, raw_response="stream: OK")
+        )
+
         publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo, publisher=publisher, blob_service=blob, scanner=scanner)
         await handler.handle(_make_event_data())
 
-        # Verify two status transitions: uploaded→scanning, scanning→scan_passed
+        # Verify two status transitions via update_status (scanning, then scan_passed)
         assert repo.update_status.await_count == 2
         calls = repo.update_status.await_args_list
         assert calls[0].args == ("t1", "art_test123", ArtifactStatus.SCANNING)
         assert calls[1].args == ("t1", "art_test123", ArtifactStatus.SCAN_PASSED)
 
-        # Verify event published
+        # Verify blob was downloaded for scanning
+        blob.download_blob.assert_awaited_once()
+
+        # Verify ClamAV was called
+        scanner.scan.assert_awaited_once_with(b"clean file data")
+
+        # Verify scan metadata was set on blob
+        blob.set_blob_metadata.assert_awaited_once()
+
+        # Verify scan result metadata was persisted
+        repo.update.assert_awaited_once()
+
+        # Verify scan-passed event published
         publisher.publish_event.assert_awaited_once()
         published_event = publisher.publish_event.call_args.args[0]
         assert published_event.type == "com.integration-copilot.artifact.scan-passed.v1"
+
+
+# ---------------------------------------------------------------------------
+# Handle — malware detected
+# ---------------------------------------------------------------------------
+
+
+class TestScanGateHandleMalware:
+    """Tests for the handler when ClamAV detects malware."""
+
+    @pytest.mark.asyncio
+    async def test_malware_quarantines_artifact_and_moves_blob(self):
+        artifact_scanning = _make_artifact(status=ArtifactStatus.SCANNING)
+        artifact_quarantined = _make_artifact(status=ArtifactStatus.QUARANTINED)
+
+        repo = AsyncMock()
+        # First call: uploaded → scanning; second call: scanning → quarantined
+        repo.update_status = AsyncMock(side_effect=[artifact_scanning, artifact_quarantined])
+        repo.update = AsyncMock(return_value=artifact_quarantined)
+
+        blob = AsyncMock()
+        blob.download_blob = AsyncMock(return_value=b"EICAR test data")
+        blob.set_blob_metadata = AsyncMock()
+        blob.move_blob = AsyncMock()
+
+        scanner = AsyncMock()
+        scanner.scan = AsyncMock(
+            return_value=ClamScanResult(
+                is_clean=False,
+                signature="Eicar-Signature",
+                raw_response="stream: Eicar-Signature FOUND",
+            )
+        )
+
+        publisher = AsyncMock()
+
+        handler = _make_handler(repo=repo, publisher=publisher, blob_service=blob, scanner=scanner)
+        await handler.handle(_make_event_data())
+
+        # Verify two status transitions via update_status (scanning, then quarantined)
+        assert repo.update_status.await_count == 2
+        calls = repo.update_status.await_args_list
+        assert calls[0].args == ("t1", "art_test123", ArtifactStatus.SCANNING)
+        assert calls[1].args == ("t1", "art_test123", ArtifactStatus.QUARANTINED)
+
+        # Verify blob was moved to quarantine path
+        blob.move_blob.assert_awaited_once()
+        move_args = blob.move_blob.call_args.args
+        assert "quarantine" in move_args[1]
+
+        # Verify scan metadata was persisted
+        repo.update.assert_awaited_once()
+
+        # Verify scan-failed event published (NOT scan-passed)
+        publisher.publish_event.assert_awaited_once()
+        published_event = publisher.publish_event.call_args.args[0]
+        assert published_event.type == "com.integration-copilot.artifact.scan-failed.v1"
+        assert published_event.data.get("quarantined") is True
+
+    @pytest.mark.asyncio
+    async def test_malware_continues_even_if_blob_move_fails(self):
+        """Quarantine proceeds even if the blob move fails."""
+        artifact_scanning = _make_artifact(status=ArtifactStatus.SCANNING)
+        artifact_quarantined = _make_artifact(status=ArtifactStatus.QUARANTINED)
+
+        repo = AsyncMock()
+        # First call: uploaded → scanning; second call: scanning → quarantined
+        repo.update_status = AsyncMock(side_effect=[artifact_scanning, artifact_quarantined])
+        repo.update = AsyncMock(return_value=artifact_quarantined)
+
+        blob = AsyncMock()
+        blob.download_blob = AsyncMock(return_value=b"malware data")
+        blob.set_blob_metadata = AsyncMock()
+        blob.move_blob = AsyncMock(side_effect=RuntimeError("blob move failed"))
+
+        scanner = AsyncMock()
+        scanner.scan = AsyncMock(
+            return_value=ClamScanResult(
+                is_clean=False, signature="BadTrojan", raw_response="stream: BadTrojan FOUND"
+            )
+        )
+
+        publisher = AsyncMock()
+
+        handler = _make_handler(repo=repo, publisher=publisher, blob_service=blob, scanner=scanner)
+        # Should not raise — quarantine proceeds even if blob move fails
+        await handler.handle(_make_event_data())
+
+        # Artifact still gets quarantined via update_status
+        assert repo.update_status.await_count == 2
+        repo.update.assert_awaited_once()
+        publisher.publish_event.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# Handle — error scenarios
+# ---------------------------------------------------------------------------
+
+
+class TestScanGateHandleErrors:
+    """Tests for error handling in the scan-gate handler."""
 
     @pytest.mark.asyncio
     async def test_raises_permanent_error_when_artifact_not_found(self):
         repo = AsyncMock()
         repo.update_status = AsyncMock(return_value=None)
-        publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo)
 
         with pytest.raises(PermanentError, match="not found"):
             await handler.handle(_make_event_data())
 
     @pytest.mark.asyncio
-    async def test_raises_transient_error_on_first_transition_failure(self):
+    async def test_raises_transient_error_on_scanning_transition_failure(self):
         repo = AsyncMock()
         repo.update_status = AsyncMock(side_effect=RuntimeError("cosmos timeout"))
-        publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo)
 
         with pytest.raises(TransientError, match="scanning"):
             await handler.handle(_make_event_data())
 
     @pytest.mark.asyncio
-    async def test_raises_transient_error_on_second_transition_failure(self):
-        artifact_scanning = _make_artifact(status=ArtifactStatus.SCANNING)
+    async def test_raises_permanent_error_when_no_blob_path(self):
+        artifact = _make_artifact(status=ArtifactStatus.SCANNING, blob_path=None)
+        # Clear the blob_path
+        artifact.blob_path = None
+
         repo = AsyncMock()
-        repo.update_status = AsyncMock(
-            side_effect=[artifact_scanning, RuntimeError("cosmos timeout")]
-        )
-        publisher = AsyncMock()
+        repo.update_status = AsyncMock(return_value=artifact)
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo)
 
-        with pytest.raises(TransientError, match="scan_passed"):
+        with pytest.raises(PermanentError, match="no blob path"):
             await handler.handle(_make_event_data())
+
+    @pytest.mark.asyncio
+    async def test_raises_transient_error_on_blob_download_failure(self):
+        artifact_scanning = _make_artifact(status=ArtifactStatus.SCANNING)
+
+        repo = AsyncMock()
+        repo.update_status = AsyncMock(return_value=artifact_scanning)
+
+        blob = AsyncMock()
+        blob.download_blob = AsyncMock(side_effect=RuntimeError("storage unavailable"))
+
+        handler = _make_handler(repo=repo, blob_service=blob)
+
+        with pytest.raises(TransientError, match="download blob"):
+            await handler.handle(_make_event_data())
+
+    @pytest.mark.asyncio
+    async def test_raises_transient_error_on_clamav_failure(self):
+        artifact_scanning = _make_artifact(status=ArtifactStatus.SCANNING)
+
+        repo = AsyncMock()
+        repo.update_status = AsyncMock(return_value=artifact_scanning)
+
+        blob = AsyncMock()
+        blob.download_blob = AsyncMock(return_value=b"file data")
+
+        scanner = AsyncMock()
+        scanner.scan = AsyncMock(side_effect=ConnectionRefusedError("clamd not ready"))
+
+        handler = _make_handler(repo=repo, blob_service=blob, scanner=scanner)
+
+        with pytest.raises(TransientError, match="ClamAV scan failed"):
+            await handler.handle(_make_event_data())
+
+
+# ---------------------------------------------------------------------------
+# Handle failure callback
+# ---------------------------------------------------------------------------
 
 
 class TestScanGateHandleFailure:
@@ -196,7 +410,7 @@ class TestScanGateHandleFailure:
         repo.update_status = AsyncMock(return_value=artifact_failed)
         publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo, publisher=publisher)
         await handler.handle_failure(_make_event_data(), PermanentError("bad data"))
 
         repo.update_status.assert_awaited_once_with("t1", "art_test123", ArtifactStatus.SCAN_FAILED)
@@ -214,7 +428,20 @@ class TestScanGateHandleFailure:
         repo.get_by_id = AsyncMock(return_value=artifact)
         publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo, publisher=publisher)
+        await handler.handle_failure(_make_event_data(), PermanentError("bad data"))
+
+        repo.update_status.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_skips_transition_if_quarantined(self):
+        artifact = _make_artifact(status=ArtifactStatus.QUARANTINED)
+
+        repo = AsyncMock()
+        repo.get_by_id = AsyncMock(return_value=artifact)
+        publisher = AsyncMock()
+
+        handler = _make_handler(repo=repo, publisher=publisher)
         await handler.handle_failure(_make_event_data(), PermanentError("bad data"))
 
         repo.update_status.assert_not_awaited()
@@ -225,6 +452,6 @@ class TestScanGateHandleFailure:
         repo.get_by_id = AsyncMock(side_effect=RuntimeError("db down"))
         publisher = AsyncMock()
 
-        handler = ScanGateHandler(artifact_repository=repo, event_publisher=publisher)
+        handler = _make_handler(repo=repo, publisher=publisher)
         # Should not raise
         await handler.handle_failure(_make_event_data(), PermanentError("bad data"))
