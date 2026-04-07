@@ -34,15 +34,15 @@
 
 Integrisight.ai is a multi-tenant SaaS application built on a well-considered Azure-native stack. The architecture demonstrates strong foundational choices: managed-identity-first security posture, structured logging with OpenTelemetry, a domain-driven backend with quota enforcement middleware, and an event-driven processing pipeline with idempotent workers.
 
-This review identifies **34 discrete gaps** against SaaS architecture and engineering best practices, organized across five Azure Well-Architected Framework pillars plus two SaaS-specific categories. The gaps range from **critical** security control deficiencies (malware scan passthrough, non-blocking CI scanners) to **foundational** SaaS capabilities (multi-tier subscription model, API versioning policy, integration tests) to **hardening** improvements (circuit breakers, rate limiting, observability dashboards).
+This review identifies **42 discrete gaps** against SaaS architecture and engineering best practices, organized across five Azure Well-Architected Framework pillars plus two SaaS-specific categories. The gaps range from **critical** security control deficiencies (malware scan passthrough, non-blocking CI scanners) to **foundational** SaaS capabilities (multi-tier subscription model, API versioning policy, integration tests) to **hardening** improvements (circuit breakers, rate limiting, observability dashboards).
 
 **Priority distribution:**
 
 | Priority | Count | Definition |
 |----------|-------|------------|
-| P0 — Critical | 4 | Production safety or active security risk; fix immediately |
+| P0 — Critical | 3 | Production safety or active security risk; fix immediately |
 | P1 — High | 10 | Material SaaS quality gaps; fix within 2 weeks |
-| P2 — Medium | 12 | Engineering maturity improvements; fix within 4–6 weeks |
+| P2 — Medium | 21 | Engineering maturity improvements; fix within 4–6 weeks |
 | P3 — Low | 8 | Hardening and polish; fix within a quarter |
 
 The architecture is production-capable for a free-tier MVP. To support paid tiers, enterprise customers, or significant user growth, the P0 and P1 gaps must be resolved first.
@@ -136,14 +136,14 @@ The following capabilities are implemented correctly and should be preserved as 
 | REL-05 | Reliability | Health dependency checks lack explicit timeouts | P2 | Reliability |
 | REL-06 | Reliability | Event Grid failure silently drops events without dead-letter path | P2 | Reliability |
 | REL-07 | Reliability | Rust worker lacks startup validation for required endpoints | P2 | Reliability |
-| OPS-01 | Ops Excellence | CI vulnerability checks non-blocking (also SEC-02) | P0 | Op. Excellence |
-| OPS-02 | Ops Excellence | No SLI/SLO definitions or alert rules | P1 | Op. Excellence |
-| OPS-03 | Ops Excellence | No Azure Monitor dashboards or workbooks | P2 | Op. Excellence |
-| OPS-04 | Ops Excellence | Log retention set to 30 days (insufficient for SaaS audit) | P2 | Op. Excellence |
-| OPS-05 | Ops Excellence | No post-deployment smoke tests | P2 | Op. Excellence |
-| OPS-06 | Ops Excellence | No rollback mechanism on failed deployment | P2 | Op. Excellence |
-| OPS-07 | Ops Excellence | No infrastructure drift detection (what-if before prod deploy) | P3 | Op. Excellence |
-| OPS-08 | Ops Excellence | No availability (synthetic) monitoring | P3 | Op. Excellence |
+| OPS-01 | Operational Excellence | CI vulnerability checks non-blocking (also SEC-02) | P0 | Operational Excellence |
+| OPS-02 | Operational Excellence | No SLI/SLO definitions or alert rules | P1 | Operational Excellence |
+| OPS-03 | Operational Excellence | No Azure Monitor dashboards or workbooks | P2 | Operational Excellence |
+| OPS-04 | Operational Excellence | Log retention set to 30 days (insufficient for SaaS audit) | P2 | Operational Excellence |
+| OPS-05 | Operational Excellence | No post-deployment smoke tests | P2 | Operational Excellence |
+| OPS-06 | Operational Excellence | No rollback mechanism on failed deployment | P2 | Operational Excellence |
+| OPS-07 | Operational Excellence | No infrastructure drift detection (what-if before prod deploy) | P3 | Operational Excellence |
+| OPS-08 | Operational Excellence | No availability (synthetic) monitoring | P3 | Operational Excellence |
 | PERF-01 | Performance | No per-client rate limiting (only quota counts) | P1 | Perf. Efficiency |
 | PERF-02 | Performance | Container Apps scale rules not defined in Bicep | P2 | Perf. Efficiency |
 | COST-01 | Cost | No Azure cost attribution tags (cost center, team, product) | P2 | Cost Opt. |
@@ -156,12 +156,12 @@ The following capabilities are implemented correctly and should be preserved as 
 | API-01 | API Design | No API versioning deprecation policy or lifecycle management | P2 | — |
 | API-02 | API Design | No client-side idempotency key support on POST endpoints | P2 | — |
 | API-03 | API Design | Conditional request headers (If-Match/ETag) not enforced on update routes | P3 | — |
-| TEST-01 | Test Coverage | Integration test directory is empty | P0 | Op. Excellence |
-| TEST-02 | Test Coverage | No end-to-end tests | P2 | Op. Excellence |
-| TEST-03 | Test Coverage | No API contract tests | P2 | Op. Excellence |
-| TEST-04 | Test Coverage | No code coverage thresholds enforced in CI | P2 | Op. Excellence |
-| TEST-05 | Test Coverage | Frontend test coverage is thin (3 test files) | P2 | Op. Excellence |
-| TEST-06 | Test Coverage | No load or performance tests | P3 | Perf. Efficiency |
+| TEST-01 | Test Coverage | Integration test directory is empty | P0 | Operational Excellence |
+| TEST-02 | Test Coverage | No end-to-end tests | P2 | Operational Excellence |
+| TEST-03 | Test Coverage | No API contract tests | P2 | Operational Excellence |
+| TEST-04 | Test Coverage | No code coverage thresholds enforced in CI | P2 | Operational Excellence |
+| TEST-05 | Test Coverage | Frontend test coverage is thin (3 test files) | P2 | Operational Excellence |
+| TEST-06 | Test Coverage | No load or performance tests | P3 | Performance Efficiency |
 
 ---
 
@@ -790,7 +790,7 @@ These items are production safety or active security risks:
 | ID | Title | Owner | Effort |
 |----|-------|-------|--------|
 | SEC-01 | Implement malware scan verdict enforcement | Worker engineer | 3d |
-| SEC-02 | Make CI vulnerability scanners blocking | DevOps engineer | 2h |
+| SEC-02 / OPS-01 | Make CI vulnerability scanners blocking | DevOps engineer | 2h |
 | TEST-01 | Scaffold integration test infrastructure | QA engineer | 2d |
 
 ### Phase 1 — Near term (within 2 weeks)
