@@ -83,8 +83,10 @@ var workbookJsonTemplate = '''
               "additionalResourceOptions": [
                 "value::1"
               ],
-              "includeAll": false
+              "includeAll": false,
+              "showDefault": false
             },
+            "defaultValue": "value::1",
             "label": "Subscription"
           },
           {
@@ -131,10 +133,18 @@ var workbookJsonTemplate = '''
             "id": "par-resourcegroupname",
             "version": "KqlParameterItem/1.0",
             "name": "ResourceGroupName",
-            "type": 1,
+            "type": 5,
             "isRequired": true,
-            "isHiddenWhenLocked": true,
-            "value": "__RESOURCE_GROUP__"
+            "query": "Resources | where type =~ \"microsoft.operationalinsights/workspaces\" or type =~ \"microsoft.insights/components\" or type =~ \"microsoft.app/containerapps\" | project resourceGroup | distinct resourceGroup | project value = resourceGroup, label = resourceGroup | order by label asc",
+            "crossComponentResources": [
+              "{Subscription}"
+            ],
+            "typeSettings": {
+              "additionalResourceOptions": []
+            },
+            "queryType": 1,
+            "value": "__RESOURCE_GROUP__",
+            "label": "Resource Group"
           }
         ],
         "style": "pills",
@@ -1194,7 +1204,7 @@ resource workbook 'Microsoft.Insights/workbooks@2023-06-01' = {
   properties: {
     displayName: workbookDisplayName
     category: 'workbook'
-    sourceId: logAnalyticsWorkspaceId
+    sourceId: 'Azure Monitor'
     serializedData: serializedData
     version: '1.0'
   }
