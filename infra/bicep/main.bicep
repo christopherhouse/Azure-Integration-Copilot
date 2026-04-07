@@ -146,6 +146,21 @@ module observability 'modules/observability.bicep' = {
 }
 
 // ---------------------------------------------------------------------------
+// Operations Workbook
+// ---------------------------------------------------------------------------
+
+module operationsWorkbook 'modules/workbook-operations.bicep' = {
+  name: 'operations-workbook'
+  params: {
+    location: location
+    workbookDisplayName: 'Integrisight.ai Operations'
+    logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
+    applicationInsightsResourceId: observability.outputs.applicationInsightsResourceId
+    tags: commonTags
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Networking
 // ---------------------------------------------------------------------------
 
