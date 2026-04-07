@@ -12,7 +12,7 @@ class AnalysisStatus(StrEnum):
     """Status of an analysis request."""
 
     PENDING = "pending"
-    IN_PROGRESS = "in_progress"
+    RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
 

@@ -130,10 +130,10 @@ class TestAnalysisHandlerIsAlreadyProcessed:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_status_is_in_progress(self):
+    async def test_returns_false_when_status_is_running(self):
         handler, repo, *_ = _make_handler()
         repo.get_by_id = AsyncMock(
-            return_value=_make_analysis(status=AnalysisStatus.IN_PROGRESS)
+            return_value=_make_analysis(status=AnalysisStatus.RUNNING)
         )
         result = await handler.is_already_processed(_make_event_data())
         assert result is False
@@ -161,7 +161,7 @@ class TestAnalysisHandlerHandle:
     """Tests for the analysis handler ``handle`` method."""
 
     @pytest.mark.asyncio
-    async def test_transitions_through_pending_to_in_progress_to_completed(self):
+    async def test_transitions_through_pending_to_running_to_completed(self):
         captured_statuses = []
 
         async def _capture_update(analysis):
@@ -174,9 +174,9 @@ class TestAnalysisHandlerHandle:
         handler, _, publisher, _, orchestrator = _make_handler(analysis_repo=repo)
         await handler.handle(_make_event_data())
 
-        # Should update twice: once for in_progress, once for completed
+        # Should update twice: once for running, once for completed
         assert len(captured_statuses) == 2
-        assert captured_statuses[0] == AnalysisStatus.IN_PROGRESS
+        assert captured_statuses[0] == AnalysisStatus.RUNNING
         assert captured_statuses[1] == AnalysisStatus.COMPLETED
 
     @pytest.mark.asyncio
