@@ -104,11 +104,13 @@ class ClamAVScanner:
         """
         data_size = len(data)
         chunk_count = (data_size + _CHUNK_SIZE - 1) // _CHUNK_SIZE
-        logger.info(
+
+        # Bind a local logger so every log entry in this scan carries the
+        # clamd target and payload size — critical when scans run concurrently.
+        log = logger.bind(host=self._host, port=self._port, data_size_bytes=data_size)
+
+        log.info(
             "clamd_scan_request",
-            host=self._host,
-            port=self._port,
-            data_size_bytes=data_size,
             chunk_size=_CHUNK_SIZE,
             chunk_count=chunk_count,
         )
@@ -121,7 +123,7 @@ class ClamAVScanner:
             # Send INSTREAM command using clamd null-terminated (z) format
             writer.write(b"zINSTREAM\0")
             await writer.drain()
-            logger.debug("clamd_instream_command_sent")
+            log.debug("clamd_instream_command_sent")
 
             # Stream data in length-prefixed chunks
             offset = 0
@@ -134,24 +136,23 @@ class ClamAVScanner:
                 offset += _CHUNK_SIZE
                 chunks_sent += 1
             await writer.drain()
-            logger.debug("clamd_chunks_streamed", chunks_sent=chunks_sent, total_bytes=data_size)
+            log.debug("clamd_chunks_streamed", chunks_sent=chunks_sent)
 
             # Send zero-length terminator to signal end of stream
             writer.write(struct.pack(">I", 0))
             await writer.drain()
-            logger.debug("clamd_stream_terminated")
+            log.debug("clamd_stream_terminated")
 
             # Read the scan result
             response_bytes = await asyncio.wait_for(reader.read(4096), timeout=_TCP_TIMEOUT)
             raw_response = response_bytes.strip(b"\0").decode("utf-8", errors="replace").strip()
 
             result = _parse_scan_response(raw_response)
-            logger.info(
+            log.info(
                 "clamd_scan_response",
                 raw_response=result.raw_response,
                 is_clean=result.is_clean,
                 signature=result.signature,
-                data_size_bytes=data_size,
             )
             return result
         finally:
