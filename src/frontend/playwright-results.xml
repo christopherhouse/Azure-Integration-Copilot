@@ -1,0 +1,110 @@
+<testsuites id="" name="" tests="49" failures="0" skipped="0" errors="0" time="40.982065999999996">
+<testsuite name="analysis.spec.ts" timestamp="2026-04-07T00:44:55.253Z" hostname="chromium" tests="8" failures="0" skipped="0" time="6.049" errors="0">
+<testcase name="Analysis page — structure › renders the Analysis heading" classname="analysis.spec.ts" time="1.02">
+</testcase>
+<testcase name="Analysis page — structure › back link points to the project detail page" classname="analysis.spec.ts" time="0.674">
+</testcase>
+<testcase name="Analysis page — structure › usage summary is visible" classname="analysis.spec.ts" time="0.681">
+</testcase>
+<testcase name="Analysis page — history sidebar › history sidebar shows the History heading on desktop viewports" classname="analysis.spec.ts" time="0.705">
+</testcase>
+<testcase name="Analysis page — history sidebar › existing analysis entries are listed in the history sidebar" classname="analysis.spec.ts" time="0.876">
+</testcase>
+<testcase name="Analysis page — chat area › chat area renders a prompt textarea" classname="analysis.spec.ts" time="0.666">
+</testcase>
+<testcase name="Analysis page — chat area › submit button is present in the chat area" classname="analysis.spec.ts" time="0.681">
+</testcase>
+<testcase name="Analysis page — chat area › typing a prompt enables the submit button" classname="analysis.spec.ts" time="0.746">
+</testcase>
+</testsuite>
+<testsuite name="auth.spec.ts" timestamp="2026-04-07T00:44:55.253Z" hostname="chromium" tests="9" failures="0" skipped="0" time="4.704" errors="0">
+<testcase name="Login page › renders the Integrisight.ai brand heading" classname="auth.spec.ts" time="0.439">
+</testcase>
+<testcase name="Login page › renders the dev-credentials sign-in form in development mode" classname="auth.spec.ts" time="0.456">
+</testcase>
+<testcase name="Login page › email input accepts a custom email address" classname="auth.spec.ts" time="0.551">
+</testcase>
+<testcase name="Login page › shows a privacy and security link" classname="auth.spec.ts" time="0.446">
+</testcase>
+<testcase name="Unauthenticated redirects › visiting / redirects to /login when not authenticated" classname="auth.spec.ts" time="0.46">
+</testcase>
+<testcase name="Unauthenticated redirects › visiting /dashboard redirects to /login when not authenticated" classname="auth.spec.ts" time="0.81">
+</testcase>
+<testcase name="Authenticated navigation › authenticated user at /login is shown the dev sign-in form" classname="auth.spec.ts" time="0.428">
+</testcase>
+<testcase name="Authenticated navigation › header shows the signed-in user&apos;s name" classname="auth.spec.ts" time="0.556">
+</testcase>
+<testcase name="Authenticated navigation › header has a sign-out button" classname="auth.spec.ts" time="0.558">
+</testcase>
+</testsuite>
+<testsuite name="navigation.spec.ts" timestamp="2026-04-07T00:44:55.253Z" hostname="chromium" tests="7" failures="0" skipped="0" time="4.582" errors="0">
+<testcase name="Sidebar navigation › shows the Integrisight.ai brand name" classname="navigation.spec.ts" time="0.568">
+</testcase>
+<testcase name="Sidebar navigation › shows a Projects navigation link" classname="navigation.spec.ts" time="0.566">
+</testcase>
+<testcase name="Sidebar navigation › shows a Settings navigation link" classname="navigation.spec.ts" time="0.574">
+</testcase>
+<testcase name="Sidebar navigation › shows the Privacy &amp; Security link in the sidebar footer" classname="navigation.spec.ts" time="0.554">
+</testcase>
+<testcase name="Sidebar navigation › clicking Settings link navigates to /dashboard/settings" classname="navigation.spec.ts" time="0.761">
+</testcase>
+<testcase name="Sidebar navigation › sidebar collapse button toggles the sidebar" classname="navigation.spec.ts" time="0.971">
+</testcase>
+<testcase name="Dashboard settings page › settings page renders a heading" classname="navigation.spec.ts" time="0.588">
+</testcase>
+</testsuite>
+<testsuite name="project-detail.spec.ts" timestamp="2026-04-07T00:44:55.253Z" hostname="chromium" tests="15" failures="0" skipped="0" time="14.475" errors="0">
+<testcase name="Project detail — header › displays the project name" classname="project-detail.spec.ts" time="1.202">
+</testcase>
+<testcase name="Project detail — header › displays the project status badge" classname="project-detail.spec.ts" time="0.906">
+</testcase>
+<testcase name="Project detail — header › Analyze button links to the analysis page" classname="project-detail.spec.ts" time="0.925">
+</testcase>
+<testcase name="Project detail — Overview tab › shows the artifact count card" classname="project-detail.spec.ts" time="0.938">
+</testcase>
+<testcase name="Project detail — Overview tab › shows the graph version card" classname="project-detail.spec.ts" time="0.908">
+</testcase>
+<testcase name="Project detail — Overview tab › shows the project status in the stats card" classname="project-detail.spec.ts" time="0.889">
+</testcase>
+<testcase name="Project detail — Overview tab › shows the created-by name in the details card" classname="project-detail.spec.ts" time="0.907">
+</testcase>
+<testcase name="Project detail — Artifacts tab › clicking Artifacts tab shows the upload area" classname="project-detail.spec.ts" time="0.876">
+</testcase>
+<testcase name="Project detail — Artifacts tab › artifacts tab lists uploaded artifacts" classname="project-detail.spec.ts" time="0.874">
+</testcase>
+<testcase name="Project detail — Graph tab › graph tab shows graph summary when data is available" classname="project-detail.spec.ts" time="0.921">
+</testcase>
+<testcase name="Project detail — Graph tab › graph tab shows empty-state placeholder when no graph data exists" classname="project-detail.spec.ts" time="0.925">
+</testcase>
+<testcase name="Project detail — Settings tab › settings tab shows the Edit Project section" classname="project-detail.spec.ts" time="0.844">
+</testcase>
+<testcase name="Project detail — Settings tab › settings tab shows the Danger Zone" classname="project-detail.spec.ts" time="0.854">
+</testcase>
+<testcase name="Project detail — Settings tab › clicking Delete Project opens a confirmation dialog" classname="project-detail.spec.ts" time="1.022">
+</testcase>
+<testcase name="Project detail — Settings tab › delete confirmation dialog can be dismissed with Cancel" classname="project-detail.spec.ts" time="1.484">
+</testcase>
+</testsuite>
+<testsuite name="projects.spec.ts" timestamp="2026-04-07T00:44:55.253Z" hostname="chromium" tests="10" failures="0" skipped="0" time="7.646" errors="0">
+<testcase name="Projects list page › renders the Projects heading" classname="projects.spec.ts" time="0.549">
+</testcase>
+<testcase name="Projects list page › shows the Create Project button" classname="projects.spec.ts" time="0.559">
+</testcase>
+<testcase name="Projects list page › lists all projects returned by the API" classname="projects.spec.ts" time="0.781">
+</testcase>
+<testcase name="Projects list page › shows project descriptions" classname="projects.spec.ts" time="0.784">
+</testcase>
+<testcase name="Projects list page › shows artifact count for each project" classname="projects.spec.ts" time="0.788">
+</testcase>
+<testcase name="Projects list page › shows empty state when no projects exist" classname="projects.spec.ts" time="0.643">
+</testcase>
+<testcase name="Projects list page › clicking a project card navigates to the project detail page" classname="projects.spec.ts" time="1.06">
+</testcase>
+<testcase name="Create Project dialog › opens when the New Project button is clicked" classname="projects.spec.ts" time="0.766">
+</testcase>
+<testcase name="Create Project dialog › dialog contains a Name field" classname="projects.spec.ts" time="0.7">
+</testcase>
+<testcase name="Create Project dialog › dialog can be dismissed" classname="projects.spec.ts" time="1.016">
+</testcase>
+</testsuite>
+</testsuites>
