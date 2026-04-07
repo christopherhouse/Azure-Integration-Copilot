@@ -9,13 +9,12 @@
  * - Clicking a project card navigates to the project detail page.
  */
 
-import { test, expect } from "../fixtures/index.js";
+import { test, expect, setupApiMocks, setupAuthMocks } from "../fixtures/index.js";
 import {
   MOCK_EMPTY_PROJECTS_RESPONSE,
   MOCK_PROJECT_1,
   MOCK_PROJECT_2,
 } from "../fixtures/mock-data.js";
-import { setupApiMocks } from "../fixtures/index.js";
 
 test.describe("Projects list page", () => {
   test("renders the Projects heading", async ({ authenticatedPage: page }) => {
@@ -63,11 +62,10 @@ test.describe("Projects list page", () => {
   });
 
   test("shows empty state when no projects exist", async ({ page }) => {
+    // Apply auth mocks before API mocks — same order as authenticatedPage fixture
+    await setupAuthMocks(page);
     // Override projects response with empty list
     await setupApiMocks(page, { projects: MOCK_EMPTY_PROJECTS_RESPONSE });
-    // Re-apply auth mocks after custom setupApiMocks call
-    const { setupAuthMocks } = await import("../fixtures/index.js");
-    await setupAuthMocks(page);
 
     await page.goto("/dashboard");
 

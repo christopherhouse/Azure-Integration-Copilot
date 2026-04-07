@@ -192,7 +192,9 @@ export async function setupApiMocks(
       });
     }
 
-    // Fallback — let unmapped requests through (avoids silent failures)
+    // Fallback — let unmapped requests through so tests don't silently hang.
+    // Routes that are intentionally allowed through include Next.js internal
+    // routes and any backend endpoints not yet covered by this fixture.
     return route.continue();
   });
 }
