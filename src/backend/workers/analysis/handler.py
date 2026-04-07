@@ -75,8 +75,8 @@ class AnalysisHandler(WorkerHandler):
         if analysis is None:
             raise PermanentError(f"Analysis {analysis_id} not found")
 
-        # Transition to in_progress
-        analysis.status = AnalysisStatus.IN_PROGRESS
+        # Transition to running
+        analysis.status = AnalysisStatus.RUNNING
         await self._repo.update(analysis)
 
         # Set scoping context for tool invocations
