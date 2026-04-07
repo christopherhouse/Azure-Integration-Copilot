@@ -1,4 +1,5 @@
-FROM node:22-alpine AS base
+# Pin Node.js 22 Alpine to specific SHA digest per convention #8
+FROM node:22-alpine@sha256:1e8b5d68cac394f76c931b266fe5c224c3fe4cdbc33131e064c83b88235fe77e AS base
 
 # Install dependencies only when needed
 FROM base AS deps
