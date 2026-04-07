@@ -88,35 +88,24 @@ var workbookJsonTemplate = '''
             "label": "Subscription"
           },
           {
-            "id": "par-resourcegroup",
+            "id": "par-loganalyticsworkspace",
             "version": "KqlParameterItem/1.0",
-            "name": "ResourceGroup",
+            "name": "LogAnalyticsWorkspace",
             "type": 5,
             "isRequired": true,
-            "query": "Resources | summarize by resourceGroup | order by resourceGroup asc",
+            "query": "Resources | where type == \"microsoft.operationalinsights/workspaces\" | project value = id, label = name | order by label asc",
             "crossComponentResources": [
               "{Subscription}"
             ],
             "typeSettings": {
-              "additionalResourceOptions": [
-                "value::1"
-              ],
+              "additionalResourceOptions": [],
               "resourceTypeFilter": {
-                "microsoft.resources/subscriptions/resourcegroups": true
+                "microsoft.operationalinsights/workspaces": true
               }
             },
+            "value": "__LOG_ANALYTICS_ID__",
             "queryType": 1,
-            "label": "Resource Group"
-          },
-          {
-            "id": "par-environment",
-            "version": "KqlParameterItem/1.0",
-            "name": "Environment",
-            "type": 2,
-            "isRequired": true,
-            "jsonData": "[\"dev\",\"prod\"]",
-            "value": "prod",
-            "label": "Environment"
+            "label": "Log Analytics Workspace"
           }
         ],
         "style": "pills",
@@ -208,7 +197,7 @@ var workbookJsonTemplate = '''
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "resources\n| where resourceGroup == \"{ResourceGroup}\"\n| where type in~ (\"microsoft.documentdb/databaseaccounts\",\"microsoft.storage/storageaccounts\",\"microsoft.eventgrid/namespaces\",\"microsoft.signalrservice/webpubsub\",\"microsoft.keyvault/vaults\",\"microsoft.containerregistry/registries\",\"microsoft.app/managedenvironments\",\"microsoft.cdn/profiles\",\"microsoft.cognitiveservices/accounts\",\"microsoft.network/bastionhosts\")\n| project ResourceName=name, ResourceType=type, HealthStatus=properties.provisioningState, Location=location",
+              "query": "resources\n| where resourceGroup == \"__RESOURCE_GROUP__\"\n| where type in~ (\"microsoft.documentdb/databaseaccounts\",\"microsoft.storage/storageaccounts\",\"microsoft.eventgrid/namespaces\",\"microsoft.signalrservice/webpubsub\",\"microsoft.keyvault/vaults\",\"microsoft.containerregistry/registries\",\"microsoft.app/managedenvironments\",\"microsoft.cdn/profiles\",\"microsoft.cognitiveservices/accounts\",\"microsoft.network/bastionhosts\")\n| project ResourceName=name, ResourceType=type, HealthStatus=properties.provisioningState, Location=location",
               "size": 0,
               "title": "Resource Health Grid",
               "queryType": 1,
@@ -251,7 +240,7 @@ var workbookJsonTemplate = '''
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "resources\n| where type == \"microsoft.app/containerapps\"\n| where resourceGroup == \"{ResourceGroup}\"\n| project AppName=name, ProvisioningState=properties.provisioningState, ActiveRevision=properties.latestRevisionName, Location=location",
+              "query": "resources\n| where type == \"microsoft.app/containerapps\"\n| where resourceGroup == \"__RESOURCE_GROUP__\"\n| project AppName=name, ProvisioningState=properties.provisioningState, ActiveRevision=properties.latestRevisionName, Location=location",
               "size": 0,
               "title": "Container Apps Status",
               "queryType": 1,
@@ -382,7 +371,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "tiles",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ],
               "tileSettings": {
                 "showBorder": true,
@@ -557,7 +546,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "frontDoorMetrics"
@@ -620,7 +609,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "eventGridDelivery"
@@ -636,7 +625,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "grid",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "deadLetterInspector"
@@ -668,7 +657,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "workerReplicaScaling"
@@ -699,7 +688,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "cosmosRU"
@@ -715,7 +704,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "cosmosThrottled"
@@ -731,7 +720,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "cosmosLatency"
@@ -747,7 +736,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "blobStorageTx"
@@ -763,7 +752,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "keyVaultOps"
@@ -779,7 +768,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "aiServicesTokens"
@@ -803,7 +792,7 @@ var workbookJsonTemplate = '''
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "resources | where type == \"microsoft.network/privateendpoints\" and resourceGroup == \"{ResourceGroup}\" | mv-expand connection = properties.privateLinkServiceConnections | project Name = name, TargetResource = tostring(connection.properties.privateLinkServiceId), Status = tostring(connection.properties.privateLinkServiceConnectionState.status)",
+              "query": "resources | where type == \"microsoft.network/privateendpoints\" and resourceGroup == \"__RESOURCE_GROUP__\" | mv-expand connection = properties.privateLinkServiceConnections | project Name = name, TargetResource = tostring(connection.properties.privateLinkServiceId), Status = tostring(connection.properties.privateLinkServiceConnectionState.status)",
               "size": 0,
               "title": "Private Endpoint Status",
               "queryType": 1,
@@ -847,7 +836,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "frontDoorWAF"
@@ -863,7 +852,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "grid",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "bastionAudit"
@@ -879,7 +868,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.operationalinsights/workspaces",
               "visualization": "grid",
               "crossComponentResources": [
-                "__LOG_ANALYTICS_ID__"
+                "{LogAnalyticsWorkspace}"
               ]
             },
             "name": "keyVaultAccessAudit"
@@ -1149,7 +1138,7 @@ var workbookJsonTemplate = '''
 }
 '''
 
-var serializedData = replace(replace(workbookJsonTemplate, '__APP_INSIGHTS_ID__', applicationInsightsResourceId), '__LOG_ANALYTICS_ID__', logAnalyticsWorkspaceId)
+var serializedData = replace(replace(replace(workbookJsonTemplate, '__APP_INSIGHTS_ID__', applicationInsightsResourceId), '__LOG_ANALYTICS_ID__', logAnalyticsWorkspaceId), '__RESOURCE_GROUP__', resourceGroup().name)
 
 // ---------------------------------------------------------------------------
 // Workbook resource
