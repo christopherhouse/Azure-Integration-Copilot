@@ -103,9 +103,8 @@ if [[ -n "${ENV_VARS}" ]]; then
   for pair in ${ENV_VARS}; do
     KEY="${pair%%=*}"
     VALUE="${pair#*=}"
-    ENV_VARS_YAML+="- name: ${KEY}"$'\n'
+    ENV_VARS_YAML+="          - name: ${KEY}"$'\n'
     ENV_VARS_YAML+="            value: \"${VALUE}\""$'\n'
-    ENV_VARS_YAML+="          "
   done
 fi
 
