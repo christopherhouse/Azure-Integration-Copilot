@@ -106,6 +106,30 @@ var workbookJsonTemplate = '''
             "value": "__LOG_ANALYTICS_ID__",
             "queryType": 1,
             "label": "Log Analytics Workspace"
+          },
+          {
+            "id": "par-applicationinsights",
+            "version": "KqlParameterItem/1.0",
+            "name": "ApplicationInsights",
+            "type": 5,
+            "isRequired": true,
+            "isHiddenWhenLocked": true,
+            "typeSettings": {
+              "additionalResourceOptions": [],
+              "resourceTypeFilter": {
+                "microsoft.insights/components": true
+              }
+            },
+            "value": "__APP_INSIGHTS_ID__"
+          },
+          {
+            "id": "par-resourcegroupname",
+            "version": "KqlParameterItem/1.0",
+            "name": "ResourceGroupName",
+            "type": 1,
+            "isRequired": true,
+            "isHiddenWhenLocked": true,
+            "value": "__RESOURCE_GROUP__"
           }
         ],
         "style": "pills",
@@ -197,7 +221,7 @@ var workbookJsonTemplate = '''
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "resources\n| where resourceGroup == \"__RESOURCE_GROUP__\"\n| where type in~ (\"microsoft.documentdb/databaseaccounts\",\"microsoft.storage/storageaccounts\",\"microsoft.eventgrid/namespaces\",\"microsoft.signalrservice/webpubsub\",\"microsoft.keyvault/vaults\",\"microsoft.containerregistry/registries\",\"microsoft.app/managedenvironments\",\"microsoft.cdn/profiles\",\"microsoft.cognitiveservices/accounts\",\"microsoft.network/bastionhosts\")\n| project ResourceName=name, ResourceType=type, HealthStatus=properties.provisioningState, Location=location",
+              "query": "resources\n| where resourceGroup == \"{ResourceGroupName}\"\n| where type in~ (\"microsoft.documentdb/databaseaccounts\",\"microsoft.storage/storageaccounts\",\"microsoft.eventgrid/namespaces\",\"microsoft.signalrservice/webpubsub\",\"microsoft.keyvault/vaults\",\"microsoft.containerregistry/registries\",\"microsoft.app/managedenvironments\",\"microsoft.cdn/profiles\",\"microsoft.cognitiveservices/accounts\",\"microsoft.network/bastionhosts\")\n| project ResourceName=name, ResourceType=type, HealthStatus=properties.provisioningState, Location=location",
               "size": 0,
               "title": "Resource Health Grid",
               "queryType": 1,
@@ -240,7 +264,7 @@ var workbookJsonTemplate = '''
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "resources\n| where type == \"microsoft.app/containerapps\"\n| where resourceGroup == \"__RESOURCE_GROUP__\"\n| project AppName=name, ProvisioningState=properties.provisioningState, ActiveRevision=properties.latestRevisionName, Location=location",
+              "query": "resources\n| where type == \"microsoft.app/containerapps\"\n| where resourceGroup == \"{ResourceGroupName}\"\n| project AppName=name, ProvisioningState=properties.provisioningState, ActiveRevision=properties.latestRevisionName, Location=location",
               "size": 0,
               "title": "Container Apps Status",
               "queryType": 1,
@@ -273,7 +297,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "tiles",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ],
               "tileSettings": {
                 "showBorder": true,
@@ -322,7 +346,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "tiles",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ],
               "tileSettings": {
                 "showBorder": true,
@@ -414,7 +438,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "tiles",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ],
               "tileSettings": {
                 "showBorder": true,
@@ -466,7 +490,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "requestVolume"
@@ -482,7 +506,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "unstackedbar",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "responseStatusDist"
@@ -498,7 +522,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "timechart",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "latencyPercentiles"
@@ -514,7 +538,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "slowestEndpoints"
@@ -530,7 +554,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "failedRequestsDetail"
@@ -577,7 +601,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "barchart",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "pipelineFunnel"
@@ -593,7 +617,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "workerDuration"
@@ -641,7 +665,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "workerErrors"
@@ -792,7 +816,7 @@ var workbookJsonTemplate = '''
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "resources | where type == \"microsoft.network/privateendpoints\" and resourceGroup == \"__RESOURCE_GROUP__\" | mv-expand connection = properties.privateLinkServiceConnections | project Name = name, TargetResource = tostring(connection.properties.privateLinkServiceId), Status = tostring(connection.properties.privateLinkServiceConnectionState.status)",
+              "query": "resources | where type == \"microsoft.network/privateendpoints\" and resourceGroup == \"{ResourceGroupName}\" | mv-expand connection = properties.privateLinkServiceConnections | project Name = name, TargetResource = tostring(connection.properties.privateLinkServiceId), Status = tostring(connection.properties.privateLinkServiceConnectionState.status)",
               "size": 0,
               "title": "Private Endpoint Status",
               "queryType": 1,
@@ -899,7 +923,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "tiles",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ],
               "tileSettings": {
                 "showBorder": true,
@@ -936,7 +960,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "barchart",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "topTenants"
@@ -952,7 +976,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "artifactsByTenant"
@@ -968,7 +992,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ],
               "gridSettings": {
                 "formatters": [
@@ -1014,7 +1038,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "tenantErrors"
@@ -1084,7 +1108,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "transactionTimeline"
@@ -1100,7 +1124,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "correlatedLogs"
@@ -1116,7 +1140,7 @@ var workbookJsonTemplate = '''
               "resourceType": "microsoft.insights/components",
               "visualization": "grid",
               "crossComponentResources": [
-                "__APP_INSIGHTS_ID__"
+                "{ApplicationInsights}"
               ]
             },
             "name": "correlatedException"
