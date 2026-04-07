@@ -1,0 +1,58 @@
+/**
+ * Next.js instrumentation hook for server-side OpenTelemetry.
+ *
+ * This file is automatically loaded by Next.js when the experimental
+ * `instrumentationHook` feature is enabled. It runs once when the Next.js
+ * server starts (before any request handling begins), making it the correct
+ * place to initialize OpenTelemetry instrumentation for server-side
+ * rendering, API routes, and middleware.
+ *
+ * **Scope:**
+ * - Server-side Next.js operations (SSR, getServerSideProps, API routes, middleware)
+ * - Outbound HTTP calls made from the Next.js server
+ *
+ * **Not Included:**
+ * - Browser-side telemetry (per Microsoft's recommendation to avoid
+ *   client-side OTel instrumentation due to bundle size and privacy concerns)
+ *
+ * @see https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
+ * @see https://learn.microsoft.com/azure/azure-monitor/app/opentelemetry-enable?tabs=nodejs
+ */
+
+export async function register() {
+  // Only run on the server (not in edge runtime or browser)
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const connectionString = process.env.APPLICATIONINSIGHTS_CONNECTION_STRING;
+
+    if (!connectionString) {
+      console.warn(
+        "[OpenTelemetry] APPLICATIONINSIGHTS_CONNECTION_STRING not set. " +
+          "Server-side telemetry disabled."
+      );
+      return;
+    }
+
+    // Dynamically import the Azure Monitor distro to avoid bundling it in
+    // edge runtime or browser builds.
+    const { useAzureMonitor } = await import("@azure/monitor-opentelemetry");
+
+    // Configure Azure Monitor with OpenTelemetry for Next.js server.
+    // This instruments:
+    // - Incoming HTTP requests (Next.js server requests, API routes)
+    // - Outbound HTTP dependencies (fetch calls to backend API)
+    // - Server-side rendering operations
+    useAzureMonitor({
+      azureMonitorExporterOptions: {
+        connectionString,
+      },
+      resource: {
+        attributes: {
+          "service.name": "integrisight-frontend",
+          "service.version": "0.1.0",
+        },
+      },
+    });
+
+    console.log("[OpenTelemetry] Azure Monitor instrumentation initialized for Next.js server");
+  }
+}
