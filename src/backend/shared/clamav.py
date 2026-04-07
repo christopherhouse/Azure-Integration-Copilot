@@ -75,10 +75,18 @@ class ClamAVScanner:
         Returns ``True`` if clamd is reachable and healthy.
         """
         try:
+            logger.debug("clamd_ping_request", host=self._host, port=self._port)
             response = await self._send_command(b"zPING\0")
-            return response.strip(b"\0").strip() == b"PONG"
+            decoded = response.strip(b"\0").strip()
+            is_pong = decoded == b"PONG"
+            logger.debug(
+                "clamd_ping_response",
+                raw_response=decoded.decode("utf-8", errors="replace"),
+                healthy=is_pong,
+            )
+            return is_pong
         except Exception:
-            logger.warning("clamd_ping_failed", exc_info=True)
+            logger.warning("clamd_ping_failed", host=self._host, port=self._port, exc_info=True)
             return False
 
     async def scan(self, data: bytes) -> ClamScanResult:
@@ -94,6 +102,19 @@ class ClamAVScanner:
             ``is_clean=False`` when the response contains ``FOUND``;
             the malware signature is extracted.
         """
+        data_size = len(data)
+        chunk_count = (data_size + _CHUNK_SIZE - 1) // _CHUNK_SIZE
+
+        # Bind a local logger so every log entry in this scan carries the
+        # clamd target and payload size — critical when scans run concurrently.
+        log = logger.bind(host=self._host, port=self._port, data_size_bytes=data_size)
+
+        log.info(
+            "clamd_scan_request",
+            chunk_size=_CHUNK_SIZE,
+            chunk_count=chunk_count,
+        )
+
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(self._host, self._port),
             timeout=_TCP_TIMEOUT,
@@ -102,26 +123,38 @@ class ClamAVScanner:
             # Send INSTREAM command using clamd null-terminated (z) format
             writer.write(b"zINSTREAM\0")
             await writer.drain()
+            log.debug("clamd_instream_command_sent")
 
             # Stream data in length-prefixed chunks
             offset = 0
+            chunks_sent = 0
             while offset < len(data):
                 chunk = data[offset : offset + _CHUNK_SIZE]
                 # Each chunk is preceded by a 4-byte big-endian length
                 writer.write(struct.pack(">I", len(chunk)))
                 writer.write(chunk)
                 offset += _CHUNK_SIZE
+                chunks_sent += 1
             await writer.drain()
+            log.debug("clamd_chunks_streamed", chunks_sent=chunks_sent)
 
             # Send zero-length terminator to signal end of stream
             writer.write(struct.pack(">I", 0))
             await writer.drain()
+            log.debug("clamd_stream_terminated")
 
             # Read the scan result
             response_bytes = await asyncio.wait_for(reader.read(4096), timeout=_TCP_TIMEOUT)
             raw_response = response_bytes.strip(b"\0").decode("utf-8", errors="replace").strip()
 
-            return _parse_scan_response(raw_response)
+            result = _parse_scan_response(raw_response)
+            log.info(
+                "clamd_scan_response",
+                raw_response=result.raw_response,
+                is_clean=result.is_clean,
+                signature=result.signature,
+            )
+            return result
         finally:
             writer.close()
             await writer.wait_closed()
