@@ -10,10 +10,6 @@
 export async function register() {
   // Only instrument on the server side (Node.js)
   if (process.env.NEXT_RUNTIME === 'nodejs') {
-    const { useAzureMonitor } = await import('@azure/monitor-opentelemetry');
-    const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = await import('@opentelemetry/semantic-conventions');
-    const { Resource } = await import('@opentelemetry/resources');
-
     const connectionString = process.env.APPLICATIONINSIGHTS_CONNECTION_STRING;
 
     if (!connectionString) {
@@ -21,15 +17,14 @@ export async function register() {
       return;
     }
 
-    // Configure Azure Monitor OpenTelemetry
+    // Import Azure Monitor and OTel SDK from the versions bundled with @azure/monitor-opentelemetry
+    const { useAzureMonitor } = await import('@azure/monitor-opentelemetry');
+
+    // Configure Azure Monitor OpenTelemetry with environment-based service name
     useAzureMonitor({
       azureMonitorExporterOptions: {
         connectionString,
       },
-      resource: new Resource({
-        [ATTR_SERVICE_NAME]: 'integrisight-frontend',
-        [ATTR_SERVICE_VERSION]: '0.1.0',
-      }),
       samplingRatio: 1.0, // 100% sampling - adjust in production if needed
     });
 
