@@ -2,8 +2,8 @@
 # CI Workflow — Integrisight.ai  (reusable child workflow)
 # =============================================================================
 # Called by the parent cicd.yml workflow.
-# Jobs: frontend build/test, backend build/test, Rust build/test, Bicep
-#        lint/build, container build/scan/push.
+# Jobs: frontend build/test, frontend e2e (Playwright), backend build/test,
+#        Rust build/test, Bicep lint/build, container build/scan/push.
 # =============================================================================
 
 name: CI
@@ -71,7 +71,57 @@ jobs:
           fail-on-error: true
 
   # -------------------------------------------------------------------------
-  # Job 2 — Backend: build, lint, test
+  # Job 2 — Frontend: Playwright end-to-end tests
+  # -------------------------------------------------------------------------
+  e2e-frontend:
+    name: "Frontend — E2E Tests (Playwright)"
+    runs-on: ubuntu-latest
+    needs: [build-and-test-frontend]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: src/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright e2e tests
+        working-directory: src/frontend
+        run: npm run test:e2e
+        env:
+          CI: "true"
+
+      - name: Publish e2e test results
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Frontend E2E Tests (Playwright)
+          path: src/frontend/playwright-results.xml
+          reporter: jest-junit
+          fail-on-error: true
+
+      - name: Upload Playwright test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: src/frontend/test-results/
+          retention-days: 7
+
+  # -------------------------------------------------------------------------
+  # Job 3 — Backend: build, lint, test
   # -------------------------------------------------------------------------
   build-and-test-backend:
     name: "Backend — Build & Test"
@@ -115,7 +165,7 @@ jobs:
           fail-on-error: true
 
   # -------------------------------------------------------------------------
-  # Job 3 — Rust parser worker: build, lint, test
+  # Job 4 — Rust parser worker: build, lint, test
   # -------------------------------------------------------------------------
   build-and-test-rust:
     name: "Rust Parser — Build & Test"
@@ -162,7 +212,7 @@ jobs:
           cargo test -- --format=pretty 2>&1 | tee ../../test-results/rust-results.txt
 
   # -------------------------------------------------------------------------
-  # Job 4 — Bicep: lint, build, publish artifacts
+  # Job 5 — Bicep: lint, build, publish artifacts
   # -------------------------------------------------------------------------
   bicep-build:
     name: "Bicep — Lint & Build"
@@ -207,12 +257,12 @@ jobs:
           retention-days: 7
 
   # -------------------------------------------------------------------------
-  # Job 5 — Container build matrix: build, scan, push (parallel per image)
+  # Job 6 — Container build matrix: build, scan, push (parallel per image)
   # -------------------------------------------------------------------------
   container-build:
     name: "Container — ${{ matrix.image_name }}"
     runs-on: ubuntu-latest
-    needs: [build-and-test-frontend, build-and-test-backend, build-and-test-rust]
+    needs: [build-and-test-frontend, build-and-test-backend, build-and-test-rust, e2e-frontend]
 
     strategy:
       fail-fast: false
@@ -368,7 +418,7 @@ jobs:
           retention-days: 1
 
   # -------------------------------------------------------------------------
-  # Job 6 — Aggregate container metadata for CD consumption
+  # Job 7 — Aggregate container metadata for CD consumption
   # -------------------------------------------------------------------------
   container-metadata:
     name: "Container Metadata — Aggregate"
