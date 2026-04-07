@@ -28,7 +28,7 @@ export function AnalysisChat({
 }: AnalysisChatProps) {
   const [prompt, setPrompt] = useState("");
   const [submittedAnalysisId, setSubmittedAnalysisId] = useState<string | null>(null);
-  const [showSamplePrompts, setShowSamplePrompts] = useState(true);
+  const [hasInteracted, setHasInteracted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -40,12 +40,8 @@ export function AnalysisChat({
     [selectedAnalysis?.id, submittedAnalysisId],
   );
 
-  // Hide sample prompts when an analysis is selected from history
-  useEffect(() => {
-    if (selectedAnalysis) {
-      setShowSamplePrompts(false);
-    }
-  }, [selectedAnalysis]);
+  // Show sample prompts only when there's no analysis and user hasn't interacted
+  const showSamplePrompts = !hasInteracted && !selectedAnalysis && !submittedAnalysisId;
 
   // Poll for the active analysis while it's running
   const { data: activeAnalysis } = useAnalysis(
@@ -66,7 +62,7 @@ export function AnalysisChat({
       const trimmed = prompt.trim();
       if (!trimmed || createMutation.isPending) return;
 
-      setShowSamplePrompts(false);
+      setHasInteracted(true);
 
       createMutation.mutate(trimmed, {
         onSuccess: (analysis) => {
@@ -85,7 +81,7 @@ export function AnalysisChat({
 
   const handleSamplePromptClick = useCallback((samplePrompt: string) => {
     setPrompt(samplePrompt);
-    setShowSamplePrompts(false);
+    setHasInteracted(true);
     inputRef.current?.focus();
   }, []);
 
