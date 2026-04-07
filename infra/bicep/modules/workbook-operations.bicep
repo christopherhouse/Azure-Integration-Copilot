@@ -153,6 +153,7 @@ var workbookJsonTemplate = '''
             "type": 1,
             "isRequired": false,
             "isHiddenWhenLocked": true,
+            "isGlobal": true,
             "value": "tab1"
           }
         ],
