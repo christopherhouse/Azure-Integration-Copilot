@@ -60,6 +60,33 @@ class BlobService:
         downloader = await blob_client.download_blob()
         return await downloader.readall()
 
+    async def move_blob(self, source_path: str, dest_path: str) -> None:
+        """Move a blob from *source_path* to *dest_path* (copy then delete)."""
+        client = await self._get_client()
+        container_client = client.get_container_client(ARTIFACTS_CONTAINER)
+        source_client = container_client.get_blob_client(source_path)
+        dest_client = container_client.get_blob_client(dest_path)
+
+        # Start async copy from source to destination
+        source_url = source_client.url
+        await dest_client.start_copy_from_url(source_url)
+        logger.info("blob_copy_started", source=source_path, dest=dest_path)
+
+        # Delete the source blob after copy
+        try:
+            await source_client.delete_blob()
+            logger.info("blob_moved", source=source_path, dest=dest_path)
+        except ResourceNotFoundError:
+            logger.info("blob_move_source_already_deleted", source=source_path)
+
+    async def set_blob_metadata(self, blob_path: str, metadata: dict[str, str]) -> None:
+        """Set custom metadata on a blob in the artifacts container."""
+        client = await self._get_client()
+        container_client = client.get_container_client(ARTIFACTS_CONTAINER)
+        blob_client = container_client.get_blob_client(blob_path)
+        await blob_client.set_blob_metadata(metadata)
+        logger.info("blob_metadata_set", blob_path=blob_path, keys=list(metadata.keys()))
+
     async def download_blob_stream(self, blob_path: str) -> AsyncIterator[bytes]:
         """Stream blob contents as an async iterator of chunks."""
         client = await self._get_client()

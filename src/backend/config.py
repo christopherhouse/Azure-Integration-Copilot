@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     applicationinsights_connection_string: str = ""
     defender_scan_enabled: bool = False
 
+    # ClamAV sidecar settings
+    clamd_host: str = "localhost"
+    clamd_port: int = 3310
+
     # CORS settings
     cors_allowed_origins: str = ""
 

@@ -157,13 +157,19 @@ class ArtifactService:
     async def get_artifact(
         self, tenant_id: str, project_id: str, artifact_id: str
     ) -> Artifact | None:
-        """Get an artifact by ID, scoped to tenant and project."""
+        """Get an artifact by ID, scoped to tenant and project.
+
+        Returns ``None`` for deleted or quarantined artifacts — quarantined
+        artifacts must never be surfaced to regular API/UI consumers.
+        """
         artifact = await artifact_repository.get_by_id(tenant_id, artifact_id)
         if artifact is None:
             return None
         if artifact.project_id != project_id:
             return None
         if artifact.deleted_at is not None:
+            return None
+        if artifact.status == ArtifactStatus.QUARANTINED:
             return None
         return artifact
 

@@ -118,6 +118,7 @@ The solution uses the following Azure services. All infrastructure must be defin
 5. **Use Azure Verified Modules.** When provisioning Azure resources with Bicep, delegate to the **bicep-engineer** agent. Always prefer Azure Verified Modules over custom resource definitions.
 6. **Use UV for Python.** All Python dependency management must go through UV. Do not use pip directly.
 7. **Cost optimization by default.** This solution is biased towards minimizing Azure spend. Prefer serverless and consumption-based services (e.g. Azure Container Apps consumption workload profiles, Cosmos DB serverless, Event Grid Namespace Standard tier) over provisioned or premium alternatives unless a specific workload requirement justifies the extra cost.
+8. **Pin container image tags.** All `FROM` directives in Dockerfiles and all container image references in deployment manifests or CI/CD pipelines **must** use either a SHA digest (`image@sha256:...`) or a specific version tag (`image:1.2.3`). Never use floating tags such as `latest`, `stable`, or bare major-version aliases (e.g. `node:22`). SHA digests are preferred for maximum reproducibility. When upgrading an image, update the digest/tag explicitly and document the version in a comment.
 
 ## Agent Tools
 

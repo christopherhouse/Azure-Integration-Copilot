@@ -2,7 +2,8 @@
 
 Runs as a standalone async process (not inside FastAPI).
 Pulls ``ArtifactUploaded`` events from the ``malware-scan-gate``
-subscription and transitions artifacts through the scan stage.
+subscription and scans artifacts with ClamAV before allowing them
+to proceed with processing.
 """
 
 from __future__ import annotations
@@ -14,6 +15,8 @@ import structlog
 
 from config import settings
 from domains.artifacts.repository import artifact_repository
+from shared.blob import blob_service
+from shared.clamav import clamav_scanner
 from shared.event_consumer import EventGridConsumer
 from shared.events import event_grid_publisher
 from shared.logging import setup_logging, setup_telemetry
@@ -38,7 +41,8 @@ async def main() -> None:
     handler = ScanGateHandler(
         artifact_repository=artifact_repository,
         event_publisher=event_grid_publisher,
-        defender_enabled=settings.defender_scan_enabled,
+        blob_service=blob_service,
+        clamav_scanner=clamav_scanner,
     )
 
     worker = BaseWorker(consumer, handler)

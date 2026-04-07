@@ -30,6 +30,10 @@ const statusConfig: Record<
     label: "Scan Failed",
     className: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
   },
+  quarantined: {
+    label: "Quarantined",
+    className: "bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-100",
+  },
   parsing: {
     label: "Parsing",
     className:

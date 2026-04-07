@@ -1,4 +1,4 @@
-"""Scan-gate worker handler — transitions artifacts through the malware scan stage."""
+"""Scan-gate worker handler — real ClamAV malware scanning via clamd sidecar."""
 
 from __future__ import annotations
 
@@ -7,8 +7,10 @@ from typing import Any
 
 import structlog
 
-from domains.artifacts.models import ArtifactError, ArtifactStatus
+from domains.artifacts.models import ArtifactError, ArtifactStatus, ScanResult
 from domains.artifacts.repository import ArtifactRepository
+from shared.blob import BlobService
+from shared.clamav import ClamAVScanner
 from shared.event_types import (
     EVENT_ARTIFACT_SCAN_FAILED,
     EVENT_ARTIFACT_SCAN_PASSED,
@@ -24,6 +26,7 @@ _POST_SCAN_STATUSES: frozenset[ArtifactStatus] = frozenset(
     {
         ArtifactStatus.SCAN_PASSED,
         ArtifactStatus.SCAN_FAILED,
+        ArtifactStatus.QUARANTINED,
         ArtifactStatus.PARSING,
         ArtifactStatus.PARSED,
         ArtifactStatus.PARSE_FAILED,
@@ -34,14 +37,31 @@ _POST_SCAN_STATUSES: frozenset[ArtifactStatus] = frozenset(
 )
 
 
-class ScanGateHandler(WorkerHandler):
-    """Process ``ArtifactUploaded`` events by transitioning the artifact
-    through the malware-scan stage.
+def _quarantine_blob_path(original_blob_path: str) -> str:
+    """Convert an artifact blob path to its quarantine location.
 
-    For the MVP the actual scan is a *passthrough* — the artifact is
-    immediately marked ``scan_passed``.  When ``defender_enabled`` is
-    ``True`` the handler will integrate with Microsoft Defender for
-    Storage (not yet implemented).
+    Original:    tenants/{tenantId}/projects/{projectId}/artifacts/{artifactId}/{filename}
+    Quarantined: tenants/{tenantId}/artifacts/quarantine/{projectId}/{artifactId}/{filename}
+    """
+    parts = original_blob_path.split("/")
+    # Expected: ["tenants", tenantId, "projects", projectId, "artifacts", artifactId, filename]
+    if len(parts) >= 7 and parts[0] == "tenants" and parts[2] == "projects":
+        tenant_id = parts[1]
+        project_id = parts[3]
+        # Everything after "artifacts/" (artifactId/filename...)
+        remainder = "/".join(parts[5:])
+        return f"tenants/{tenant_id}/artifacts/quarantine/{project_id}/{remainder}"
+    # Fallback: prefix with quarantine
+    return f"quarantine/{original_blob_path}"
+
+
+class ScanGateHandler(WorkerHandler):
+    """Process ``ArtifactUploaded`` events by scanning artifact content
+    with ClamAV and transitioning through the malware-scan stage.
+
+    Clean artifacts proceed to parsing.  Infected artifacts are
+    quarantined — their blob is moved to a quarantine path and the
+    artifact status is set to ``quarantined``.
     """
 
     @property
@@ -52,12 +72,13 @@ class ScanGateHandler(WorkerHandler):
         self,
         artifact_repository: ArtifactRepository,
         event_publisher: EventGridPublisher,
-        *,
-        defender_enabled: bool = False,
+        blob_service: BlobService,
+        clamav_scanner: ClamAVScanner,
     ) -> None:
         self._repo = artifact_repository
         self._publisher = event_publisher
-        self._defender_enabled = defender_enabled
+        self._blob = blob_service
+        self._scanner = clamav_scanner
 
     # -- WorkerHandler interface ----------------------------------------------
 
@@ -73,7 +94,7 @@ class ScanGateHandler(WorkerHandler):
         return artifact.status in _POST_SCAN_STATUSES
 
     async def handle(self, event_data: dict[str, Any]) -> None:
-        """Transition artifact from ``uploaded`` → ``scanning`` → ``scan_passed``."""
+        """Scan artifact content and transition based on the result."""
         tenant_id = event_data["tenantId"]
         artifact_id = event_data["artifactId"]
         project_id = event_data["projectId"]
@@ -89,13 +110,64 @@ class ScanGateHandler(WorkerHandler):
         if artifact is None:
             raise PermanentError(f"Artifact {artifact_id} not found for tenant {tenant_id}")
 
-        # MVP passthrough — skip actual Defender scan
-        if self._defender_enabled:
-            log.info("defender_scan_not_implemented")
+        blob_path = artifact.blob_path
+        if not blob_path:
+            raise PermanentError(f"Artifact {artifact_id} has no blob path")
 
-        # scanning → scan_passed
+        # Download blob content for scanning
         try:
-            await self._repo.update_status(tenant_id, artifact_id, ArtifactStatus.SCAN_PASSED)
+            blob_data = await self._blob.download_blob(blob_path)
+        except Exception as exc:
+            raise TransientError(f"Failed to download blob for scanning: {exc}") from exc
+
+        # Scan with ClamAV
+        try:
+            scan_result = await self._scanner.scan(blob_data)
+        except Exception as exc:
+            raise TransientError(f"ClamAV scan failed: {exc}") from exc
+
+        scanned_at = datetime.now(UTC)
+
+        # Write scan metadata to blob
+        try:
+            await self._blob.set_blob_metadata(blob_path, {
+                "scan_status": "clean" if scan_result.is_clean else "infected",
+                "scan_signature": scan_result.signature or "",
+                "scan_timestamp": scanned_at.isoformat(),
+                "scan_scanner": "clamav",
+            })
+        except Exception:
+            log.warning("failed_to_set_blob_scan_metadata", exc_info=True)
+
+        if scan_result.is_clean:
+            await self._handle_clean(tenant_id, artifact_id, project_id, artifact, scanned_at, log)
+        else:
+            await self._handle_malware(
+                tenant_id, artifact_id, project_id, artifact, scan_result, scanned_at, log,
+            )
+
+    async def _handle_clean(
+        self,
+        tenant_id: str,
+        artifact_id: str,
+        project_id: str,
+        artifact: Any,
+        scanned_at: datetime,
+        log: Any,
+    ) -> None:
+        """Handle a clean scan result — transition to ``scan_passed``."""
+        # Update artifact with scan result and status
+        try:
+            artifact = await self._repo.get_by_id(tenant_id, artifact_id)
+            if artifact is not None:
+                artifact.scan_result = ScanResult(
+                    scanner="clamav",
+                    isClean=True,
+                    signature=None,
+                    scannedAt=scanned_at,
+                )
+                artifact.status = ArtifactStatus.SCAN_PASSED
+                await self._repo.update(artifact)
         except Exception as exc:
             raise TransientError(f"Failed to transition to scan_passed: {exc}") from exc
 
@@ -108,12 +180,78 @@ class ScanGateHandler(WorkerHandler):
                 "tenantId": tenant_id,
                 "projectId": project_id,
                 "artifactId": artifact_id,
-                "artifactType": artifact.artifact_type,
-                "blobPath": artifact.blob_path,
+                "artifactType": artifact.artifact_type if artifact else None,
+                "blobPath": artifact.blob_path if artifact else None,
             },
         )
         await self._publisher.publish_event(event)
         log.info("scan_passed_event_published")
+
+    async def _handle_malware(
+        self,
+        tenant_id: str,
+        artifact_id: str,
+        project_id: str,
+        artifact: Any,
+        scan_result: Any,
+        scanned_at: datetime,
+        log: Any,
+    ) -> None:
+        """Handle a malware detection — quarantine the artifact."""
+        log.warning(
+            "malware_detected",
+            signature=scan_result.signature,
+            raw_response=scan_result.raw_response,
+        )
+
+        original_blob_path = artifact.blob_path
+
+        # Move blob to quarantine path
+        quarantine_path = _quarantine_blob_path(original_blob_path) if original_blob_path else None
+        if original_blob_path and quarantine_path:
+            try:
+                await self._blob.move_blob(original_blob_path, quarantine_path)
+            except Exception:
+                log.error("failed_to_move_blob_to_quarantine", exc_info=True)
+                # Continue with quarantine status even if blob move fails
+                quarantine_path = original_blob_path
+
+        # Update artifact: quarantined status, new blob path, scan result, error
+        try:
+            artifact = await self._repo.get_by_id(tenant_id, artifact_id)
+            if artifact is not None:
+                artifact.status = ArtifactStatus.QUARANTINED
+                artifact.blob_path = quarantine_path
+                artifact.scan_result = ScanResult(
+                    scanner="clamav",
+                    isClean=False,
+                    signature=scan_result.signature,
+                    scannedAt=scanned_at,
+                )
+                artifact.error = ArtifactError(
+                    code="MALWARE_DETECTED",
+                    message=f"Malware detected: {scan_result.signature or 'unknown signature'}",
+                    occurredAt=scanned_at,
+                )
+                await self._repo.update(artifact)
+        except Exception as exc:
+            raise TransientError(f"Failed to update artifact to quarantined: {exc}") from exc
+
+        # Publish ArtifactScanFailed event (NOT scan-passed)
+        event = build_cloud_event(
+            event_type=EVENT_ARTIFACT_SCAN_FAILED,
+            source="/integration-copilot/worker/scan-gate",
+            subject=f"tenants/{tenant_id}/projects/{project_id}/artifacts/{artifact_id}",
+            data={
+                "tenantId": tenant_id,
+                "projectId": project_id,
+                "artifactId": artifact_id,
+                "error": f"Malware detected: {scan_result.signature}",
+                "quarantined": True,
+            },
+        )
+        await self._publisher.publish_event(event)
+        log.info("artifact_quarantined", signature=scan_result.signature)
 
     async def handle_failure(self, event_data: dict[str, Any], error: Exception) -> None:
         """Transition artifact to ``scan_failed`` on permanent error."""
