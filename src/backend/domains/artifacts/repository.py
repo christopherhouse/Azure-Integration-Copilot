@@ -64,11 +64,12 @@ class ArtifactRepository:
         where_clause = (
             "WHERE c.partitionKey = @tenantId AND c.type = 'artifact' "
             "AND c.projectId = @projectId AND (NOT IS_DEFINED(c.deletedAt) OR IS_NULL(c.deletedAt))"
-            " AND c.status != 'quarantined'"
+            " AND c.status != @quarantinedStatus"
         )
         params = [
             {"name": "@tenantId", "value": tenant_id},
             {"name": "@projectId", "value": project_id},
+            {"name": "@quarantinedStatus", "value": str(ArtifactStatus.QUARANTINED)},
         ]
 
         if status_filter is not None:

@@ -49,7 +49,10 @@ class ClamAVScanner:
         self._port = port or settings.clamd_port
 
     async def _send_command(self, command: bytes) -> bytes:
-        """Open a TCP connection, send *command*, and return the full response."""
+        """Open a TCP connection, send *command*, and return the full response.
+
+        Commands use the clamd ``z`` (null-terminated) protocol format.
+        """
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(self._host, self._port),
             timeout=_TCP_TIMEOUT,
@@ -65,6 +68,9 @@ class ClamAVScanner:
 
     async def ping(self) -> bool:
         """Send a ``PING`` command and expect ``PONG`` back.
+
+        Uses the clamd ``z`` (null-terminated) command format:
+        ``zPING\\0`` → ``PONG\\0``.
 
         Returns ``True`` if clamd is reachable and healthy.
         """
@@ -93,7 +99,7 @@ class ClamAVScanner:
             timeout=_TCP_TIMEOUT,
         )
         try:
-            # Send INSTREAM command (null-terminated)
+            # Send INSTREAM command using clamd null-terminated (z) format
             writer.write(b"zINSTREAM\0")
             await writer.drain()
 

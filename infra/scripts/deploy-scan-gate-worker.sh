@@ -135,17 +135,18 @@ sed \
 
 # Inject environment variables into the YAML
 if [[ -n "${ENV_VARS_YAML}" ]]; then
-  # Replace the __ENV_VARS_YAML__ placeholder with the actual env block
-  python3 -c "
-import sys
-with open('${YAML_FILE}', 'r') as f:
-    content = f.read()
-env_block = '''${ENV_VARS_YAML}'''
-# Replace placeholder; indent is already in the env_block
-content = content.replace('__ENV_VARS_YAML__', env_block.rstrip())
-with open('${YAML_FILE}', 'w') as f:
-    f.write(content)
-"
+  # Write env block to a temp file, then use sed to replace the placeholder.
+  ENV_FILE=$(mktemp /tmp/scan-gate-env-XXXXXX.yaml)
+  echo -n "${ENV_VARS_YAML}" > "${ENV_FILE}"
+  # Use awk to replace the placeholder line with the env block contents
+  awk -v envfile="${ENV_FILE}" '
+    /__ENV_VARS_YAML__/ {
+      while ((getline line < envfile) > 0) print line
+      next
+    }
+    { print }
+  ' "${YAML_FILE}" > "${YAML_FILE}.tmp" && mv "${YAML_FILE}.tmp" "${YAML_FILE}"
+  rm -f "${ENV_FILE}"
 else
   sed -i 's|__ENV_VARS_YAML__|[]|g' "${YAML_FILE}"
 fi

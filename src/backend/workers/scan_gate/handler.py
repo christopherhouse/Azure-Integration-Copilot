@@ -213,7 +213,11 @@ class ScanGateHandler(WorkerHandler):
                 await self._blob.move_blob(original_blob_path, quarantine_path)
             except Exception:
                 log.error("failed_to_move_blob_to_quarantine", exc_info=True)
-                # Continue with quarantine status even if blob move fails
+                # Continue with quarantine status even if blob move fails —
+                # the artifact is still marked quarantined and hidden from
+                # the API.  The blob remains at its original path but is
+                # inaccessible to regular consumers.  A future admin cleanup
+                # job can reconcile orphaned quarantine blobs.
                 quarantine_path = original_blob_path
 
         # Update artifact: quarantined status, new blob path, scan result, error
