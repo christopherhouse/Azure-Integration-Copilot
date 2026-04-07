@@ -113,14 +113,19 @@ var workbookJsonTemplate = '''
             "name": "ApplicationInsights",
             "type": 5,
             "isRequired": true,
-            "isHiddenWhenLocked": true,
+            "query": "Resources | where type == \"microsoft.insights/components\" | project value = id, label = name | order by label asc",
+            "crossComponentResources": [
+              "{Subscription}"
+            ],
             "typeSettings": {
               "additionalResourceOptions": [],
               "resourceTypeFilter": {
                 "microsoft.insights/components": true
               }
             },
-            "value": "__APP_INSIGHTS_ID__"
+            "value": "__APP_INSIGHTS_ID__",
+            "queryType": 1,
+            "label": "Application Insights"
           },
           {
             "id": "par-resourcegroupname",
@@ -226,6 +231,9 @@ var workbookJsonTemplate = '''
               "title": "Resource Health Grid",
               "queryType": 1,
               "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "{Subscription}"
+              ],
               "visualization": "grid",
               "gridSettings": {
                 "formatters": [
@@ -269,6 +277,9 @@ var workbookJsonTemplate = '''
               "title": "Container Apps Status",
               "queryType": 1,
               "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "{Subscription}"
+              ],
               "visualization": "grid"
             },
             "name": "containerAppsStatus"
@@ -282,6 +293,9 @@ var workbookJsonTemplate = '''
               "title": "Active Alerts Summary",
               "queryType": 1,
               "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "{Subscription}"
+              ],
               "visualization": "grid"
             },
             "name": "activeAlerts"
@@ -821,6 +835,9 @@ var workbookJsonTemplate = '''
               "title": "Private Endpoint Status",
               "queryType": 1,
               "resourceType": "microsoft.resourcegraph/resources",
+              "crossComponentResources": [
+                "{Subscription}"
+              ],
               "visualization": "grid",
               "gridSettings": {
                 "formatters": [
