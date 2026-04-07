@@ -10,7 +10,7 @@ import path from "path";
  * - Tests run in Chromium by default; add more projects as needed.
  */
 export default defineConfig({
-  testDir: path.join(__dirname, "../../tests/playwright/e2e"),
+  testDir: path.join(__dirname, "e2e"),
 
   /* Run tests sequentially in CI to avoid port conflicts. */
   fullyParallel: !process.env.CI,
@@ -48,7 +48,7 @@ export default defineConfig({
     command: "npm run dev",
     url: "http://localhost:3000",
     reuseExistingServer: !process.env.CI,
-    cwd: __dirname,
+    cwd: path.join(__dirname, "../../src/frontend"),
     timeout: 120_000,
     env: {
       NODE_ENV: "development",
