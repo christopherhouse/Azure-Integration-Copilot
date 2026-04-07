@@ -169,67 +169,60 @@ var workbookJsonTemplate = '''
         "links": [
           {
             "id": "lt1",
-            "cellValue": "tab1",
+            "cellValue": "selectedTab",
             "linkTarget": "parameter",
             "linkLabel": "Platform Health Overview",
-            "subTarget": "selectedTab",
+            "subTarget": "tab1",
             "style": "link",
-            "preText": "Platform Health Overview",
             "isDefault": true
           },
           {
             "id": "lt2",
-            "cellValue": "tab2",
+            "cellValue": "selectedTab",
             "linkTarget": "parameter",
             "linkLabel": "API & Frontend Performance",
-            "subTarget": "selectedTab",
-            "style": "link",
-            "preText": "API & Frontend Performance"
+            "subTarget": "tab2",
+            "style": "link"
           },
           {
             "id": "lt3",
-            "cellValue": "tab3",
+            "cellValue": "selectedTab",
             "linkTarget": "parameter",
             "linkLabel": "Worker Pipeline",
-            "subTarget": "selectedTab",
-            "style": "link",
-            "preText": "Worker Pipeline"
+            "subTarget": "tab3",
+            "style": "link"
           },
           {
             "id": "lt4",
-            "cellValue": "tab4",
+            "cellValue": "selectedTab",
             "linkTarget": "parameter",
             "linkLabel": "Data Services",
-            "subTarget": "selectedTab",
-            "style": "link",
-            "preText": "Data Services"
+            "subTarget": "tab4",
+            "style": "link"
           },
           {
             "id": "lt5",
-            "cellValue": "tab5",
+            "cellValue": "selectedTab",
             "linkTarget": "parameter",
             "linkLabel": "Networking & Security",
-            "subTarget": "selectedTab",
-            "style": "link",
-            "preText": "Networking & Security"
+            "subTarget": "tab5",
+            "style": "link"
           },
           {
             "id": "lt6",
-            "cellValue": "tab6",
+            "cellValue": "selectedTab",
             "linkTarget": "parameter",
             "linkLabel": "Tenant Activity",
-            "subTarget": "selectedTab",
-            "style": "link",
-            "preText": "Tenant Activity"
+            "subTarget": "tab6",
+            "style": "link"
           },
           {
             "id": "lt7",
-            "cellValue": "tab7",
+            "cellValue": "selectedTab",
             "linkTarget": "parameter",
             "linkLabel": "End-to-End Transaction Search",
-            "subTarget": "selectedTab",
-            "style": "link",
-            "preText": "End-to-End Transaction Search"
+            "subTarget": "tab7",
+            "style": "link"
           }
         ]
       },
