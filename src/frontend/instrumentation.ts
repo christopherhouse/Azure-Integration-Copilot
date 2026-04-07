@@ -1,8 +1,7 @@
 /**
  * Next.js instrumentation hook for server-side OpenTelemetry.
  *
- * This file is automatically loaded by Next.js when the experimental
- * `instrumentationHook` feature is enabled. It runs once when the Next.js
+ * This file is automatically loaded by Next.js. It runs once when the Next.js
  * server starts (before any request handling begins), making it the correct
  * place to initialize OpenTelemetry instrumentation for server-side
  * rendering, API routes, and middleware.
@@ -32,9 +31,10 @@ export async function register() {
       return;
     }
 
-    // Dynamically import the Azure Monitor distro to avoid bundling it in
-    // edge runtime or browser builds.
+    // Dynamically import the Azure Monitor distro and OpenTelemetry APIs to avoid
+    // bundling them in edge runtime or browser builds.
     const { useAzureMonitor } = await import("@azure/monitor-opentelemetry");
+    const { resourceFromAttributes } = await import("@opentelemetry/resources");
 
     // Configure Azure Monitor with OpenTelemetry for Next.js server.
     // This instruments:
@@ -45,12 +45,10 @@ export async function register() {
       azureMonitorExporterOptions: {
         connectionString,
       },
-      resource: {
-        attributes: {
-          "service.name": "integrisight-frontend",
-          "service.version": "0.1.0",
-        },
-      },
+      resource: resourceFromAttributes({
+        "service.name": "integrisight-frontend",
+        "service.version": "0.1.0",
+      }),
       samplingRatio: 1.0, // 100% sampling - adjust in production if needed
     });
 
