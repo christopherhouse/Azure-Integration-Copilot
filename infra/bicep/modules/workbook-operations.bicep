@@ -145,6 +145,23 @@ var workbookJsonTemplate = '''
             "queryType": 1,
             "value": "__RESOURCE_GROUP__",
             "label": "Resource Group"
+          },
+          {
+            "id": "par-selectedtab",
+            "version": "KqlParameterItem/1.0",
+            "name": "selectedTab",
+            "type": 1,
+            "isRequired": false,
+            "isHiddenWhenLocked": true,
+            "criteriaData": [
+              {
+                "criteriaContext": {
+                  "operator": "Default",
+                  "resultValType": "static",
+                  "resultVal": "tab1"
+                }
+              }
+            ]
           }
         ],
         "style": "pills",
