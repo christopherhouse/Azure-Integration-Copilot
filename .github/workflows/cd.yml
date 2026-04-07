@@ -125,15 +125,55 @@ jobs:
           echo "ai_services_endpoint=$(echo "$OUTPUTS" | jq -r '.aiServicesEndpoint.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
-  # Dev — Promote Containers (GHCR → ACR)
+  # Dev — Parse Container Metadata (shared output for matrix jobs)
   # ---------------------------------------------------------------------------
-  promote-containers-dev:
-    name: "Dev — Promote Containers"
+  parse-metadata-dev:
+    name: "Dev — Parse Container Metadata"
     needs: [deploy-infra-dev]
     runs-on: ubuntu-latest
     environment: dev
     outputs:
       image_tag: ${{ steps.metadata.outputs.tag }}
+
+    steps:
+      - name: Download container metadata
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: container-metadata
+
+      - name: Parse container metadata
+        id: metadata
+        run: |
+          cat container-metadata.json
+          TAG=$(jq -r '.containers[] | select(.name=="integrisight-frontend") | .tag' container-metadata.json)
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Dev — Promote Containers (GHCR → ACR) — matrix for parallel imports
+  # ---------------------------------------------------------------------------
+  promote-containers-dev:
+    name: "Dev — Import ${{ matrix.container.name }}"
+    needs: [deploy-infra-dev, parse-metadata-dev]
+    runs-on: ubuntu-latest
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        container:
+          - name: integrisight-frontend
+            image_name: integrisight-frontend
+          - name: integrisight-backend
+            image_name: integrisight-backend
+          - name: integrisight-worker-scan-gate
+            image_name: integrisight-worker-scan-gate
+          - name: integrisight-worker-parser
+            image_name: integrisight-worker-parser
+          - name: integrisight-worker-graph-builder
+            image_name: integrisight-worker-graph-builder
+          - name: integrisight-worker-analysis
+            image_name: integrisight-worker-analysis
+          - name: integrisight-worker-notification
+            image_name: integrisight-worker-notification
 
     steps:
       - name: Azure Login (OIDC)
@@ -148,107 +188,20 @@ jobs:
         with:
           name: container-metadata
 
-      - name: Parse container metadata
-        id: metadata
+      - name: Get container image
+        id: image
         run: |
-          cat container-metadata.json
-          FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-frontend") | .full_image' container-metadata.json)
-          BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-backend") | .full_image' container-metadata.json)
-          WORKER_SCAN_GATE_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-scan-gate") | .full_image' container-metadata.json)
-          WORKER_PARSER_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-parser") | .full_image' container-metadata.json)
-          WORKER_GRAPH_BUILDER_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-graph-builder") | .full_image' container-metadata.json)
-          WORKER_ANALYSIS_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-analysis") | .full_image' container-metadata.json)
-          WORKER_NOTIFICATION_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-notification") | .full_image' container-metadata.json)
-          TAG=$(jq -r '.containers[] | select(.name=="integrisight-frontend") | .tag' container-metadata.json)
-          echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_scan_gate_image=${WORKER_SCAN_GATE_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_parser_image=${WORKER_PARSER_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_graph_builder_image=${WORKER_GRAPH_BUILDER_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_analysis_image=${WORKER_ANALYSIS_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_notification_image=${WORKER_NOTIFICATION_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          FULL_IMAGE=$(jq -r '.containers[] | select(.name=="${{ matrix.container.name }}") | .full_image' container-metadata.json)
+          echo "full_image=${FULL_IMAGE}" >> "$GITHUB_OUTPUT"
 
-      - name: Import frontend image to ACR
+      - name: Import ${{ matrix.container.name }} to ACR
         env:
           ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
         run: |
           az acr import \
             --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.frontend_image }}" \
-            --image "integrisight-frontend:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import backend image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.backend_image }}" \
-            --image "integrisight-backend:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-scan-gate image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_scan_gate_image }}" \
-            --image "integrisight-worker-scan-gate:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-parser image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_parser_image }}" \
-            --image "integrisight-worker-parser:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-graph-builder image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_graph_builder_image }}" \
-            --image "integrisight-worker-graph-builder:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-analysis image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_analysis_image }}" \
-            --image "integrisight-worker-analysis:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-notification image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-dev.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_notification_image }}" \
-            --image "integrisight-worker-notification:${{ steps.metadata.outputs.tag }}" \
+            --source "${{ steps.image.outputs.full_image }}" \
+            --image "${{ matrix.container.image_name }}:${{ needs.parse-metadata-dev.outputs.image_tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -258,7 +211,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-apps-dev:
     name: "Dev — Deploy Container Apps"
-    needs: [deploy-infra-dev, promote-containers-dev]
+    needs: [deploy-infra-dev, parse-metadata-dev, promote-containers-dev]
     runs-on: ubuntu-latest
     environment: dev
 
@@ -306,7 +259,7 @@ jobs:
             --name "ca-backend" \
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-backend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-backend:${{ needs.parse-metadata-dev.outputs.image_tag }}" \
             --target-port 8000 \
             --identity "${{ steps.identities.outputs.backend_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
@@ -345,7 +298,7 @@ jobs:
             --name "ca-frontend" \
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-frontend:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-frontend:${{ needs.parse-metadata-dev.outputs.image_tag }}" \
             --target-port 3000 \
             --identity "${{ steps.identities.outputs.frontend_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
@@ -360,7 +313,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-workers-dev:
     name: "Dev — Deploy Worker (${{ matrix.worker.name }})"
-    needs: [deploy-infra-dev, promote-containers-dev]
+    needs: [deploy-infra-dev, parse-metadata-dev, promote-containers-dev]
     runs-on: ubuntu-latest
     environment: dev
     strategy:
@@ -435,7 +388,7 @@ jobs:
             --name "${{ matrix.worker.app_name }}" \
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/${{ matrix.worker.image_name }}:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/${{ matrix.worker.image_name }}:${{ needs.parse-metadata-dev.outputs.image_tag }}" \
             --no-ingress \
             --identity "${{ steps.identity.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
@@ -453,7 +406,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-scan-gate-dev:
     name: "Dev — Deploy Scan-Gate Worker (ClamAV sidecar)"
-    needs: [deploy-infra-dev, promote-containers-dev]
+    needs: [deploy-infra-dev, parse-metadata-dev, promote-containers-dev]
     runs-on: ubuntu-latest
     environment: dev
 
@@ -496,7 +449,7 @@ jobs:
             --name "ca-worker-scan-gate" \
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-dev.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-scan-gate:${{ needs.promote-containers-dev.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-dev.outputs.acr_login_server }}/integrisight-worker-scan-gate:${{ needs.parse-metadata-dev.outputs.image_tag }}" \
             --identity "${{ steps.identity.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-dev.outputs.acr_login_server }}" \
             --env-vars "${{ steps.worker-env.outputs.env_vars }}"
@@ -728,15 +681,55 @@ jobs:
           echo "ai_services_endpoint=$(echo "$OUTPUTS" | jq -r '.aiServicesEndpoint.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
-  # Prod — Promote Containers (GHCR → ACR)
+  # Prod — Parse Container Metadata (shared output for matrix jobs)
   # ---------------------------------------------------------------------------
-  promote-containers-prod:
-    name: "Prod — Promote Containers"
+  parse-metadata-prod:
+    name: "Prod — Parse Container Metadata"
     needs: [deploy-infra-prod]
     runs-on: ubuntu-latest
     environment: prod
     outputs:
       image_tag: ${{ steps.metadata.outputs.tag }}
+
+    steps:
+      - name: Download container metadata
+        uses: actions/download-artifact@v8.0.1
+        with:
+          name: container-metadata
+
+      - name: Parse container metadata
+        id: metadata
+        run: |
+          cat container-metadata.json
+          TAG=$(jq -r '.containers[] | select(.name=="integrisight-frontend") | .tag' container-metadata.json)
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Prod — Promote Containers (GHCR → ACR) — matrix for parallel imports
+  # ---------------------------------------------------------------------------
+  promote-containers-prod:
+    name: "Prod — Import ${{ matrix.container.name }}"
+    needs: [deploy-infra-prod, parse-metadata-prod]
+    runs-on: ubuntu-latest
+    environment: prod
+    strategy:
+      fail-fast: false
+      matrix:
+        container:
+          - name: integrisight-frontend
+            image_name: integrisight-frontend
+          - name: integrisight-backend
+            image_name: integrisight-backend
+          - name: integrisight-worker-scan-gate
+            image_name: integrisight-worker-scan-gate
+          - name: integrisight-worker-parser
+            image_name: integrisight-worker-parser
+          - name: integrisight-worker-graph-builder
+            image_name: integrisight-worker-graph-builder
+          - name: integrisight-worker-analysis
+            image_name: integrisight-worker-analysis
+          - name: integrisight-worker-notification
+            image_name: integrisight-worker-notification
 
     steps:
       - name: Azure Login (OIDC)
@@ -751,107 +744,20 @@ jobs:
         with:
           name: container-metadata
 
-      - name: Parse container metadata
-        id: metadata
+      - name: Get container image
+        id: image
         run: |
-          cat container-metadata.json
-          FRONTEND_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-frontend") | .full_image' container-metadata.json)
-          BACKEND_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-backend") | .full_image' container-metadata.json)
-          WORKER_SCAN_GATE_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-scan-gate") | .full_image' container-metadata.json)
-          WORKER_PARSER_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-parser") | .full_image' container-metadata.json)
-          WORKER_GRAPH_BUILDER_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-graph-builder") | .full_image' container-metadata.json)
-          WORKER_ANALYSIS_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-analysis") | .full_image' container-metadata.json)
-          WORKER_NOTIFICATION_IMAGE=$(jq -r '.containers[] | select(.name=="integrisight-worker-notification") | .full_image' container-metadata.json)
-          TAG=$(jq -r '.containers[] | select(.name=="integrisight-frontend") | .tag' container-metadata.json)
-          echo "frontend_image=${FRONTEND_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "backend_image=${BACKEND_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_scan_gate_image=${WORKER_SCAN_GATE_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_parser_image=${WORKER_PARSER_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_graph_builder_image=${WORKER_GRAPH_BUILDER_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_analysis_image=${WORKER_ANALYSIS_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "worker_notification_image=${WORKER_NOTIFICATION_IMAGE}" >> "$GITHUB_OUTPUT"
-          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          FULL_IMAGE=$(jq -r '.containers[] | select(.name=="${{ matrix.container.name }}") | .full_image' container-metadata.json)
+          echo "full_image=${FULL_IMAGE}" >> "$GITHUB_OUTPUT"
 
-      - name: Import frontend image to ACR
+      - name: Import ${{ matrix.container.name }} to ACR
         env:
           ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
         run: |
           az acr import \
             --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.frontend_image }}" \
-            --image "integrisight-frontend:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import backend image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.backend_image }}" \
-            --image "integrisight-backend:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-scan-gate image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_scan_gate_image }}" \
-            --image "integrisight-worker-scan-gate:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-parser image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_parser_image }}" \
-            --image "integrisight-worker-parser:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-graph-builder image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_graph_builder_image }}" \
-            --image "integrisight-worker-graph-builder:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-analysis image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_analysis_image }}" \
-            --image "integrisight-worker-analysis:${{ steps.metadata.outputs.tag }}" \
-            --username "${{ github.actor }}" \
-            --password "${{ secrets.GITHUB_TOKEN }}" \
-            --force
-
-      - name: Import worker-notification image to ACR
-        env:
-          ACR_NAME: ${{ needs.deploy-infra-prod.outputs.acr_name }}
-        run: |
-          az acr import \
-            --name "${ACR_NAME}" \
-            --source "${{ steps.metadata.outputs.worker_notification_image }}" \
-            --image "integrisight-worker-notification:${{ steps.metadata.outputs.tag }}" \
+            --source "${{ steps.image.outputs.full_image }}" \
+            --image "${{ matrix.container.image_name }}:${{ needs.parse-metadata-prod.outputs.image_tag }}" \
             --username "${{ github.actor }}" \
             --password "${{ secrets.GITHUB_TOKEN }}" \
             --force
@@ -861,7 +767,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-apps-prod:
     name: "Prod — Deploy Container Apps"
-    needs: [deploy-infra-prod, promote-containers-prod]
+    needs: [deploy-infra-prod, parse-metadata-prod, promote-containers-prod]
     runs-on: ubuntu-latest
     environment: prod
 
@@ -909,7 +815,7 @@ jobs:
             --name "ca-backend" \
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-backend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-backend:${{ needs.parse-metadata-prod.outputs.image_tag }}" \
             --target-port 8000 \
             --identity "${{ steps.identities.outputs.backend_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
@@ -948,7 +854,7 @@ jobs:
             --name "ca-frontend" \
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-frontend:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-frontend:${{ needs.parse-metadata-prod.outputs.image_tag }}" \
             --target-port 3000 \
             --identity "${{ steps.identities.outputs.frontend_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
@@ -963,7 +869,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-workers-prod:
     name: "Prod — Deploy Worker (${{ matrix.worker.name }})"
-    needs: [deploy-infra-prod, promote-containers-prod]
+    needs: [deploy-infra-prod, parse-metadata-prod, promote-containers-prod]
     runs-on: ubuntu-latest
     environment: prod
     strategy:
@@ -1038,7 +944,7 @@ jobs:
             --name "${{ matrix.worker.app_name }}" \
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/${{ matrix.worker.image_name }}:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/${{ matrix.worker.image_name }}:${{ needs.parse-metadata-prod.outputs.image_tag }}" \
             --no-ingress \
             --identity "${{ steps.identity.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
@@ -1056,7 +962,7 @@ jobs:
   # ---------------------------------------------------------------------------
   deploy-scan-gate-prod:
     name: "Prod — Deploy Scan-Gate Worker (ClamAV sidecar)"
-    needs: [deploy-infra-prod, promote-containers-prod]
+    needs: [deploy-infra-prod, parse-metadata-prod, promote-containers-prod]
     runs-on: ubuntu-latest
     environment: prod
 
@@ -1099,7 +1005,7 @@ jobs:
             --name "ca-worker-scan-gate" \
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
             --environment "${{ needs.deploy-infra-prod.outputs.cae_name }}" \
-            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-scan-gate:${{ needs.promote-containers-prod.outputs.image_tag }}" \
+            --image "${{ needs.deploy-infra-prod.outputs.acr_login_server }}/integrisight-worker-scan-gate:${{ needs.parse-metadata-prod.outputs.image_tag }}" \
             --identity "${{ steps.identity.outputs.worker_id }}" \
             --registry-server "${{ needs.deploy-infra-prod.outputs.acr_login_server }}" \
             --env-vars "${{ steps.worker-env.outputs.env_vars }}"
