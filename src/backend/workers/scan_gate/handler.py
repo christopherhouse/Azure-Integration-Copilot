@@ -140,6 +140,7 @@ class ScanGateHandler(WorkerHandler):
                 blob_size_bytes=blob_size,
                 error=str(exc),
                 error_type=type(exc).__name__,
+                exc_info=True,
             )
             raise TransientError(f"ClamAV scan failed: {exc}") from exc
 
