@@ -1153,7 +1153,6 @@ var serializedData = replace(replace(workbookJsonTemplate, '__APP_INSIGHTS_ID__'
 
 // ---------------------------------------------------------------------------
 // Workbook resource
-// API version 2023-06-01 is the latest stable version for Microsoft.Insights/workbooks.
 // The name uses a deterministic GUID seeded from the resource group ID to ensure
 // idempotent deployments — redeploying in the same RG updates rather than duplicates.
 // ---------------------------------------------------------------------------
