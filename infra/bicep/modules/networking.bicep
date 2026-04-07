@@ -191,21 +191,25 @@ module vnet 'br/public:avm/res/network/virtual-network:0.5.2' = {
         addressPrefix: subnetContainerAppsPrefix
         networkSecurityGroupResourceId: nsgContainerApps.id
         delegation: 'Microsoft.App/environments'
+        defaultOutboundAccess: true
       }
       {
         name: 'snet-private-endpoints'
         addressPrefix: subnetPrivateEndpointsPrefix
         networkSecurityGroupResourceId: nsgPrivateEndpoints.id
+        defaultOutboundAccess: true
       }
       {
         name: 'snet-integration'
         addressPrefix: subnetIntegrationPrefix
         networkSecurityGroupResourceId: nsgIntegration.id
+        defaultOutboundAccess: true
       }
       {
         name: 'AzureBastionSubnet'
         addressPrefix: subnetBastionPrefix
         networkSecurityGroupResourceId: nsgBastion.id
+        defaultOutboundAccess: true
       }
     ]
   }
