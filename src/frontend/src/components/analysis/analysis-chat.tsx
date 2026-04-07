@@ -16,12 +16,19 @@ interface AnalysisChatProps {
   selectedAnalysis?: Analysis | null;
 }
 
+const SAMPLE_PROMPTS = [
+  "What are the dependencies of my Logic App?",
+  "Show me all API connections in this project",
+  "Analyze the integration flow and identify potential bottlenecks",
+];
+
 export function AnalysisChat({
   projectId,
   selectedAnalysis,
 }: AnalysisChatProps) {
   const [prompt, setPrompt] = useState("");
   const [submittedAnalysisId, setSubmittedAnalysisId] = useState<string | null>(null);
+  const [showSamplePrompts, setShowSamplePrompts] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -32,6 +39,13 @@ export function AnalysisChat({
     () => selectedAnalysis?.id ?? submittedAnalysisId,
     [selectedAnalysis?.id, submittedAnalysisId],
   );
+
+  // Hide sample prompts when an analysis is selected from history
+  useEffect(() => {
+    if (selectedAnalysis) {
+      setShowSamplePrompts(false);
+    }
+  }, [selectedAnalysis]);
 
   // Poll for the active analysis while it's running
   const { data: activeAnalysis } = useAnalysis(
@@ -52,6 +66,8 @@ export function AnalysisChat({
       const trimmed = prompt.trim();
       if (!trimmed || createMutation.isPending) return;
 
+      setShowSamplePrompts(false);
+
       createMutation.mutate(trimmed, {
         onSuccess: (analysis) => {
           setSubmittedAnalysisId(analysis.id);
@@ -66,6 +82,12 @@ export function AnalysisChat({
     },
     [prompt, createMutation],
   );
+
+  const handleSamplePromptClick = useCallback((samplePrompt: string) => {
+    setPrompt(samplePrompt);
+    setShowSamplePrompts(false);
+    inputRef.current?.focus();
+  }, []);
 
   const displayedAnalysis = activeAnalysis ?? selectedAnalysis;
   const isRunning =
@@ -89,9 +111,20 @@ export function AnalysisChat({
               Ask a question about your integration project to start an
               analysis.
             </p>
-            <p className="text-xs text-muted-foreground/60">
-              e.g. &ldquo;What are the dependencies of my Logic App?&rdquo;
-            </p>
+            {showSamplePrompts && (
+              <div className="mt-4 flex flex-col gap-2">
+                {SAMPLE_PROMPTS.map((samplePrompt) => (
+                  <Button
+                    key={samplePrompt}
+                    variant="outline"
+                    className="justify-start text-left text-sm font-normal"
+                    onClick={() => handleSamplePromptClick(samplePrompt)}
+                  >
+                    {samplePrompt}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
