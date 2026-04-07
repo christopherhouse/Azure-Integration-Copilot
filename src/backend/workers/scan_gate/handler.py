@@ -120,13 +120,37 @@ class ScanGateHandler(WorkerHandler):
         except Exception as exc:
             raise TransientError(f"Failed to download blob for scanning: {exc}") from exc
 
+        log.info(
+            "clamav_scan_starting",
+            blob_path=blob_path,
+            blob_size_bytes=len(blob_data),
+            artifact_type=artifact.artifact_type,
+            artifact_status=artifact.status,
+        )
+
         # Scan with ClamAV
         try:
             scan_result = await self._scanner.scan(blob_data)
         except Exception as exc:
+            log.error(
+                "clamav_scan_error",
+                blob_path=blob_path,
+                blob_size_bytes=len(blob_data),
+                error=str(exc),
+                error_type=type(exc).__name__,
+            )
             raise TransientError(f"ClamAV scan failed: {exc}") from exc
 
         scanned_at = datetime.now(UTC)
+
+        log.info(
+            "clamav_scan_completed",
+            blob_path=blob_path,
+            blob_size_bytes=len(blob_data),
+            is_clean=scan_result.is_clean,
+            signature=scan_result.signature,
+            raw_response=scan_result.raw_response,
+        )
 
         # Write scan metadata to blob
         try:
