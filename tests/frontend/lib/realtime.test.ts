@@ -64,7 +64,7 @@ function fakeResponse(body: Record<string, unknown>, ok = true, status = 200) {
 /** Simulate a successful negotiate + WebSocket open. */
 async function connectSuccessfully(client: RealtimeClient) {
   mockApiFetch.mockResolvedValueOnce(
-    fakeResponse({ url: "wss://test.webpubsub.azure.com/ws" }),
+    fakeResponse({ data: { url: "wss://test.webpubsub.azure.com/ws" } }),
   );
   await client.connect();
   // Fire the onopen callback so the client transitions to connected
@@ -169,7 +169,7 @@ describe("RealtimeClient", () => {
   describe("connect()", () => {
     it("calls apiFetch with POST /api/v1/realtime/negotiate", async () => {
       mockApiFetch.mockResolvedValueOnce(
-        fakeResponse({ url: "wss://example.com/ws" }),
+        fakeResponse({ data: { url: "wss://example.com/ws" } }),
       );
 
       await client.connect();
@@ -181,7 +181,7 @@ describe("RealtimeClient", () => {
 
     it("opens a WebSocket to the negotiated URL", async () => {
       const negotiatedUrl = "wss://test.webpubsub.azure.com/ws";
-      mockApiFetch.mockResolvedValueOnce(fakeResponse({ url: negotiatedUrl }));
+      mockApiFetch.mockResolvedValueOnce(fakeResponse({ data: { url: negotiatedUrl } }));
 
       await client.connect();
 
