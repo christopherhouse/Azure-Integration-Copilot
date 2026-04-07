@@ -44,3 +44,6 @@ output logAnalyticsWorkspaceId string = logAnalytics.outputs.resourceId
 
 @description('Connection string for Application Insights')
 output applicationInsightsConnectionString string = appInsights.outputs.connectionString
+
+@description('Resource ID of the Application Insights instance')
+output applicationInsightsResourceId string = appInsights.outputs.resourceId
