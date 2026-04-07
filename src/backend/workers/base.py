@@ -8,6 +8,8 @@ from typing import Any
 
 import structlog
 from opentelemetry import metrics, trace
+from opentelemetry.context import attach, detach
+from opentelemetry.propagate import extract
 from opentelemetry.trace import StatusCode
 
 from shared.event_consumer import EventGridConsumer
@@ -193,7 +195,15 @@ class BaseWorker:
         self._running = False
 
     async def _process_event(self, detail: Any) -> None:
-        """Validate, de-duplicate, and hand off a single event."""
+        """Validate, de-duplicate, and hand off a single event.
+
+        **Distributed Tracing:**
+        If the CloudEvent contains W3C Trace Context extension attributes
+        (``traceparent``, ``tracestate``), they are extracted and used as the
+        parent context for the worker processing span. This allows the worker
+        trace to continue from the API request that published the event,
+        maintaining end-to-end correlation across the event-driven pipeline.
+        """
         event = detail.event
         lock_token = detail.broker_properties.lock_token
         event_id = getattr(event, "id", "unknown")
@@ -207,73 +217,88 @@ class BaseWorker:
             "worker.event.type": str(event.type),
         }
 
-        with tracer.start_as_current_span(
-            "worker process event",
-            attributes=span_attrs,
-        ) as span:
-            handler_attrs = {"worker.handler": self._handler_name}
+        # Extract W3C Trace Context from CloudEvent extensions (if present).
+        # The API publishes events with 'traceparent' and 'tracestate' extension
+        # attributes. We extract these into an OpenTelemetry context so that the
+        # worker span becomes a child of the original API request span.
+        carrier = {}
+        if hasattr(event, "extensions") and event.extensions:
+            carrier = {k: v for k, v in event.extensions.items() if k in ("traceparent", "tracestate")}
 
-            # --- Tenant validation ---
-            if not tenant_id:
-                log.error("missing_tenant_id")
-                span.set_status(StatusCode.ERROR, "missing_tenant_id")
-                await self._consumer.acknowledge([lock_token])
-                return
+        parent_ctx = extract(carrier) if carrier else None
+        token = attach(parent_ctx) if parent_ctx else None
 
-            span.set_attribute("worker.tenant.id", tenant_id)
+        try:
+            with tracer.start_as_current_span(
+                "worker process event",
+                attributes=span_attrs,
+            ) as span:
+                handler_attrs = {"worker.handler": self._handler_name}
 
-            # --- Event type validation ---
-            accepted = self._handler.accepted_event_types
-            if accepted is not None and str(event.type) not in accepted:
-                log.warning(
-                    "unexpected_event_type",
-                    accepted_types=sorted(accepted),
-                )
-                span.set_status(StatusCode.OK)
-                await self._consumer.acknowledge([lock_token])
-                return
+                # --- Tenant validation ---
+                if not tenant_id:
+                    log.error("missing_tenant_id")
+                    span.set_status(StatusCode.ERROR, "missing_tenant_id")
+                    await self._consumer.acknowledge([lock_token])
+                    return
 
-            # --- Idempotency check ---
-            try:
-                if await self._handler.is_already_processed(event_data):
-                    log.info("event_already_processed")
+                span.set_attribute("worker.tenant.id", tenant_id)
+
+                # --- Event type validation ---
+                accepted = self._handler.accepted_event_types
+                if accepted is not None and str(event.type) not in accepted:
+                    log.warning(
+                        "unexpected_event_type",
+                        accepted_types=sorted(accepted),
+                    )
                     span.set_status(StatusCode.OK)
                     await self._consumer.acknowledge([lock_token])
                     return
-            except Exception:
-                log.error("idempotency_check_failed", exc_info=True)
-                span.set_status(StatusCode.ERROR, "idempotency_check_failed")
-                _messages_failed.add(1, handler_attrs)
-                await self._consumer.release([lock_token])
-                return
 
-            # --- Process ---
-            try:
-                log.info("event_processing_started")
-                await self._handler.handle(event_data)
-                await self._consumer.acknowledge([lock_token])
-                log.info("event_processing_succeeded")
-                span.set_status(StatusCode.OK)
-                _messages_processed.add(1, handler_attrs)
-
-            except TransientError:
-                log.warning("transient_error", exc_info=True)
-                span.set_status(StatusCode.ERROR, "transient_error")
-                _messages_failed.add(1, handler_attrs)
-                await self._consumer.release([lock_token])
-
-            except PermanentError as exc:
-                log.error("permanent_error", exc_info=True)
-                span.set_status(StatusCode.ERROR, "permanent_error")
-                _messages_failed.add(1, handler_attrs)
+                # --- Idempotency check ---
                 try:
-                    await self._handler.handle_failure(event_data, exc)
+                    if await self._handler.is_already_processed(event_data):
+                        log.info("event_already_processed")
+                        span.set_status(StatusCode.OK)
+                        await self._consumer.acknowledge([lock_token])
+                        return
                 except Exception:
-                    log.error("handle_failure_callback_error", exc_info=True)
-                await self._consumer.acknowledge([lock_token])
+                    log.error("idempotency_check_failed", exc_info=True)
+                    span.set_status(StatusCode.ERROR, "idempotency_check_failed")
+                    _messages_failed.add(1, handler_attrs)
+                    await self._consumer.release([lock_token])
+                    return
 
-            except Exception:
-                log.error("unexpected_error", exc_info=True)
-                span.set_status(StatusCode.ERROR, "unexpected_error")
-                _messages_failed.add(1, handler_attrs)
-                await self._consumer.release([lock_token])
+                # --- Process ---
+                try:
+                    log.info("event_processing_started")
+                    await self._handler.handle(event_data)
+                    await self._consumer.acknowledge([lock_token])
+                    log.info("event_processing_succeeded")
+                    span.set_status(StatusCode.OK)
+                    _messages_processed.add(1, handler_attrs)
+
+                except TransientError:
+                    log.warning("transient_error", exc_info=True)
+                    span.set_status(StatusCode.ERROR, "transient_error")
+                    _messages_failed.add(1, handler_attrs)
+                    await self._consumer.release([lock_token])
+
+                except PermanentError as exc:
+                    log.error("permanent_error", exc_info=True)
+                    span.set_status(StatusCode.ERROR, "permanent_error")
+                    _messages_failed.add(1, handler_attrs)
+                    try:
+                        await self._handler.handle_failure(event_data, exc)
+                    except Exception:
+                        log.error("handle_failure_callback_error", exc_info=True)
+                    await self._consumer.acknowledge([lock_token])
+
+                except Exception:
+                    log.error("unexpected_error", exc_info=True)
+                    span.set_status(StatusCode.ERROR, "unexpected_error")
+                    _messages_failed.add(1, handler_attrs)
+                    await self._consumer.release([lock_token])
+        finally:
+            if token is not None:
+                detach(token)

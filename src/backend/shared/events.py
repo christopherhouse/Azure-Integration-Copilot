@@ -6,6 +6,7 @@ import structlog
 from azure.core.messaging import CloudEvent
 from azure.eventgrid.aio import EventGridPublisherClient
 from azure.identity.aio import DefaultAzureCredential
+from opentelemetry.propagate import inject
 from ulid import ULID
 
 from config import settings
@@ -28,8 +29,14 @@ def build_cloud_event(
 
     Each event receives a unique ``evt_``-prefixed ULID as its ``id`` and the
     current UTC timestamp as ``time``.
+
+    **Distributed Tracing:**
+    The current OpenTelemetry trace context is automatically injected into
+    the event's extension attributes (``traceparent``, ``tracestate``) so that
+    downstream consumers (workers) can continue the trace and maintain end-to-end
+    correlation across the event-driven pipeline.
     """
-    return CloudEvent(
+    event = CloudEvent(
         id=f"evt_{ULID()}",
         type=event_type,
         source=source,
@@ -37,6 +44,18 @@ def build_cloud_event(
         data=data,
         time=datetime.now(UTC),
     )
+
+    # Inject W3C Trace Context into CloudEvent extension attributes.
+    # OpenTelemetry propagators serialize the current trace context into a
+    # dict with keys like 'traceparent' and 'tracestate'. We copy these into
+    # the CloudEvent extensions so downstream consumers can extract and
+    # continue the trace.
+    carrier: dict[str, str] = {}
+    inject(carrier)
+    for key, value in carrier.items():
+        event.extensions[key] = value
+
+    return event
 
 
 class EventGridPublisher:
