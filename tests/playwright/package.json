@@ -3,5 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "description": "Playwright end-to-end tests for the Integrisight.ai frontend",
-  "type": "commonjs"
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
 }
