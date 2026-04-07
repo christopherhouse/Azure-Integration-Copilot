@@ -21,6 +21,7 @@ export async function register() {
     const { useAzureMonitor } = await import('@azure/monitor-opentelemetry');
 
     // Configure Azure Monitor OpenTelemetry with environment-based service name
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     useAzureMonitor({
       azureMonitorExporterOptions: {
         connectionString,
