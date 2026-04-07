@@ -92,22 +92,24 @@ export function AnalysisMessage({ analysis }: AnalysisMessageProps) {
                   className="mt-2 flex flex-col gap-2"
                   role="list"
                 >
-                  {analysis.toolCalls!.map((tc) => (
+                  {analysis.toolCalls!.map((tc, idx) => (
                     <li
-                      key={tc.id}
+                      key={idx}
                       className="rounded-md bg-muted/50 px-3 py-2 text-xs"
                     >
                       <div className="font-medium text-foreground">
-                        {tc.name}
+                        {tc.toolName}
                       </div>
                       {Object.keys(tc.arguments).length > 0 && (
                         <pre className="mt-1 overflow-x-auto text-muted-foreground">
                           {JSON.stringify(tc.arguments, null, 2)}
                         </pre>
                       )}
-                      {tc.result && (
+                      {tc.output && (
                         <pre className="mt-1 overflow-x-auto whitespace-pre-wrap break-all text-muted-foreground">
-                          {tc.result}
+                          {typeof tc.output === "string"
+                            ? tc.output
+                            : JSON.stringify(tc.output, null, 2)}
                         </pre>
                       )}
                     </li>
