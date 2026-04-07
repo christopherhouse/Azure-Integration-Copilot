@@ -114,4 +114,61 @@ test.describe("Analysis page — chat area", () => {
       page.getByRole("button", { name: /analyze|send|submit/i })
     ).not.toBeDisabled();
   });
+
+  test("sample prompts are displayed in empty state", async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto(ANALYSIS_URL);
+
+    // Sample prompts should be visible as buttons
+    await expect(
+      page.getByRole("button", { name: /dependencies of my Logic App/i })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /API connections in this project/i })
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /integration flow.*bottlenecks/i })
+    ).toBeVisible();
+  });
+
+  test("clicking a sample prompt populates the input", async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto(ANALYSIS_URL);
+
+    const samplePromptButton = page.getByRole("button", {
+      name: /dependencies of my Logic App/i,
+    });
+    await samplePromptButton.click();
+
+    const promptInput = page
+      .getByRole("textbox")
+      .or(page.getByPlaceholder(/ask|prompt/i))
+      .first();
+
+    await expect(promptInput).toHaveValue(/dependencies of my Logic App/i);
+  });
+
+  test("clicking a sample prompt hides all sample prompts", async ({
+    authenticatedPage: page,
+  }) => {
+    await page.goto(ANALYSIS_URL);
+
+    const samplePromptButton = page.getByRole("button", {
+      name: /dependencies of my Logic App/i,
+    });
+    await samplePromptButton.click();
+
+    // All sample prompts should be hidden
+    await expect(
+      page.getByRole("button", { name: /dependencies of my Logic App/i })
+    ).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /API connections in this project/i })
+    ).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /integration flow.*bottlenecks/i })
+    ).not.toBeVisible();
+  });
 });

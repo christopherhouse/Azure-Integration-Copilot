@@ -18,7 +18,7 @@ const config = {
   moduleDirectories: ["node_modules", "<rootDir>/node_modules"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
-    "^ansi-regex$": "<rootDir>/node_modules/pretty-format/node_modules/ansi-regex/index.js",
+    "^ansi-regex$": "<rootDir>/node_modules/ansi-regex/index.js",
   },
   setupFilesAfterEnv: ["../../tests/frontend/setup.ts"],
 };

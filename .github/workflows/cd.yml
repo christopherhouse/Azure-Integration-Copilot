@@ -337,6 +337,7 @@ jobs:
             ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
             ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
             CLARITY_PROJECT_ID=${{ vars.CLARITY_PROJECT_ID }}
             GOOGLE_MEASUREMENT_ID=${{ vars.GOOGLE_MEASUREMENT_ID }}
         run: |
@@ -939,6 +940,7 @@ jobs:
             ENTRA_CIAM_FRONTEND_CLIENT_ID=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_ID || vars.ENTRA_CIAM_FRONTEND_CLIENT_ID }}
             ENTRA_CIAM_FRONTEND_CLIENT_SECRET=${{ secrets.ENTRA_CIAM_FRONTEND_CLIENT_SECRET }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
+            APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
             CLARITY_PROJECT_ID=${{ vars.CLARITY_PROJECT_ID }}
             GOOGLE_MEASUREMENT_ID=${{ vars.GOOGLE_MEASUREMENT_ID }}
         run: |

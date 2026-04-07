@@ -51,6 +51,7 @@ export async function register() {
           "service.version": "0.1.0",
         },
       },
+      samplingRatio: 1.0, // 100% sampling - adjust in production if needed
     });
 
     console.log("[OpenTelemetry] Azure Monitor instrumentation initialized for Next.js server");
