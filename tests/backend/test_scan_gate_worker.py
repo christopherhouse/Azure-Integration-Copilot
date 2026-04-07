@@ -182,8 +182,8 @@ class TestScanGateHandleClean:
         artifact_passed = _make_artifact(status=ArtifactStatus.SCAN_PASSED)
 
         repo = AsyncMock()
-        repo.update_status = AsyncMock(return_value=artifact_scanning)
-        repo.get_by_id = AsyncMock(return_value=artifact_passed)
+        # First call: uploaded → scanning; second call: scanning → scan_passed
+        repo.update_status = AsyncMock(side_effect=[artifact_scanning, artifact_passed])
         repo.update = AsyncMock(return_value=artifact_passed)
 
         blob = AsyncMock()
@@ -200,8 +200,11 @@ class TestScanGateHandleClean:
         handler = _make_handler(repo=repo, publisher=publisher, blob_service=blob, scanner=scanner)
         await handler.handle(_make_event_data())
 
-        # Verify scanning transition
-        repo.update_status.assert_awaited_once_with("t1", "art_test123", ArtifactStatus.SCANNING)
+        # Verify two status transitions via update_status (scanning, then scan_passed)
+        assert repo.update_status.await_count == 2
+        calls = repo.update_status.await_args_list
+        assert calls[0].args == ("t1", "art_test123", ArtifactStatus.SCANNING)
+        assert calls[1].args == ("t1", "art_test123", ArtifactStatus.SCAN_PASSED)
 
         # Verify blob was downloaded for scanning
         blob.download_blob.assert_awaited_once()
@@ -212,7 +215,7 @@ class TestScanGateHandleClean:
         # Verify scan metadata was set on blob
         blob.set_blob_metadata.assert_awaited_once()
 
-        # Verify artifact was updated (scan result + scan_passed status)
+        # Verify scan result metadata was persisted
         repo.update.assert_awaited_once()
 
         # Verify scan-passed event published
@@ -235,8 +238,8 @@ class TestScanGateHandleMalware:
         artifact_quarantined = _make_artifact(status=ArtifactStatus.QUARANTINED)
 
         repo = AsyncMock()
-        repo.update_status = AsyncMock(return_value=artifact_scanning)
-        repo.get_by_id = AsyncMock(return_value=artifact_quarantined)
+        # First call: uploaded → scanning; second call: scanning → quarantined
+        repo.update_status = AsyncMock(side_effect=[artifact_scanning, artifact_quarantined])
         repo.update = AsyncMock(return_value=artifact_quarantined)
 
         blob = AsyncMock()
@@ -258,12 +261,18 @@ class TestScanGateHandleMalware:
         handler = _make_handler(repo=repo, publisher=publisher, blob_service=blob, scanner=scanner)
         await handler.handle(_make_event_data())
 
+        # Verify two status transitions via update_status (scanning, then quarantined)
+        assert repo.update_status.await_count == 2
+        calls = repo.update_status.await_args_list
+        assert calls[0].args == ("t1", "art_test123", ArtifactStatus.SCANNING)
+        assert calls[1].args == ("t1", "art_test123", ArtifactStatus.QUARANTINED)
+
         # Verify blob was moved to quarantine path
         blob.move_blob.assert_awaited_once()
         move_args = blob.move_blob.call_args.args
         assert "quarantine" in move_args[1]
 
-        # Verify artifact was updated (quarantined status, scan result, error)
+        # Verify scan metadata was persisted
         repo.update.assert_awaited_once()
 
         # Verify scan-failed event published (NOT scan-passed)
@@ -279,8 +288,8 @@ class TestScanGateHandleMalware:
         artifact_quarantined = _make_artifact(status=ArtifactStatus.QUARANTINED)
 
         repo = AsyncMock()
-        repo.update_status = AsyncMock(return_value=artifact_scanning)
-        repo.get_by_id = AsyncMock(return_value=artifact_quarantined)
+        # First call: uploaded → scanning; second call: scanning → quarantined
+        repo.update_status = AsyncMock(side_effect=[artifact_scanning, artifact_quarantined])
         repo.update = AsyncMock(return_value=artifact_quarantined)
 
         blob = AsyncMock()
@@ -301,7 +310,8 @@ class TestScanGateHandleMalware:
         # Should not raise — quarantine proceeds even if blob move fails
         await handler.handle(_make_event_data())
 
-        # Artifact still gets quarantined
+        # Artifact still gets quarantined via update_status
+        assert repo.update_status.await_count == 2
         repo.update.assert_awaited_once()
         publisher.publish_event.assert_awaited_once()
 

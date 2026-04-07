@@ -61,18 +61,26 @@ class BlobService:
         return await downloader.readall()
 
     async def move_blob(self, source_path: str, dest_path: str) -> None:
-        """Move a blob from *source_path* to *dest_path* (copy then delete)."""
+        """Move a blob from *source_path* to *dest_path* (download, upload, delete).
+
+        Uses authenticated download+upload rather than server-side copy because
+        the artifacts container has ``publicAccess: None`` — a URL-based copy
+        would fail with 403.
+        """
         client = await self._get_client()
         container_client = client.get_container_client(ARTIFACTS_CONTAINER)
+
+        # Download source blob content
         source_client = container_client.get_blob_client(source_path)
+        downloader = await source_client.download_blob()
+        data = await downloader.readall()
+
+        # Upload to destination
         dest_client = container_client.get_blob_client(dest_path)
+        await dest_client.upload_blob(data, overwrite=True)
+        logger.info("blob_copied", source=source_path, dest=dest_path)
 
-        # Start async copy from source to destination
-        source_url = source_client.url
-        await dest_client.start_copy_from_url(source_url)
-        logger.info("blob_copy_started", source=source_path, dest=dest_path)
-
-        # Delete the source blob after copy
+        # Delete the source blob
         try:
             await source_client.delete_blob()
             logger.info("blob_moved", source=source_path, dest=dest_path)

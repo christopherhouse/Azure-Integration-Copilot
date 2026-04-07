@@ -100,12 +100,12 @@ log_info "Location: ${LOCATION}"
 # ---------------------------------------------------------------------------
 ENV_VARS_YAML=""
 if [[ -n "${ENV_VARS}" ]]; then
-  ENV_VARS_YAML=$'\n'
   for pair in ${ENV_VARS}; do
     KEY="${pair%%=*}"
     VALUE="${pair#*=}"
-    ENV_VARS_YAML+="          - name: ${KEY}"$'\n'
+    ENV_VARS_YAML+="- name: ${KEY}"$'\n'
     ENV_VARS_YAML+="            value: \"${VALUE}\""$'\n'
+    ENV_VARS_YAML+="          "
   done
 fi
 
@@ -135,12 +135,12 @@ sed \
 
 # Inject environment variables into the YAML
 if [[ -n "${ENV_VARS_YAML}" ]]; then
-  # Write env block to a temp file, then use sed to replace the placeholder.
+  # Write env block to a temp file, then use awk to replace the placeholder line.
   ENV_FILE=$(mktemp /tmp/scan-gate-env-XXXXXX.yaml)
   echo -n "${ENV_VARS_YAML}" > "${ENV_FILE}"
-  # Use awk to replace the placeholder line with the env block contents
+  # Replace the placeholder line with the env block contents (preserving indentation)
   awk -v envfile="${ENV_FILE}" '
-    /__ENV_VARS_YAML__/ {
+    /^ *__ENV_VARS_YAML__/ {
       while ((getline line < envfile) > 0) print line
       next
     }
@@ -148,7 +148,8 @@ if [[ -n "${ENV_VARS_YAML}" ]]; then
   ' "${YAML_FILE}" > "${YAML_FILE}.tmp" && mv "${YAML_FILE}.tmp" "${YAML_FILE}"
   rm -f "${ENV_FILE}"
 else
-  sed -i 's|__ENV_VARS_YAML__|[]|g' "${YAML_FILE}"
+  # No env vars — remove the placeholder line entirely (env: with no items is valid)
+  sed -i '/__ENV_VARS_YAML__/d' "${YAML_FILE}"
 fi
 
 log_info "Generated YAML:"

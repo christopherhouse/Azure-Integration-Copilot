@@ -10,7 +10,7 @@
 #   __WORKER_IMAGE__          — Full image reference for the scan-gate worker
 #   __IDENTITY_RESOURCE_ID__  — User-assigned managed identity resource ID
 #   __REGISTRY_SERVER__       — ACR login server (e.g. myacr.azurecr.io)
-#   __ENV_VARS__              — Injected dynamically by the deploy script
+#   __ENV_VARS_YAML__         — Injected dynamically by the deploy script
 # =============================================================================
 
 type: Microsoft.App/containerApps
@@ -37,7 +37,8 @@ properties:
         resources:
           cpu: 0.25
           memory: 0.5Gi
-        env: __ENV_VARS_YAML__
+        env:
+          __ENV_VARS_YAML__
       # --- Sidecar: ClamAV daemon with freshclam ---
       # Image pinned to ClamAV 1.5.2 by SHA digest for reproducibility.
       # freshclam runs automatically on startup and periodically to keep

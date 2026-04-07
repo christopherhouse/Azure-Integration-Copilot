@@ -3,7 +3,7 @@
 import asyncio
 import os
 import struct
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -16,6 +16,16 @@ _test_env = {
 
 with patch.dict(os.environ, _test_env):
     from shared.clamav import ClamAVScanner, ClamScanResult, _parse_scan_response
+
+
+def _make_mock_writer() -> MagicMock:
+    """Create a mock StreamWriter with sync write/close and async drain/wait_closed."""
+    writer = MagicMock()
+    writer.write = MagicMock()          # sync in production
+    writer.close = MagicMock()          # sync in production
+    writer.drain = AsyncMock()          # async in production
+    writer.wait_closed = AsyncMock()    # async in production
+    return writer
 
 
 # ---------------------------------------------------------------------------
@@ -63,8 +73,7 @@ class TestClamAVScannerPing:
 
         mock_reader = AsyncMock()
         mock_reader.read = AsyncMock(return_value=b"PONG\0")
-        mock_writer = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
+        mock_writer = _make_mock_writer()
 
         with patch("shared.clamav.asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             result = await scanner.ping()
@@ -86,8 +95,7 @@ class TestClamAVScannerPing:
 
         mock_reader = AsyncMock()
         mock_reader.read = AsyncMock(return_value=b"SOMETHING_ELSE\0")
-        mock_writer = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
+        mock_writer = _make_mock_writer()
 
         with patch("shared.clamav.asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             result = await scanner.ping()
@@ -109,8 +117,7 @@ class TestClamAVScannerScan:
 
         mock_reader = AsyncMock()
         mock_reader.read = AsyncMock(return_value=b"stream: OK\0")
-        mock_writer = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
+        mock_writer = _make_mock_writer()
 
         with patch("shared.clamav.asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             result = await scanner.scan(b"clean file content")
@@ -124,8 +131,7 @@ class TestClamAVScannerScan:
 
         mock_reader = AsyncMock()
         mock_reader.read = AsyncMock(return_value=b"stream: Eicar-Test-Signature FOUND\0")
-        mock_writer = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
+        mock_writer = _make_mock_writer()
 
         with patch("shared.clamav.asyncio.open_connection", return_value=(mock_reader, mock_writer)):
             result = await scanner.scan(b"EICAR test data")
@@ -140,8 +146,7 @@ class TestClamAVScannerScan:
 
         mock_reader = AsyncMock()
         mock_reader.read = AsyncMock(return_value=b"stream: OK\0")
-        mock_writer = AsyncMock()
-        mock_writer.wait_closed = AsyncMock()
+        mock_writer = _make_mock_writer()
 
         test_data = b"test data"
 

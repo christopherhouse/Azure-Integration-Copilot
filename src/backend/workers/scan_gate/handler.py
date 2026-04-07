@@ -156,20 +156,26 @@ class ScanGateHandler(WorkerHandler):
         log: Any,
     ) -> None:
         """Handle a clean scan result — transition to ``scan_passed``."""
-        # Update artifact with scan result and status
+        # Transition status via update_status() which validates the state machine
         try:
-            artifact = await self._repo.get_by_id(tenant_id, artifact_id)
-            if artifact is not None:
-                artifact.scan_result = ScanResult(
-                    scanner="clamav",
-                    isClean=True,
-                    signature=None,
-                    scannedAt=scanned_at,
-                )
-                artifact.status = ArtifactStatus.SCAN_PASSED
-                await self._repo.update(artifact)
+            updated = await self._repo.update_status(tenant_id, artifact_id, ArtifactStatus.SCAN_PASSED)
         except Exception as exc:
             raise TransientError(f"Failed to transition to scan_passed: {exc}") from exc
+
+        if updated is None:
+            raise PermanentError(f"Artifact {artifact_id} not found when transitioning to scan_passed")
+
+        # Persist scan result metadata on the (now scan_passed) artifact
+        try:
+            updated.scan_result = ScanResult(
+                scanner="clamav",
+                isClean=True,
+                signature=None,
+                scannedAt=scanned_at,
+            )
+            await self._repo.update(updated)
+        except Exception:
+            log.warning("failed_to_persist_scan_result_metadata", exc_info=True)
 
         # Publish ArtifactScanPassed event
         event = build_cloud_event(
@@ -180,8 +186,8 @@ class ScanGateHandler(WorkerHandler):
                 "tenantId": tenant_id,
                 "projectId": project_id,
                 "artifactId": artifact_id,
-                "artifactType": artifact.artifact_type if artifact else None,
-                "blobPath": artifact.blob_path if artifact else None,
+                "artifactType": updated.artifact_type,
+                "blobPath": updated.blob_path,
             },
         )
         await self._publisher.publish_event(event)
@@ -220,24 +226,30 @@ class ScanGateHandler(WorkerHandler):
                 # job can reconcile orphaned quarantine blobs.
                 quarantine_path = original_blob_path
 
-        # Update artifact: quarantined status, new blob path, scan result, error
+        # Transition status via update_status() which validates the state machine
         try:
-            artifact = await self._repo.get_by_id(tenant_id, artifact_id)
-            if artifact is not None:
-                artifact.status = ArtifactStatus.QUARANTINED
-                artifact.blob_path = quarantine_path
-                artifact.scan_result = ScanResult(
-                    scanner="clamav",
-                    isClean=False,
-                    signature=scan_result.signature,
-                    scannedAt=scanned_at,
-                )
-                artifact.error = ArtifactError(
-                    code="MALWARE_DETECTED",
-                    message=f"Malware detected: {scan_result.signature or 'unknown signature'}",
-                    occurredAt=scanned_at,
-                )
-                await self._repo.update(artifact)
+            updated = await self._repo.update_status(tenant_id, artifact_id, ArtifactStatus.QUARANTINED)
+        except Exception as exc:
+            raise TransientError(f"Failed to transition to quarantined: {exc}") from exc
+
+        if updated is None:
+            raise PermanentError(f"Artifact {artifact_id} not found when transitioning to quarantined")
+
+        # Persist scan result, blob path, and error metadata
+        try:
+            updated.blob_path = quarantine_path
+            updated.scan_result = ScanResult(
+                scanner="clamav",
+                isClean=False,
+                signature=scan_result.signature,
+                scannedAt=scanned_at,
+            )
+            updated.error = ArtifactError(
+                code="MALWARE_DETECTED",
+                message=f"Malware detected: {scan_result.signature or 'unknown signature'}",
+                occurredAt=scanned_at,
+            )
+            await self._repo.update(updated)
         except Exception as exc:
             raise TransientError(f"Failed to update artifact to quarantined: {exc}") from exc
 
