@@ -153,15 +153,7 @@ var workbookJsonTemplate = '''
             "type": 1,
             "isRequired": false,
             "isHiddenWhenLocked": true,
-            "criteriaData": [
-              {
-                "criteriaContext": {
-                  "operator": "Default",
-                  "resultValType": "static",
-                  "resultVal": "tab1"
-                }
-              }
-            ]
+            "value": "tab1"
           }
         ],
         "style": "pills",
@@ -253,7 +245,7 @@ var workbookJsonTemplate = '''
             "type": 3,
             "content": {
               "version": "KqlItem/1.0",
-              "query": "resources\n| where resourceGroup == \"{ResourceGroupName}\"\n| where type in~ (\"microsoft.documentdb/databaseaccounts\",\"microsoft.storage/storageaccounts\",\"microsoft.eventgrid/namespaces\",\"microsoft.signalrservice/webpubsub\",\"microsoft.keyvault/vaults\",\"microsoft.containerregistry/registries\",\"microsoft.app/managedenvironments\",\"microsoft.cdn/profiles\",\"microsoft.cognitiveservices/accounts\",\"microsoft.network/bastionhosts\")\n| project ResourceName=name, ResourceType=type, HealthStatus=properties.provisioningState, Location=location",
+              "query": "resources\n| where resourceGroup == \"{ResourceGroupName}\"\n| where type in~ (\"microsoft.documentdb/databaseaccounts\",\"microsoft.storage/storageaccounts\",\"microsoft.eventgrid/namespaces\",\"microsoft.signalrservice/webpubsub\",\"microsoft.keyvault/vaults\",\"microsoft.containerregistry/registries\",\"microsoft.app/managedenvironments\",\"microsoft.cdn/profiles\",\"microsoft.cognitiveservices/accounts\",\"microsoft.network/bastionhosts\")\n| project ResourceName=name, ResourceType=type, ProvisioningState=properties.provisioningState, Location=location",
               "size": 0,
               "title": "Resource Health Grid",
               "queryType": 1,
@@ -265,7 +257,7 @@ var workbookJsonTemplate = '''
               "gridSettings": {
                 "formatters": [
                   {
-                    "columnMatch": "HealthStatus",
+                    "columnMatch": "ProvisioningState",
                     "formatter": 18,
                     "formatOptions": {
                       "thresholdsOptions": "icons",
