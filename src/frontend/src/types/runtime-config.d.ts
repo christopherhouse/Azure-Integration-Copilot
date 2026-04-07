@@ -6,6 +6,7 @@ interface RuntimeConfig {
   apiBaseUrl?: string;
   clarityProjectId?: string;
   googleMeasurementId?: string;
+  applicationInsightsConnectionString?: string;
 }
 
 interface Window {
