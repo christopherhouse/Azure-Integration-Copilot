@@ -100,11 +100,11 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
-        working-directory: src/frontend
+        working-directory: tests/playwright
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright e2e tests
-        working-directory: src/frontend
+        working-directory: tests/playwright
         run: npm run test:e2e
         env:
           CI: "true"
@@ -114,7 +114,7 @@ jobs:
         uses: dorny/test-reporter@v1
         with:
           name: Frontend E2E Tests (Playwright)
-          path: src/frontend/playwright-results.xml
+          path: tests/playwright/playwright-results.xml
           reporter: jest-junit
           fail-on-error: true
 
@@ -123,7 +123,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-test-results
-          path: src/frontend/test-results/
+          path: tests/playwright/test-results/
           retention-days: 7
 
   # -------------------------------------------------------------------------
