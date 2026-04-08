@@ -27,15 +27,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Microsoft Semantic Kernel — agent framework (Azure AI Foundry backend) -->
-    <PackageReference Include="Microsoft.SemanticKernel" Version="1.71.0" />
-    <PackageReference Include="Microsoft.SemanticKernel.Agents.AzureAI" Version="1.71.0-preview" />
-
-    <!-- Azure AI Agents Persistent — Azure AI Foundry Agents Service SDK -->
-    <PackageReference Include="Azure.AI.Agents.Persistent" Version="1.1.0" />
+    <!-- Microsoft Agent Framework — agents backed by Azure AI Foundry Agents Service -->
+    <PackageReference Include="Microsoft.Agents.AI.Foundry" Version="1.0.0" />
 
     <!-- Azure Identity -->
-    <PackageReference Include="Azure.Identity" Version="1.17.1" />
+    <PackageReference Include="Azure.Identity" Version="1.20.0" />
 
     <!-- Azure Event Grid Namespace (pull delivery) -->
     <PackageReference Include="Azure.Messaging.EventGrid.Namespaces" Version="1.0.0" />

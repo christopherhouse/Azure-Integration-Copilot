@@ -1,16 +1,16 @@
-/// Agent orchestrator — analyst + evaluator using Microsoft Semantic Kernel
-/// with the Azure AI Foundry Agents Service backend (AzureAIAgent).
+/// Agent orchestrator — analyst + evaluator using Microsoft Agent Framework
+/// (Microsoft.Agents.AI + Microsoft.Agents.AI.Foundry) backed by Azure AI Foundry
+/// Agents Service.
 ///
-/// Mirrors Python workers/analysis/agent.py which uses the
-/// ``agent-framework-core`` + ``agent-framework-foundry`` packages.
+/// Mirrors Python workers/analysis/agent.py which uses
+///   from agent_framework import Agent
+///   from agent_framework.foundry import FoundryChatClient
 ///
-/// Pattern:
-///   AzureAIAgent + AzureAIAgentThread — Semantic Kernel's high-level
-///   agent abstraction that handles run polling, tool-call dispatch, and
-///   thread management automatically.  Analyst tools are registered as
-///   KernelPlugin functions; SK dispatches them and feeds results back.
+/// The .NET equivalent:
+///   Azure.AI.Projects.AIProjectClient + .AsAIAgent() extension from
+///   Microsoft.Agents.AI.Foundry → ChatClientAgent
 ///
-/// On FAILED evaluation verdict, the analyst is re-prompted once (max 1 retry).
+/// On a FAILED evaluation verdict, the analyst is re-prompted once (max 1 retry).
 module IntegrisightWorkerAnalysis.AgentOrchestrator
 
 open System
@@ -18,15 +18,14 @@ open System.Collections.Generic
 open System.Text.Json
 open System.Threading
 open System.Threading.Tasks
-open Azure.AI.Agents.Persistent
+open Azure.AI.Projects
+open Microsoft.Agents.AI
+open Microsoft.Extensions.AI
 open Microsoft.Extensions.Logging
-open Microsoft.SemanticKernel
-open Microsoft.SemanticKernel.ChatCompletion
-open Microsoft.SemanticKernel.Agents
-open Microsoft.SemanticKernel.Agents.AzureAI
 open Models
 open JsonHelpers
 open Tools
+
 
 // ---------------------------------------------------------------------------
 // System prompts
@@ -71,6 +70,41 @@ Return ONLY a JSON object with no markdown formatting:\n\
 
 
 // ---------------------------------------------------------------------------
+// Custom AIFunction — wraps AnalysisToolDefinition
+//
+// AIFunction is abstract in Microsoft.Extensions.AI.
+// We override InvokeCoreAsync to call the existing Execute function
+// and override JsonSchema to supply the hand-written parameter schema
+// from AnalysisToolDefinition.ParametersSchema.
+//
+// AIFunctionArguments inherits IDictionary<string,obj>; we serialise it
+// to JSON and pass the JSON string to the existing Execute implementation.
+// ---------------------------------------------------------------------------
+
+type private AnalysisAIFunction(toolDef: AnalysisToolDefinition) =
+    inherit AIFunction()
+
+    let schemaElem =
+        try JsonDocument.Parse(toolDef.ParametersSchema).RootElement
+        with _ -> JsonDocument.Parse("{}").RootElement
+
+    override _.Name = toolDef.Name
+    override _.Description = toolDef.Description
+    override _.JsonSchema = schemaElem
+
+    override _.InvokeCoreAsync(arguments: AIFunctionArguments, cancellationToken: CancellationToken) : ValueTask<obj> =
+        let t =
+            task {
+                let argsJson =
+                    try JsonSerializer.Serialize(arguments :> IDictionary<string, obj>)
+                    with _ -> "{}"
+                let! result = toolDef.Execute argsJson
+                return result :> obj
+            }
+        ValueTask<obj>(t)
+
+
+// ---------------------------------------------------------------------------
 // Evaluator prompt builder
 // ---------------------------------------------------------------------------
 
@@ -92,28 +126,6 @@ let private buildEvaluatorPrompt
             |> String.concat "\n"
 
     $"## User Question\n{userPrompt}\n\n## Analyst Response\n{analystResponse}\n\n## Tool Call History\n{toolCallText}\n\nPlease evaluate the analyst's response and return your verdict as JSON."
-
-
-// ---------------------------------------------------------------------------
-// SK KernelPlugin builder — wraps the four F# tool functions
-// ---------------------------------------------------------------------------
-
-/// Build a KernelPlugin that wraps the four analysis tools as KernelFunctions.
-/// SK uses these to auto-dispatch tool calls during an agent run.
-let private buildAnalystPlugin (toolDefs: AnalysisToolDefinition list) : KernelPlugin =
-    let functions =
-        toolDefs
-        |> List.map (fun td ->
-            // Wrap the tool as a KernelFunction with a string input / string output
-            let func =
-                KernelFunctionFactory.CreateFromMethod(
-                    Func<string, Task<string>>(fun (args: string) -> td.Execute(args)),
-                    td.Name,
-                    td.Description
-                )
-            func)
-
-    KernelPluginFactory.CreateFromFunctions("analysis_tools", functions)
 
 
 // ---------------------------------------------------------------------------
@@ -170,151 +182,70 @@ let private parseEvaluation (evalText: string) (logger: ILogger) : EvaluationRes
 
 
 // ---------------------------------------------------------------------------
-// Run analyst with SK AzureAIAgent
+// Extract tool call records from an AgentResponse
 // ---------------------------------------------------------------------------
 
-/// Collect all messages from an IAsyncEnumerable.
-let private collectAsync<'T> (seq: IAsyncEnumerable<'T>) (ct: CancellationToken) =
-    task {
-        let mutable items: 'T list = []
-        let enumerator = seq.GetAsyncEnumerator(ct)
-        let mutable keepGoing = true
-        while keepGoing do
-            let! hasNext = enumerator.MoveNextAsync()
-            if hasNext then
-                items <- enumerator.Current :: items
-            else
-                keepGoing <- false
-        return List.rev items
-    }
+let private extractToolCalls (response: AgentResponse) : ToolCallRecord list =
+    let mutable calls: ToolCallRecord list = []
 
-/// Run the analyst agent on a single prompt.  Returns the text response and
-/// a list of tool calls extracted from the message items.
+    for msg in response.Messages do
+        for item in msg.Contents do
+            match item with
+            | :? FunctionCallContent as fc ->
+                let argsJson =
+                    try JsonSerializer.Serialize(fc.Arguments :> IDictionary<string, obj>)
+                    with _ -> "{}"
+                let argsElem =
+                    try JsonDocument.Parse(argsJson).RootElement
+                    with _ -> JsonDocument.Parse("{}").RootElement
+                calls <-
+                    calls
+                    @ [ { ToolName = fc.Name |> Option.ofObj |> Option.defaultValue ""
+                          Arguments = argsElem
+                          Output = None } ]
+            | :? FunctionResultContent as fr ->
+                let result =
+                    match box fr.Result with
+                    | null -> ""
+                    | r ->
+                        match r.ToString() with
+                        | null -> ""
+                        | s -> s
+                // Attach result to the most recently unmatched call with the same CallId
+                let frCallId = fr.CallId |> Option.ofObj |> Option.defaultValue ""
+                calls <-
+                    let rec attach lst =
+                        match lst with
+                        | [] -> []
+                        | tc :: rest when tc.Output.IsNone ->
+                            // Match by CallId when available, else first unmatched
+                            let idMatch = frCallId = "" || tc.Arguments.GetRawText().Contains(frCallId)
+                            if idMatch then
+                                { tc with Output = Some result } :: rest
+                            else
+                                tc :: attach rest
+                        | tc :: rest -> tc :: attach rest
+                    attach calls
+            | _ -> ()
+
+    calls
+
+
+// ---------------------------------------------------------------------------
+// Run an agent for a single one-shot prompt
+// ---------------------------------------------------------------------------
+
 let private runAgent
-    (agent: AzureAIAgent)
+    (agent: ChatClientAgent)
     (userPrompt: string)
     (logger: ILogger)
     (ct: CancellationToken)
-    : Task<string * ToolCallRecord list>
+    : Task<AgentResponse>
     =
     task {
-        let thread = AzureAIAgentThread(agent.Client)
-
-        let cleanup () =
-            task {
-                try
-                    do! thread.DeleteAsync()
-                with ex ->
-                    logger.LogWarning(ex, "thread_delete_failed")
-            }
-
-        try
-            let messages =
-                [| ChatMessageContent(AuthorRole.User, userPrompt) |]
-                :> ICollection<ChatMessageContent>
-
-            let! responseItems = collectAsync (agent.InvokeAsync(messages, thread, AgentInvokeOptions(), ct)) ct
-
-            let mutable toolCalls: ToolCallRecord list = []
-            let mutable responseText = ""
-
-            for item in responseItems do
-                let msg = item.Message
-                if msg <> null then
-                    for contentItem in msg.Items do
-                        match contentItem with
-                        | :? FunctionCallContent as fc ->
-                            let argsJson =
-                                if fc.Arguments <> null then
-                                    try
-                                        JsonSerializer.Serialize(fc.Arguments :> IDictionary<string, obj>)
-                                    with _ -> "{}"
-                                else "{}"
-                            let argsElem =
-                                try JsonDocument.Parse(argsJson).RootElement
-                                with _ -> JsonDocument.Parse("{}").RootElement
-                            toolCalls <-
-                                toolCalls
-                                @ [ { ToolName = fc.FunctionName |> Option.ofObj |> Option.defaultValue ""
-                                      Arguments = argsElem
-                                      Output = None } ]
-                        | :? FunctionResultContent as fr ->
-                            let result : string =
-                                match box fr.Result with
-                                | null -> ""
-                                | r ->
-                                    match r.ToString() with
-                                    | null -> ""
-                                    | s -> s
-                            // Attach result to the most recent matching tool call
-                            toolCalls <-
-                                let frFuncName = fr.FunctionName |> Option.ofObj |> Option.defaultValue ""
-                                let rec attachResult lst =
-                                    match lst with
-                                    | [] -> []
-                                    | tc :: rest when tc.Output.IsNone && tc.ToolName = frFuncName ->
-                                        { tc with Output = Some result } :: rest
-                                    | tc :: rest -> tc :: attachResult rest
-                                List.rev (attachResult (List.rev toolCalls))
-                        | _ -> ()
-
-                    if msg.Role = AuthorRole.Assistant && not (String.IsNullOrEmpty msg.Content) then
-                        responseText <- msg.Content |> Option.ofObj |> Option.defaultValue responseText
-
-            do! cleanup ()
-            return responseText, toolCalls
-
-        with ex ->
-            do! cleanup ()
-            raise ex
-            return "", []
-    }
-
-
-/// Run the evaluator agent (no tools) on the eval prompt. Returns raw text.
-let private runEvaluatorAgent
-    (agent: AzureAIAgent)
-    (evalPrompt: string)
-    (logger: ILogger)
-    (ct: CancellationToken)
-    : Task<string>
-    =
-    task {
-        let thread = AzureAIAgentThread(agent.Client)
-
-        let cleanup () =
-            task {
-                try
-                    do! thread.DeleteAsync()
-                with ex ->
-                    logger.LogWarning(ex, "eval_thread_delete_failed")
-            }
-
-        try
-            let messages =
-                [| ChatMessageContent(AuthorRole.User, evalPrompt) |]
-                :> ICollection<ChatMessageContent>
-
-            let! responseItems = collectAsync (agent.InvokeAsync(messages, thread, AgentInvokeOptions(), ct)) ct
-
-            let text =
-                responseItems
-                |> List.tryFindBack (fun item ->
-                    let msg = item.Message
-                    not (isNull (box msg))
-                    && msg.Role = AuthorRole.Assistant
-                    && not (String.IsNullOrEmpty msg.Content))
-                |> Option.map (fun item ->
-                    item.Message.Content |> Option.ofObj |> Option.defaultValue "")
-                |> Option.defaultValue ""
-
-            do! cleanup ()
-            return text
-
-        with ex ->
-            do! cleanup ()
-            logger.LogWarning(ex, "evaluator_run_failed")
-            return ""
+        let! session = agent.CreateSessionAsync(ct)
+        let! response = agent.RunAsync(userPrompt, session, null, ct)
+        return response
     }
 
 
@@ -329,80 +260,74 @@ type AgentOrchestrator
         logger: ILogger
     ) =
 
-    let mutable agentsClient: PersistentAgentsClient option = None
-    let mutable analystAgent: AzureAIAgent option = None
-    let mutable evaluatorAgent: AzureAIAgent option = None
-
-    let ensureClient () =
-        match agentsClient with
-        | Some c -> c
-        | None ->
-            let credential = Credential.createCredential settings.AzureClientId
-            let client = AzureAIAgent.CreateAgentsClient(settings.FoundryProjectEndpoint, credential)
-            agentsClient <- Some client
-            client
+    let mutable analystAgent: ChatClientAgent option = None
+    let mutable evaluatorAgent: ChatClientAgent option = None
 
     let ensureAgents () =
-        task {
-            if analystAgent.IsNone then
-                let client = ensureClient ()
+        if analystAgent.IsNone then
+            let credential = Credential.createCredential settings.AzureClientId
+            let client = AIProjectClient(Uri(settings.FoundryProjectEndpoint), credential)
 
-                // Build the analyst Kernel with tool plugin
-                let analystPlugin = buildAnalystPlugin toolDefs
-                let analystKernel =
-                    Kernel.CreateBuilder()
-                        .Build()
-                analystKernel.Plugins.Add(analystPlugin)
+            // Build AITool list from AnalysisToolDefinition list
+            let tools: IList<AITool> = toolDefs |> List.map (fun td -> AnalysisAIFunction(td) :> AITool) |> ResizeArray :> IList<AITool>
 
-                // Create the persistent agent definition via Foundry
-                let! analystDef =
-                    client.Administration.CreateAgentAsync(
-                        settings.FoundryModelDeploymentName,
-                        name = "integration-analyst",
-                        description = null,
-                        instructions = analystSystemPrompt
-                    )
+            let analyst =
+                client.AsAIAgent(
+                    model       = settings.FoundryModelDeploymentName,
+                    instructions= analystSystemPrompt,
+                    name        = "integration-analyst",
+                    description = null,
+                    tools       = tools,
+                    clientFactory = null,
+                    loggerFactory = null,
+                    services    = null)
 
-                let analyst = AzureAIAgent(analystDef.Value, client, [ analystPlugin ])
-                analystAgent <- Some analyst
-                logger.LogInformation("analyst_agent_created agent_id={AgentId}", analystDef.Value.Id)
+            let evaluator =
+                client.AsAIAgent(
+                    model       = settings.FoundryModelDeploymentName,
+                    instructions= evaluatorSystemPrompt,
+                    name        = "quality-evaluator",
+                    description = null,
+                    tools       = null,
+                    clientFactory = null,
+                    loggerFactory = null,
+                    services    = null)
 
-                // Evaluator has no tools
-                let! evalDef =
-                    client.Administration.CreateAgentAsync(
-                        settings.FoundryModelDeploymentName,
-                        name = "quality-evaluator",
-                        description = null,
-                        instructions = evaluatorSystemPrompt
-                    )
+            analystAgent   <- Some analyst
+            evaluatorAgent <- Some evaluator
 
-                let evaluator = AzureAIAgent(evalDef.Value, client)
-                evaluatorAgent <- Some evaluator
-                logger.LogInformation("evaluator_agent_created agent_id={AgentId}", evalDef.Value.Id)
-        }
+            logger.LogInformation("maf_agents_created")
 
     /// Run the full analyst → evaluator flow with up to 1 retry on FAILED.
     member _.RunAnalysisAsync(userPrompt: string, ?ct: CancellationToken) =
         task {
             let ct = defaultArg ct CancellationToken.None
-            do! ensureAgents ()
+            ensureAgents ()
 
-            let analyst = analystAgent.Value
+            let analyst   = analystAgent.Value
             let evaluator = evaluatorAgent.Value
 
-            let mutable retryCount = 0
-
             // Step 1: Run analyst
-            let! (analystResponse, toolCallRecords) = runAgent analyst userPrompt logger ct
+            let! analystResponse = runAgent analyst userPrompt logger ct
+            let analystText = analystResponse.Text |> Option.ofObj |> Option.defaultValue ""
+            let toolCalls   = extractToolCalls analystResponse
+
+            logger.LogInformation(
+                "analyst_completed response_len={Len} tool_calls={N}",
+                analystText.Length, toolCalls.Length)
 
             // Step 2: Evaluate
-            let evalPrompt = buildEvaluatorPrompt userPrompt analystResponse toolCallRecords
-            let! evalText = runEvaluatorAgent evaluator evalPrompt logger ct
+            let evalPrompt = buildEvaluatorPrompt userPrompt analystText toolCalls
+            let! evalResponse = runAgent evaluator evalPrompt logger ct
+            let evalText = evalResponse.Text |> Option.ofObj |> Option.defaultValue ""
             let mutable evalResult = parseEvaluation evalText logger
 
+            logger.LogInformation(
+                "evaluator_verdict={Verdict} confidence={Confidence}",
+                string evalResult.Verdict, evalResult.Confidence)
+
             // Step 3: Retry once on FAILED
-            if evalResult.Verdict = EvalFailed && retryCount < 1 then
-                retryCount <- retryCount + 1
+            if evalResult.Verdict = EvalFailed then
                 let issuesText =
                     if evalResult.Issues.IsEmpty then evalResult.Summary
                     else String.concat "; " evalResult.Issues
@@ -410,42 +335,35 @@ type AgentOrchestrator
                     $"Your previous response had issues: {issuesText}. \
                       Please revise your answer using the tools to verify your claims."
 
-                let! (r2, tc2) = runAgent analyst revisionPrompt logger ct
-                let evalPrompt2 = buildEvaluatorPrompt userPrompt r2 tc2
-                let! evalText2 = runEvaluatorAgent evaluator evalPrompt2 logger ct
+                let! r2 = runAgent analyst revisionPrompt logger ct
+                let analystText2 = r2.Text |> Option.ofObj |> Option.defaultValue ""
+                let tc2 = extractToolCalls r2
+
+                let evalPrompt2 = buildEvaluatorPrompt userPrompt analystText2 tc2
+                let! evalResponse2 = runAgent evaluator evalPrompt2 logger ct
+                let evalText2 = evalResponse2.Text |> Option.ofObj |> Option.defaultValue ""
                 evalResult <- parseEvaluation evalText2 logger
 
-                return { Response = r2; ToolCalls = tc2; Evaluation = Some evalResult; RetryCount = retryCount }
+                return
+                    {
+                        Response = analystText2
+                        ToolCalls = tc2
+                        Evaluation = Some evalResult
+                        RetryCount = 1
+                    }
             else
                 return
                     {
-                        Response = analystResponse
-                        ToolCalls = toolCallRecords
+                        Response = analystText
+                        ToolCalls = toolCalls
                         Evaluation = Some evalResult
-                        RetryCount = retryCount
+                        RetryCount = 0
                     }
         }
 
-    /// Clean up agents from Azure AI Foundry.
+    /// Reset agents (called on shutdown; agents are ephemeral per session, no cloud cleanup needed).
     member _.CloseAsync() =
         task {
-            let client = ensureClient ()
-
-            let deleteAgent (agentOpt: AzureAIAgent option) =
-                task {
-                    match agentOpt with
-                    | None -> ()
-                    | Some a ->
-                        try
-                            let! _ = client.Administration.DeleteAgentAsync(a.Definition.Id)
-                            ()
-                        with ex ->
-                            logger.LogWarning(ex, "agent_delete_failed agent_id={AgentId}", a.Definition.Id)
-                }
-
-            do! deleteAgent analystAgent
-            do! deleteAgent evaluatorAgent
-            analystAgent <- None
+            analystAgent   <- None
             evaluatorAgent <- None
-            agentsClient <- None
         }
