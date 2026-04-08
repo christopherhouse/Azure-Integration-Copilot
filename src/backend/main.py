@@ -114,7 +114,7 @@ if settings.cors_allowed_origins:
         CORSMiddleware,
         allow_origins=cors_origins,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+        allow_headers=["Content-Type", "Authorization", "X-Request-ID", "X-Trace-ID", "traceparent", "tracestate"],
         allow_credentials=True,
     )
 
