@@ -4,11 +4,11 @@ import { apiFetch } from "@/lib/api";
  * Realtime message received from the Web PubSub WebSocket.
  *
  * The backend sends JSON messages with a `type` discriminator and an
- * arbitrary `payload`.
+ * arbitrary `data` object.
  */
 export interface RealtimeMessage {
   type: string;
-  payload: unknown;
+  data: unknown;
 }
 
 /** Callback registered via {@link RealtimeClient.on}. */
@@ -145,7 +145,7 @@ export class RealtimeClient {
     if (set) {
       for (const listener of set) {
         try {
-          listener(msg.payload);
+          listener(msg.data);
         } catch (err) {
           console.error("[realtime] listener error:", err);
         }

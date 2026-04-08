@@ -17,7 +17,9 @@ with patch.dict(os.environ, _test_env):
     from shared.event_types import (
         EVENT_ANALYSIS_COMPLETED,
         EVENT_ANALYSIS_FAILED,
+        EVENT_ARTIFACT_PARSE_FAILED,
         EVENT_ARTIFACT_PARSED,
+        EVENT_ARTIFACT_SCAN_FAILED,
         EVENT_ARTIFACT_SCAN_PASSED,
         EVENT_GRAPH_UPDATED,
     )
@@ -188,6 +190,7 @@ class TestNotificationHandlerHandle:
         first_call = pubsub.send_to_group.call_args_list[0]
         payload = first_call.kwargs["data"]
         assert payload["type"] == "artifact.status_changed"
+        assert payload["data"]["status"] == "scan_passed"
 
     @pytest.mark.asyncio
     async def test_maps_artifact_parsed_event(self):
@@ -200,6 +203,46 @@ class TestNotificationHandlerHandle:
         first_call = pubsub.send_to_group.call_args_list[0]
         payload = first_call.kwargs["data"]
         assert payload["type"] == "artifact.status_changed"
+        assert payload["data"]["status"] == "parsed"
+
+    @pytest.mark.asyncio
+    async def test_maps_artifact_scan_failed_event(self):
+        pubsub = _make_pubsub()
+        handler = NotificationHandler(pubsub_service=pubsub)
+        event_data = _make_event_data(event_type=EVENT_ARTIFACT_SCAN_FAILED)
+
+        await handler.handle(event_data)
+
+        first_call = pubsub.send_to_group.call_args_list[0]
+        payload = first_call.kwargs["data"]
+        assert payload["type"] == "artifact.status_changed"
+        assert payload["data"]["status"] == "scan_failed"
+
+    @pytest.mark.asyncio
+    async def test_maps_artifact_parse_failed_event(self):
+        pubsub = _make_pubsub()
+        handler = NotificationHandler(pubsub_service=pubsub)
+        event_data = _make_event_data(event_type=EVENT_ARTIFACT_PARSE_FAILED)
+
+        await handler.handle(event_data)
+
+        first_call = pubsub.send_to_group.call_args_list[0]
+        payload = first_call.kwargs["data"]
+        assert payload["type"] == "artifact.status_changed"
+        assert payload["data"]["status"] == "parse_failed"
+
+    @pytest.mark.asyncio
+    async def test_analysis_payload_has_no_status(self):
+        """Non-artifact events should not have a status field."""
+        pubsub = _make_pubsub()
+        handler = NotificationHandler(pubsub_service=pubsub)
+        event_data = _make_event_data(event_type=EVENT_ANALYSIS_COMPLETED)
+
+        await handler.handle(event_data)
+
+        first_call = pubsub.send_to_group.call_args_list[0]
+        payload = first_call.kwargs["data"]
+        assert "status" not in payload["data"]
 
 
 class TestNotificationHandlerBuildPayload:
@@ -240,6 +283,20 @@ class TestNotificationHandlerBuildPayload:
         }
         payload = NotificationHandler._build_payload(event_data)
         assert payload == {}
+
+    def test_injects_status_for_artifact_events(self):
+        event_data = {"tenantId": "t1", "artifactId": "art_001"}
+        payload = NotificationHandler._build_payload(
+            event_data, EVENT_ARTIFACT_PARSED
+        )
+        assert payload["status"] == "parsed"
+
+    def test_no_status_for_non_artifact_events(self):
+        event_data = {"tenantId": "t1"}
+        payload = NotificationHandler._build_payload(
+            event_data, EVENT_GRAPH_UPDATED
+        )
+        assert "status" not in payload
 
 
 class TestNotificationHandlerHandleFailure:
