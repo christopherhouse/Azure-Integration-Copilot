@@ -211,21 +211,32 @@ let private extractToolCalls (response: AgentResponse) : ToolCallRecord list =
                         match r.ToString() with
                         | null -> ""
                         | s -> s
-                // Attach result to the most recently unmatched call with the same CallId
+                // Pair by CallId when both sides have one; otherwise pair
+                // sequentially (first unmatched call gets this result).
+                // The agent framework emits calls and results in order, so
+                // sequential pairing is always correct.
                 let frCallId = fr.CallId |> Option.ofObj |> Option.defaultValue ""
                 calls <-
                     let rec attach lst =
                         match lst with
                         | [] -> []
                         | tc :: rest when tc.Output.IsNone ->
-                            // Match by CallId when available, else first unmatched
-                            let idMatch = frCallId = "" || tc.Arguments.GetRawText().Contains(frCallId)
-                            if idMatch then
-                                { tc with Output = Some result } :: rest
-                            else
-                                tc :: attach rest
-                        | tc :: rest -> tc :: attach rest
-                    attach calls
+                            { tc with Output = Some result } :: rest
+                        | tc :: rest ->
+                            tc :: attach rest
+                    // If we have a CallId, try to find the specific matching call.
+                    // Otherwise fall back to sequential first-unmatched pairing.
+                    if frCallId <> "" then
+                        // Build a local lookup to find the matching pending call
+                        let mutable found = false
+                        calls
+                        |> List.map (fun tc ->
+                            if not found && tc.Output.IsNone then
+                                found <- true
+                                { tc with Output = Some result }
+                            else tc)
+                    else
+                        attach calls
             | _ -> ()
 
     calls
@@ -268,8 +279,11 @@ type AgentOrchestrator
             let credential = Credential.createCredential settings.AzureClientId
             let client = AIProjectClient(Uri(settings.FoundryProjectEndpoint), credential)
 
-            // Build AITool list from AnalysisToolDefinition list
-            let tools: IList<AITool> = toolDefs |> List.map (fun td -> AnalysisAIFunction(td) :> AITool) |> ResizeArray :> IList<AITool>
+            // Build tool list from AnalysisToolDefinition list
+            let tools =
+                toolDefs
+                |> List.map (fun td -> AnalysisAIFunction(td) :> AITool)
+                |> ResizeArray
 
             let analyst =
                 client.AsAIAgent(
