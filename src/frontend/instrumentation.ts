@@ -33,7 +33,9 @@ export async function register() {
 
     // Dynamically import the Azure Monitor distro and OpenTelemetry APIs to avoid
     // bundling them in edge runtime or browser builds.
-    const { useAzureMonitor } = await import("@azure/monitor-opentelemetry");
+    // Note: aliased to avoid ESLint react-hooks/rules-of-hooks false positive
+    // (useAzureMonitor is an Azure SDK init function, not a React hook)
+    const { useAzureMonitor: initAzureMonitor } = await import("@azure/monitor-opentelemetry");
     const { resourceFromAttributes } = await import("@opentelemetry/resources");
 
     // Configure Azure Monitor with OpenTelemetry for Next.js server.
@@ -41,7 +43,7 @@ export async function register() {
     // - Incoming HTTP requests (Next.js server requests, API routes)
     // - Outbound HTTP dependencies (fetch calls to backend API)
     // - Server-side rendering operations
-    useAzureMonitor({
+    initAzureMonitor({
       azureMonitorExporterOptions: {
         connectionString,
       },
