@@ -117,12 +117,12 @@ describe("RealtimeClient", () => {
 
       // Dispatch a message — listener should fire
       const ws = MockWebSocket.lastInstance!;
-      ws.onmessage?.({ data: JSON.stringify({ type: "test-event", payload: "a" }) });
+      ws.onmessage?.({ data: JSON.stringify({ type: "test-event", data: "a" }) });
       expect(listener).toHaveBeenCalledTimes(1);
 
       // Unsubscribe and dispatch again — should NOT fire
       unsub();
-      ws.onmessage?.({ data: JSON.stringify({ type: "test-event", payload: "b" }) });
+      ws.onmessage?.({ data: JSON.stringify({ type: "test-event", data: "b" }) });
       expect(listener).toHaveBeenCalledTimes(1);
     });
   });
@@ -263,7 +263,7 @@ describe("RealtimeClient", () => {
       const ws = MockWebSocket.lastInstance!;
 
       ws.onmessage?.({
-        data: JSON.stringify({ type: "update", payload: { id: 1 } }),
+        data: JSON.stringify({ type: "update", data: { id: 1 } }),
       });
 
       expect(listener).toHaveBeenCalledWith({ id: 1 });
@@ -279,7 +279,7 @@ describe("RealtimeClient", () => {
       const ws = MockWebSocket.lastInstance!;
 
       ws.onmessage?.({
-        data: JSON.stringify({ type: "update", payload: "data" }),
+        data: JSON.stringify({ type: "update", data: "data" }),
       });
 
       expect(updateListener).toHaveBeenCalledTimes(1);
@@ -294,16 +294,16 @@ describe("RealtimeClient", () => {
       const ws = MockWebSocket.lastInstance!;
 
       ws.onmessage?.({
-        data: JSON.stringify({ type: "alpha", payload: "p1" }),
+        data: JSON.stringify({ type: "alpha", data: "p1" }),
       });
       ws.onmessage?.({
-        data: JSON.stringify({ type: "beta", payload: "p2" }),
+        data: JSON.stringify({ type: "beta", data: "p2" }),
       });
 
       expect(wildcardListener).toHaveBeenCalledTimes(2);
-      // Wildcard receives the full message, not just payload
-      expect(wildcardListener).toHaveBeenCalledWith({ type: "alpha", payload: "p1" });
-      expect(wildcardListener).toHaveBeenCalledWith({ type: "beta", payload: "p2" });
+      // Wildcard receives the full message, not just data
+      expect(wildcardListener).toHaveBeenCalledWith({ type: "alpha", data: "p1" });
+      expect(wildcardListener).toHaveBeenCalledWith({ type: "beta", data: "p2" });
     });
 
     it("catches listener errors without breaking other listeners", async () => {
@@ -320,7 +320,7 @@ describe("RealtimeClient", () => {
       const ws = MockWebSocket.lastInstance!;
 
       ws.onmessage?.({
-        data: JSON.stringify({ type: "evt", payload: "data" }),
+        data: JSON.stringify({ type: "evt", data: "data" }),
       });
 
       expect(badListener).toHaveBeenCalled();

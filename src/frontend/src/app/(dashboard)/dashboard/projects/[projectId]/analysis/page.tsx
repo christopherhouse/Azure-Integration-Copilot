@@ -7,7 +7,6 @@ import { ArrowLeft, BrainCircuit } from "lucide-react";
 import { AnalysisChat } from "@/components/analysis/analysis-chat";
 import { AnalysisHistory } from "@/components/analysis/analysis-history";
 import { UsageSummary } from "@/components/usage/usage-summary";
-import { NotificationToast } from "@/components/realtime/notification-toast";
 import type { Analysis } from "@/types/analysis";
 
 export default function AnalysisPage() {
@@ -19,9 +18,6 @@ export default function AnalysisPage() {
 
   return (
     <div className="flex h-[calc(100vh-theme(spacing.14)-theme(spacing.12))] flex-col gap-4">
-      {/* Realtime notification listener */}
-      <NotificationToast />
-
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link

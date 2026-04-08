@@ -5,6 +5,50 @@ import { toast } from "sonner";
 import { useRealtimeEvent } from "@/hooks/use-realtime";
 
 /**
+ * Resolves a human-readable toast for `artifact.status_changed` events
+ * based on the `status` field injected by the backend.
+ */
+function resolveArtifactToast(p: Record<string, unknown>): {
+  title: string;
+  description?: string;
+  variant: "success" | "error" | "info" | "warning";
+} {
+  const name = typeof p.name === "string" ? p.name : "Artifact";
+  switch (p.status) {
+    case "parsed":
+      return {
+        title: "Artifact parsed",
+        description: `"${name}" has been processed successfully.`,
+        variant: "success",
+      };
+    case "parse_failed":
+      return {
+        title: "Artifact parsing failed",
+        description: `"${name}" could not be parsed.`,
+        variant: "error",
+      };
+    case "scan_passed":
+      return {
+        title: "Security scan complete",
+        description: `"${name}" has been scanned.`,
+        variant: "info",
+      };
+    case "scan_failed":
+      return {
+        title: "Security scan failed",
+        description: `"${name}" scan encountered an error.`,
+        variant: "warning",
+      };
+    default:
+      return {
+        title: "Artifact status changed",
+        description: `"${name}" status updated.`,
+        variant: "info",
+      };
+  }
+}
+
+/**
  * Maps backend realtime event types to human-readable toast messages.
  */
 const EVENT_MESSAGES: Record<string, (payload: Record<string, unknown>) => {
@@ -12,22 +56,13 @@ const EVENT_MESSAGES: Record<string, (payload: Record<string, unknown>) => {
   description?: string;
   variant: "success" | "error" | "info" | "warning";
 }> = {
-  "artifact.parsed": (p) => ({
-    title: "Artifact parsed",
-    description: `"${p.name ?? "Artifact"}" has been processed successfully.`,
-    variant: "success",
-  }),
-  "artifact.parse_failed": (p) => ({
-    title: "Artifact parsing failed",
-    description: `"${p.name ?? "Artifact"}" could not be parsed.`,
-    variant: "error",
-  }),
-  "graph.built": () => ({
+  "artifact.status_changed": resolveArtifactToast,
+  "graph.updated": () => ({
     title: "Graph updated",
     description: "The dependency graph has been rebuilt.",
     variant: "success",
   }),
-  "graph.failed": () => ({
+  "graph.build_failed": () => ({
     title: "Graph build failed",
     description: "An error occurred while rebuilding the graph.",
     variant: "error",
@@ -45,16 +80,6 @@ const EVENT_MESSAGES: Record<string, (payload: Record<string, unknown>) => {
     description: "The analysis could not be completed.",
     variant: "error",
   }),
-  "scan.completed": (p) => ({
-    title: "Security scan complete",
-    description: `"${p.name ?? "Artifact"}" has been scanned.`,
-    variant: "info",
-  }),
-  "scan.failed": (p) => ({
-    title: "Security scan failed",
-    description: `"${p.name ?? "Artifact"}" scan encountered an error.`,
-    variant: "warning",
-  }),
 };
 
 /**
@@ -68,9 +93,10 @@ export function NotificationToast() {
     const msg = payload as Record<string, unknown> | undefined;
     if (!msg || typeof msg.type !== "string") return;
 
+    const data = (msg.data ?? {}) as Record<string, unknown>;
     const mapper = EVENT_MESSAGES[msg.type];
     if (mapper) {
-      const { title, description, variant } = mapper(msg);
+      const { title, description, variant } = mapper(data);
       switch (variant) {
         case "success":
           toast.success(title, { description });
@@ -89,7 +115,7 @@ export function NotificationToast() {
     } else {
       // Unknown event type — show a generic info toast
       toast.info("Notification", {
-        description: typeof msg.message === "string" ? msg.message : undefined,
+        description: typeof data.message === "string" ? data.message : undefined,
       });
     }
   }, []);

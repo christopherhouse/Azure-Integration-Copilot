@@ -34,6 +34,14 @@ NOTIFICATION_MAP: dict[str, str] = {
     EVENT_ANALYSIS_FAILED: "analysis.failed",
 }
 
+# Maps CloudEvent types to a status string for artifact sub-type disambiguation.
+STATUS_MAP: dict[str, str] = {
+    EVENT_ARTIFACT_PARSED: "parsed",
+    EVENT_ARTIFACT_PARSE_FAILED: "parse_failed",
+    EVENT_ARTIFACT_SCAN_PASSED: "scan_passed",
+    EVENT_ARTIFACT_SCAN_FAILED: "scan_failed",
+}
+
 
 class NotificationHandler(WorkerHandler):
     """Process terminal events and send Web PubSub notifications."""
@@ -67,7 +75,7 @@ class NotificationHandler(WorkerHandler):
 
         payload = {
             "type": notification_type,
-            "data": self._build_payload(event_data),
+            "data": self._build_payload(event_data, event_type),
         }
 
         # Send to tenant group
@@ -99,11 +107,16 @@ class NotificationHandler(WorkerHandler):
         )
 
     @staticmethod
-    def _build_payload(event_data: dict[str, Any]) -> dict[str, Any]:
+    def _build_payload(event_data: dict[str, Any], event_type: str = "") -> dict[str, Any]:
         """Extract a clean payload for the frontend notification."""
         # Pass through relevant fields, excluding internal metadata
-        return {
+        result = {
             k: v
             for k, v in event_data.items()
             if not k.startswith("_") and k != "partitionKey"
         }
+        # Inject status for artifact sub-type disambiguation
+        status = STATUS_MAP.get(event_type)
+        if status:
+            result["status"] = status
+        return result

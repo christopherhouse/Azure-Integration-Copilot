@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { useTenantContext } from "@/components/providers/tenant-provider";
+import { NotificationToast } from "@/components/realtime/notification-toast";
 
 const WORKSPACE_PROVISIONED_KEY = "workspace_provisioned";
 
@@ -81,6 +82,7 @@ export default function DashboardLayout({
         <Header />
         <main className="flex-1 p-6">{children}</main>
       </div>
+      <NotificationToast />
     </div>
   );
 }
