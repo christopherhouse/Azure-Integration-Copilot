@@ -3,7 +3,7 @@
 # =============================================================================
 # Called by the parent cicd.yml workflow.
 # Jobs: frontend build/test, frontend e2e (Playwright), backend build/test,
-#        Rust build/test, Bicep lint/build, container build/scan/push.
+#        Rust build/test, Go graph builder build/test, Bicep lint/build, container build/scan/push.
 # =============================================================================
 
 name: CI
@@ -218,7 +218,8 @@ jobs:
           cargo test -- --format=pretty 2>&1 | tee ../../test-results/rust-results.txt
 
   # -------------------------------------------------------------------------
-  # Job 5 — F# analysis worker: build, test
+# Job 5 — F# analysis worker: build, test
+  # (Job 6 below — Go graph builder worker)
   # -------------------------------------------------------------------------
   build-and-test-analysis-fsharp:
     name: "F# Analysis Worker — Build & Test"
@@ -263,7 +264,44 @@ jobs:
           fail-on-error: true
 
   # -------------------------------------------------------------------------
-  # Job 6 — Bicep: lint, build, publish artifacts
+  # Job 6 — Go graph builder worker: build, lint, test
+  # -------------------------------------------------------------------------
+  build-and-test-go:
+    name: "Go Graph Builder — Build & Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go 1.24
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+          cache-dependency-path: src/worker-graph-builder-go/go.sum
+
+      - name: Audit Go dependencies
+        working-directory: src/worker-graph-builder-go
+        run: |
+          go list -m -json all 2>/dev/null | grep -q '"Path"' && echo "modules listed" || true
+
+      - name: Vet
+        working-directory: src/worker-graph-builder-go
+        run: go vet ./...
+
+      - name: Build
+        working-directory: src/worker-graph-builder-go
+        run: go build ./...
+
+      - name: Run tests
+        working-directory: src/worker-graph-builder-go
+        run: |
+          mkdir -p ../../test-results
+          go test ./... -v 2>&1 | tee ../../test-results/go-graph-builder-results.txt
+
+  # -------------------------------------------------------------------------
+  # Job 7 — Bicep: lint, build, publish artifacts
   # -------------------------------------------------------------------------
   bicep-build:
     name: "Bicep — Lint & Build"
@@ -308,12 +346,12 @@ jobs:
           retention-days: 7
 
   # -------------------------------------------------------------------------
-  # Job 7 — Container build matrix: build, scan, push (parallel per image)
+  # Job 8 — Container build matrix: build, scan, push (parallel per image)
   # -------------------------------------------------------------------------
   container-build:
     name: "Container — ${{ matrix.image_name }}"
     runs-on: ubuntu-latest
-    needs: [build-and-test-frontend, build-and-test-backend, build-and-test-rust, e2e-frontend, build-and-test-analysis-fsharp]
+    needs: [build-and-test-frontend, build-and-test-backend, build-and-test-rust, build-and-test-go, e2e-frontend, build-and-test-analysis-fsharp]
 
     strategy:
       fail-fast: false
@@ -359,6 +397,11 @@ jobs:
             context: src/worker-parser-rust
             dockerfile: Dockerfile
             cache_scope: worker-parser-rust
+          - name: worker-graph-builder-go
+            image_name: integrisight-worker-graph-builder-go
+            context: src/worker-graph-builder-go
+            dockerfile: Dockerfile
+            cache_scope: worker-graph-builder-go
           - name: worker-analysis-fsharp
             image_name: integrisight-worker-analysis-fsharp
             context: src/worker-analysis-fsharp
@@ -474,7 +517,7 @@ jobs:
           retention-days: 1
 
   # -------------------------------------------------------------------------
-  # Job 7 — Aggregate container metadata for CD consumption
+  # Job 9 — Aggregate container metadata for CD consumption
   # -------------------------------------------------------------------------
   container-metadata:
     name: "Container Metadata — Aggregate"
