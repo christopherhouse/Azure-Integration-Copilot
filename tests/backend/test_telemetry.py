@@ -519,6 +519,9 @@ def test_install_filter_wraps_active_span_processor():
         def shutdown(self):
             pass
 
+        def force_flush(self, timeout_millis: int = 30_000) -> bool:
+            return True
+
     exporter = _MemExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
@@ -579,7 +582,10 @@ def test_install_filter_logs_success(caplog):
     ):
         app_logging._install_health_head_filter()
 
-    assert any("health_head_filter_installed" in r.message for r in caplog.records)
+    assert any(
+        "health_head_filter_installed" in r.message and r.levelname == "INFO"
+        for r in caplog.records
+    )
 
 
 def test_install_filter_logs_warning_for_noop_provider(caplog):
@@ -597,4 +603,7 @@ def test_install_filter_logs_warning_for_noop_provider(caplog):
     ):
         app_logging._install_health_head_filter()
 
-    assert any("health_head_filter_skipped" in r.message for r in caplog.records)
+    assert any(
+        "health_head_filter_skipped" in r.message and r.levelname == "WARNING"
+        for r in caplog.records
+    )
