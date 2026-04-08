@@ -1,0 +1,10 @@
+## User Question
+{user_prompt}
+
+## Analyst Response
+{analyst_response}
+
+## Tool Call History
+{tool_call_history}
+
+Please evaluate the analyst's response and return your verdict as JSON.

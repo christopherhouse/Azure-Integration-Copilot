@@ -14,7 +14,8 @@ _test_env = {
 }
 
 with patch.dict(os.environ, _test_env):
-    from workers.analysis.evaluator import EVALUATOR_SYSTEM_PROMPT, build_evaluator_prompt
+    from prompts import EVALUATOR_SYSTEM_PROMPT
+    from workers.analysis.evaluator import build_evaluator_prompt
 
 
 class TestBuildEvaluatorPrompt:
