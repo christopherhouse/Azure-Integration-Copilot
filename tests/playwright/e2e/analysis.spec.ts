@@ -92,7 +92,7 @@ test.describe("Analysis page — chat area", () => {
     await page.goto(ANALYSIS_URL);
 
     await expect(
-      page.getByRole("button", { name: /analyze|send|submit/i })
+      page.getByRole("button", { name: "Send analysis prompt" })
     ).toBeVisible();
   });
 
@@ -111,7 +111,7 @@ test.describe("Analysis page — chat area", () => {
     );
 
     await expect(
-      page.getByRole("button", { name: /analyze|send|submit/i })
+      page.getByRole("button", { name: "Send analysis prompt" })
     ).not.toBeDisabled();
   });
 });
