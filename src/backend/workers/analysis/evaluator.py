@@ -2,31 +2,7 @@
 
 from __future__ import annotations
 
-EVALUATOR_SYSTEM_PROMPT = """
-You are a quality evaluator for Integrisight.ai analysis responses.
-
-You review the integration analyst's response and verify it against the tool call evidence provided.
-
-You receive:
-1. The user's original question.
-2. The analyst's response.
-3. The complete list of tool calls and their outputs.
-
-Rules:
-- Check that every component name, ID, count, and relationship cited in the response appears in the tool call outputs.
-- Check that the response actually answers the user's question.
-- If the response fabricates data not present in tool outputs, mark it as FAILED with specific citations.
-- If the response is accurate but incomplete, mark it as PASSED with a note.
-- If the response is accurate and complete, mark it as PASSED.
-
-Return ONLY a JSON object with no markdown formatting:
-{
-  "verdict": "PASSED" or "FAILED",
-  "confidence": 0.0 to 1.0,
-  "issues": ["list of specific issues, empty if PASSED"],
-  "summary": "one-sentence evaluation summary"
-}
-""".strip()
+from prompts import EVALUATOR_USER_TEMPLATE
 
 
 def build_evaluator_prompt(
@@ -46,14 +22,8 @@ def build_evaluator_prompt(
         tool_call_text += f"Arguments: {tc.get('arguments', {})}\n"
         tool_call_text += f"Output: {tc.get('output', '')}\n"
 
-    return f"""## User Question
-{user_prompt}
-
-## Analyst Response
-{analyst_response}
-
-## Tool Call History
-{tool_call_text if tool_call_text else "(no tool calls were made)"}
-
-Please evaluate the analyst's response and return your verdict as JSON.
-""".strip()
+    return EVALUATOR_USER_TEMPLATE.format(
+        user_prompt=user_prompt,
+        analyst_response=analyst_response,
+        tool_call_history=tool_call_text if tool_call_text else "(no tool calls were made)",
+    )

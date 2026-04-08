@@ -19,27 +19,13 @@ from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
 
 from domains.analysis.models import AnalysisResult, EvaluationResult, EvaluationVerdict, ToolCallRecord
+from prompts import ANALYST_REVISION_TEMPLATE, ANALYST_SYSTEM_PROMPT, EVALUATOR_SYSTEM_PROMPT
 from shared.credential import create_credential
 
-from .evaluator import EVALUATOR_SYSTEM_PROMPT, build_evaluator_prompt
+from .evaluator import build_evaluator_prompt
 from .tools import ALL_TOOLS
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
-
-ANALYST_SYSTEM_PROMPT = """
-You are the Integrisight.ai integration analyst. You help users understand
-their Azure Integration Services landscape by querying the dependency graph.
-
-Rules:
-1. ALWAYS use the provided tools to retrieve data. Never fabricate component
-   names, IDs, counts, or relationships.
-2. If the user asks about something not in the graph data, say so explicitly.
-3. When citing components, include their display names and types.
-4. For impact analysis, explain what each impacted component does and why
-   it would be affected.
-5. Be concise but thorough. Use bullet points for lists.
-6. If a tool returns an error, report it honestly to the user.
-""".strip()
 
 
 def _get_model_deployment() -> str:
@@ -118,10 +104,7 @@ class AgentOrchestrator:
         if eval_result.verdict == EvaluationVerdict.FAILED and retry_count < 1:
             retry_count += 1
             issues_text = "; ".join(eval_result.issues) if eval_result.issues else eval_result.summary
-            revision_prompt = (
-                f"Your previous response had issues: {issues_text}. "
-                f"Please revise your answer using the tools to verify your claims."
-            )
+            revision_prompt = ANALYST_REVISION_TEMPLATE.format(issues_text=issues_text)
             analyst_response, tool_call_records = await self._run_analyst(revision_prompt)
             eval_result = await self._run_evaluator(
                 user_prompt, analyst_response, tool_call_records
