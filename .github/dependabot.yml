@@ -1,7 +1,7 @@
 # =============================================================================
 # Dependabot Configuration — Integrisight.ai
 # =============================================================================
-# Keeps dependencies up-to-date across Python, npm, Cargo, and GitHub Actions.
+# Keeps dependencies up-to-date across Python, npm, and GitHub Actions.
 # Minor/patch updates are grouped into single PRs to reduce noise.
 # =============================================================================
 
@@ -31,21 +31,6 @@ updates:
     labels:
       - "dependencies"
       - "javascript"
-    groups:
-      minor-and-patch:
-        update-types:
-          - "minor"
-          - "patch"
-
-  - package-ecosystem: "cargo"
-    directory: "/src/worker-parser-rust"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "rust"
     groups:
       minor-and-patch:
         update-types:

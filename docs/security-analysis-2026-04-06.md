@@ -1,7 +1,7 @@
 # Security Analysis Report (Frontend + Backend + Workers + Infra + GitHub Actions)
 
 Date: 2026-04-06  
-Scope: `src/frontend`, `src/backend`, `src/worker-parser-rust`, `infra/bicep`, `.github/workflows`, and deployment scripts.
+Scope: `src/frontend`, `src/backend`, `infra/bicep`, `.github/workflows`, and deployment scripts.
 
 ## Executive Summary
 
@@ -30,7 +30,7 @@ The **largest residual risks** are now concentrated in supply-chain/process cont
 - CSP is set dynamically with per-request nonce and restrictive directives (`object-src 'none'`, `frame-ancestors 'none'`, `form-action 'self'`).
 
 ### 3) Identity and secret posture are generally strong
-- Workloads consistently use managed identity patterns (Python and Rust workers).
+- Workloads consistently use managed identity patterns (Python workers).
 - ACR admin user is disabled.
 - Storage shared key access is disabled.
 - Private endpoints are used across core data-plane services.
@@ -63,7 +63,7 @@ The **largest residual risks** are now concentrated in supply-chain/process cont
 **Why it matters:** Known high/critical dependency or image vulnerabilities can merge and deploy undetected as release blockers.
 
 **Evidence:**
-- `npm audit`, `pip-audit`, `cargo audit` use `|| true`.
+- `npm audit`, `pip-audit` use `|| true`.
 - Trivy uses `exit-code: "0"`.
 
 **Recommendation:**
@@ -125,11 +125,7 @@ The **largest residual risks** are now concentrated in supply-chain/process cont
 - Worker base enforces `tenantId` presence but does not centrally validate full event schema/type-specific required fields before handler logic.
 - Add strict schema validation per event type at worker ingress.
 
-### L2) Rust worker settings allow empty endpoints by default
-- Defaults ease local startup but defer failures to runtime network paths.
-- Add startup validation that fails fast on missing required production endpoints.
-
-### L3) ACR private endpoint depends on Premium SKU only
+### L2) ACR private endpoint depends on Premium SKU only
 - Current module creates private endpoint only when SKU is Premium.
 - If Basic/Standard is used, registry may remain reachable via public endpoint (even with admin disabled).
 
@@ -154,7 +150,7 @@ The **largest residual risks** are now concentrated in supply-chain/process cont
 **Weaknesses / Residual Risks**
 - Primary remaining backend risk is indirect: ingest pipeline trust depends on downstream scan stage quality.
 
-### Workers (Python + Rust)
+### Workers (Python)
 **Strengths**
 - Clear retry semantics (transient vs permanent), idempotency checks, and dead-letter support.
 - Managed identity-based Azure client usage.
@@ -186,7 +182,7 @@ The **largest residual risks** are now concentrated in supply-chain/process cont
 
 ## P0 — Immediate (0–48 hours)
 1. **Implement real malware scan enforcement** in `scan_gate` (fail-closed).  
-2. **Make scanner results blocking** for High/Critical findings in PR + main (`npm audit`, `pip-audit`, `cargo audit`, Trivy).  
+2. **Make scanner results blocking** for High/Critical findings in PR + main (`npm audit`, `pip-audit`, Trivy).  
 3. **Stop logging raw env-var command lines** in deployment script paths that can include secret material.
 
 ## P1 — Near term (3–7 days)
@@ -197,7 +193,6 @@ The **largest residual risks** are now concentrated in supply-chain/process cont
 ## P2 — Short term (1–3 weeks)
 7. **Harden Cosmos network exposure**: disable public access where feasible, remove broad bypass, verify private-only app paths.
 8. **Add strict event schema validation** at worker ingress and reject malformed/unexpected payloads early.
-9. **Fail-fast startup validation in Rust worker** for required production settings.
 
 ## P3 — Programmatic hardening (3–6 weeks)
 10. **Define security exception process + SLA** for temporarily accepted vulnerabilities.

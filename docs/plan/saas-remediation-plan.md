@@ -56,7 +56,7 @@ This review examined the following artefacts:
 | Area | Files Reviewed |
 |------|---------------|
 | Backend API | `src/backend/main.py`, `config.py`, all `domains/`, `middleware/`, `shared/` |
-| Workers | `src/backend/workers/` (all 5 workers + base), `src/worker-parser-rust/` |
+| Workers | `src/backend/workers/` (all 5 workers + base) |
 | Frontend | `src/frontend/src/` (all pages, components, hooks, lib, middleware) |
 | Infrastructure | `infra/bicep/main.bicep`, all `modules/*.bicep`, environment params |
 | CI/CD | `.github/workflows/ci.yml`, `cd.yml`, `cicd.yml`, `codeql.yml` |
@@ -111,7 +111,7 @@ The following capabilities are implemented correctly and should be preserved as 
 #### CI/CD Pipeline
 - **Parallel container build matrix**: 8 container images built in parallel after tests pass, with shared layer caching.
 - **Trivy scanning**: All container images scanned for CVEs before push.
-- **Dependency auditing**: `npm audit`, `pip-audit`, `cargo audit` run on every CI execution.
+- **Dependency auditing**: `npm audit`, `pip-audit` run on every CI execution.
 - **CodeQL analysis**: Separate `codeql.yml` workflow for static analysis security scanning.
 
 ---
@@ -135,7 +135,6 @@ The following capabilities are implemented correctly and should be preserved as 
 | REL-04 | Reliability | No zone redundancy on Cosmos DB or Container Apps | P3 | Reliability |
 | REL-05 | Reliability | Health dependency checks lack explicit timeouts | P2 | Reliability |
 | REL-06 | Reliability | Event Grid failure silently drops events without dead-letter path | P2 | Reliability |
-| REL-07 | Reliability | Rust worker lacks startup validation for required endpoints | P2 | Reliability |
 | OPS-01 | Operational Excellence | CI vulnerability checks non-blocking (also SEC-02) | P0 | Operational Excellence |
 | OPS-02 | Operational Excellence | No SLI/SLO definitions or alert rules | P1 | Operational Excellence |
 | OPS-03 | Operational Excellence | No Azure Monitor dashboards or workbooks | P2 | Operational Excellence |
@@ -189,16 +188,15 @@ The following capabilities are implemented correctly and should be preserved as 
 
 #### SEC-02 / OPS-01 — CI vulnerability scanners are non-blocking (P0)
 
-**Current State:** All four scanner steps use suppressed exit codes:
+**Current State:** All scanner steps use suppressed exit codes:
 - `npm audit --audit-level=high ... || true`
 - `uv run pip-audit --strict ... || true`
-- `cargo audit || true`
 - Trivy: `exit-code: "0"`
 
 **Risk:** Known high/critical CVEs in dependencies or container base images can merge to `main` and deploy to production undetected. This directly contradicts supply-chain security commitments.
 
 **Remediation:**
-1. Remove `|| true` from `npm audit`, `pip-audit`, `cargo audit`.
+1. Remove `|| true` from `npm audit`, `pip-audit`.
 2. Set Trivy `exit-code: "1"` with `severity: "CRITICAL,HIGH"`.
 3. Add a documented allowlist process (`.audit-allowlist.json`, `.pip-audit-ignore`, `.trivyignore`) for accepted exceptions with mandatory expiry dates and rationale.
 4. On PR branches, allow failures to annotate without blocking (use separate reporting step). On `main` branch pushes, enforce as a hard gate.
@@ -381,19 +379,6 @@ The following capabilities are implemented correctly and should be preserved as 
 1. Re-raise `EventGridPublisher.publish_event()` exceptions by default. Add an `ignore_errors: bool = False` parameter for cases where fire-and-forget is intentional.
 2. Add a Cosmos DB "outbox" pattern: write a pending event document to Cosmos DB in the same transaction as the artifact creation, then publish and mark as sent. A background task or separate worker polls and retries unsent outbox events.
 3. Alternatively: configure Event Grid Namespace event retention to 7 days (already done in `event-grid.bicep`) and add an alert rule for subscription queue depth > 1,000 as a proxy for publish failures.
-
----
-
-#### REL-07 — Rust worker lacks startup validation for required endpoints (P2)
-
-**Current State:** The Rust parser worker (`src/worker-parser-rust/src/main.rs`) reads endpoint URLs from environment at runtime. Empty strings likely cause connection errors only when the first event is processed.
-
-**Impact:** A misconfigured Rust worker starts successfully, appears healthy, but silently fails on every event — masking the configuration error and causing events to retry indefinitely.
-
-**Remediation:**
-1. Add startup validation in `main.rs` that checks all required endpoint env vars are non-empty and well-formed URLs before entering the event loop.
-2. `panic!` (or return `Err`) with a clear message listing the missing variable if validation fails, so the Container App restart loop surfaces the misconfiguration.
-3. Mirror the Python `settings` validation approach using `envy` or direct environment checks.
 
 ---
 
@@ -822,7 +807,6 @@ These items improve engineering maturity and operational capability:
 | REL-03 | Add Cosmos DB provisioned throughput option | Infra engineer | 1d |
 | REL-05 | Add timeouts to health dependency checks | Backend engineer | 4h |
 | REL-06 | Add event publish outbox pattern | Backend engineer | 3d |
-| REL-07 | Rust worker startup validation | Rust engineer | 4h |
 | OPS-03 | Create Azure Monitor workbook | SRE | 2d |
 | OPS-04 | Increase log retention to 90/365 days | Infra engineer | 2h |
 | OPS-05 | Add post-deployment smoke tests | DevOps engineer | 1d |
