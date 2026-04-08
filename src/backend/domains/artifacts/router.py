@@ -281,7 +281,7 @@ async def rename_artifact(
 
 @router.delete("/{artifact_id}", status_code=204)
 async def delete_artifact(project_id: str, artifact_id: str, request: Request):
-    """Soft-delete an artifact."""
+    """Delete an artifact and all associated data."""
     req_id = _request_id(request)
     tenant_id = _get_tenant_id(request)
 

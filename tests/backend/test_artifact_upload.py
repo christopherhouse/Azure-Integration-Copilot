@@ -390,7 +390,8 @@ async def test_delete_artifact_decrements_counters():
         patch("domains.artifacts.service.graph_repository") as mock_graph,
     ):
         mock_art_repo.get_by_id = AsyncMock(return_value=artifact)
-        mock_art_repo.soft_delete = AsyncMock(return_value=artifact)
+        mock_art_repo.hard_delete = AsyncMock(return_value=True)
+        mock_art_repo.delete_parse_results_by_artifact_id = AsyncMock(return_value=0)
         mock_tenant_repo.increment_usage = AsyncMock()
         mock_proj_repo.increment_artifact_count = AsyncMock()
         mock_blob.delete_blob = AsyncMock()
