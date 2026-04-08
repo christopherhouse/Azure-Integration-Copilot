@@ -52,6 +52,20 @@ export async function register() {
         "service.version": "0.1.0",
       }),
       samplingRatio: 1.0, // 100% sampling - adjust in production if needed
+      instrumentationOptions: {
+        // The Azure Monitor types declare http as generic InstrumentationConfig,
+        // but the value is forwarded to HttpInstrumentation which accepts the
+        // full HttpInstrumentationConfig (including ignoreIncomingRequestHook).
+        http: {
+          ignoreIncomingRequestHook: (request) => {
+            // Suppress health probe HEAD requests from Azure Container Apps.
+            // These create significant noise in Application Insights without
+            // adding diagnostic value.  GET requests are still traced.
+            return request.method === "HEAD" &&
+              (request.url?.startsWith("/v1/health") ?? false);
+          },
+        } as import("@opentelemetry/instrumentation-http").HttpInstrumentationConfig,
+      },
     });
 
     console.log("[OpenTelemetry] Azure Monitor instrumentation initialized for Next.js server");
