@@ -247,13 +247,47 @@ def _install_health_head_filter() -> None:
     This function accesses the ``_active_span_processor`` private attribute of
     the SDK ``TracerProvider``.  While private, this is the standard community
     pattern for injecting span-level filtering into an existing OTel pipeline.
+
+    .. note::
+
+       In some OTel API versions ``trace.get_tracer_provider()`` returns a
+       ``ProxyTracerProvider`` that delegates to the real SDK provider.  This
+       function unwraps the proxy transparently so that the filter is installed
+       on the underlying ``TracerProvider`` regardless of wrapper depth.
     """
     from opentelemetry.sdk.trace import TracerProvider as SdkTracerProvider
 
+    log = structlog.get_logger(__name__)
+
     provider = trace.get_tracer_provider()
-    if isinstance(provider, SdkTracerProvider) and hasattr(provider, "_active_span_processor"):
-        original = provider._active_span_processor
-        provider._active_span_processor = HealthCheckHeadFilter(original)
+
+    # Unwrap ProxyTracerProvider if the API version uses one.  The attribute
+    # name varies across releases, so try the two known variants.
+    real_provider = provider
+    for attr in ("_real_tracer_provider", "_tracer_provider"):
+        candidate = getattr(provider, attr, None)
+        if candidate is not None:
+            real_provider = candidate
+            break
+
+    if isinstance(real_provider, SdkTracerProvider) and hasattr(
+        real_provider, "_active_span_processor"
+    ):
+        original = real_provider._active_span_processor
+        real_provider._active_span_processor = HealthCheckHeadFilter(original)
+        log.info(
+            "health_head_filter_installed",
+            msg="HEAD health-check spans will be suppressed in Application Insights.",
+        )
+    else:
+        log.warning(
+            "health_head_filter_skipped",
+            msg=(
+                "Could not install HealthCheckHeadFilter — "
+                "TracerProvider is not the expected SDK type."
+            ),
+            provider_type=type(real_provider).__name__,
+        )
 
 
 def setup_logging() -> None:

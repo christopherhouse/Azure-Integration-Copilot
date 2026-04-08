@@ -492,3 +492,118 @@ def test_filter_bounded_memory():
     assert len(f._suppressed_traces) == 5
     # Only the last 5 trace_ids should be retained
     assert list(f._suppressed_traces.keys()) == [5, 6, 7, 8, 9]
+
+
+# ---------------------------------------------------------------------------
+# _install_health_head_filter — integration with real TracerProvider
+# ---------------------------------------------------------------------------
+
+
+def test_install_filter_wraps_active_span_processor():
+    """_install_health_head_filter() wraps the active span processor with the filter."""
+    from opentelemetry import trace as trace_api
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter, SpanExportResult
+    from opentelemetry.trace import SpanKind
+
+    import shared.logging as app_logging
+
+    class _MemExporter(SpanExporter):
+        def __init__(self):
+            self.spans = []
+
+        def export(self, spans):
+            self.spans.extend(spans)
+            return SpanExportResult.SUCCESS
+
+        def shutdown(self):
+            pass
+
+        def force_flush(self, timeout_millis: int = 30_000) -> bool:
+            return True
+
+    exporter = _MemExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+
+    with patch.object(trace_api, "get_tracer_provider", return_value=provider):
+        app_logging._install_health_head_filter()
+
+    # The active span processor should now be our filter
+    assert type(provider._active_span_processor).__name__ == "HealthCheckHeadFilter"
+
+    # Tracer created AFTER installation picks up the filter
+    tracer = provider.get_tracer("integration-test")
+
+    # HEAD health check span should be dropped
+    with tracer.start_as_current_span(
+        "HEAD /api/v1/health",
+        kind=SpanKind.SERVER,
+        attributes={"http.method": "HEAD", "http.target": "/api/v1/health"},
+    ):
+        pass
+    assert len(exporter.spans) == 0, "HEAD health check span should be suppressed"
+
+    # GET health check span should pass through
+    with tracer.start_as_current_span(
+        "GET /api/v1/health",
+        kind=SpanKind.SERVER,
+        attributes={"http.method": "GET", "http.target": "/api/v1/health"},
+    ):
+        pass
+    assert len(exporter.spans) == 1, "GET health check span should be exported"
+
+    # Normal API span should pass through
+    with tracer.start_as_current_span(
+        "GET /api/v1/projects",
+        kind=SpanKind.SERVER,
+        attributes={"http.method": "GET", "http.target": "/api/v1/projects"},
+    ):
+        pass
+    assert len(exporter.spans) == 2, "Normal API span should be exported"
+    assert [s.name for s in exporter.spans] == [
+        "GET /api/v1/health",
+        "GET /api/v1/projects",
+    ]
+
+
+def test_install_filter_logs_success(caplog):
+    """_install_health_head_filter() logs an info message on success."""
+    from opentelemetry import trace as trace_api
+    from opentelemetry.sdk.trace import TracerProvider
+
+    import shared.logging as app_logging
+
+    provider = TracerProvider()
+
+    with (
+        patch.object(trace_api, "get_tracer_provider", return_value=provider),
+        caplog.at_level(logging.INFO),
+    ):
+        app_logging._install_health_head_filter()
+
+    assert any(
+        "health_head_filter_installed" in r.message and r.levelname == "INFO"
+        for r in caplog.records
+    )
+
+
+def test_install_filter_logs_warning_for_noop_provider(caplog):
+    """_install_health_head_filter() logs a warning when the provider is not SDK type."""
+    from opentelemetry import trace as trace_api
+    from opentelemetry.trace import NoOpTracerProvider
+
+    import shared.logging as app_logging
+
+    provider = NoOpTracerProvider()
+
+    with (
+        patch.object(trace_api, "get_tracer_provider", return_value=provider),
+        caplog.at_level(logging.WARNING),
+    ):
+        app_logging._install_health_head_filter()
+
+    assert any(
+        "health_head_filter_skipped" in r.message and r.levelname == "WARNING"
+        for r in caplog.records
+    )
