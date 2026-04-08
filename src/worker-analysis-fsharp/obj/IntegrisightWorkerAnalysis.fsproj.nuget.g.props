@@ -1,0 +1,31 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <RestoreSuccess Condition=" '$(RestoreSuccess)' == '' ">True</RestoreSuccess>
+    <RestoreTool Condition=" '$(RestoreTool)' == '' ">NuGet</RestoreTool>
+    <ProjectAssetsFile Condition=" '$(ProjectAssetsFile)' == '' ">$(MSBuildThisFileDirectory)project.assets.json</ProjectAssetsFile>
+    <NuGetPackageRoot Condition=" '$(NuGetPackageRoot)' == '' ">/home/runner/.nuget/packages/</NuGetPackageRoot>
+    <NuGetPackageFolders Condition=" '$(NuGetPackageFolders)' == '' ">/home/runner/.nuget/packages/</NuGetPackageFolders>
+    <NuGetProjectStyle Condition=" '$(NuGetProjectStyle)' == '' ">PackageReference</NuGetProjectStyle>
+    <NuGetToolVersion Condition=" '$(NuGetToolVersion)' == '' ">7.0.0</NuGetToolVersion>
+  </PropertyGroup>
+  <ItemGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <SourceRoot Include="/home/runner/.nuget/packages/" />
+  </ItemGroup>
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <PkgOpenTelemetry_Instrumentation_Http Condition=" '$(PkgOpenTelemetry_Instrumentation_Http)' == '' ">/home/runner/.nuget/packages/opentelemetry.instrumentation.http/1.12.0</PkgOpenTelemetry_Instrumentation_Http>
+    <PkgMicrosoft_Extensions_Logging Condition=" '$(PkgMicrosoft_Extensions_Logging)' == '' ">/home/runner/.nuget/packages/microsoft.extensions.logging/9.0.4</PkgMicrosoft_Extensions_Logging>
+    <PkgOpenTelemetry Condition=" '$(PkgOpenTelemetry)' == '' ">/home/runner/.nuget/packages/opentelemetry/1.12.0</PkgOpenTelemetry>
+    <PkgOpenTelemetry_Extensions_Hosting Condition=" '$(PkgOpenTelemetry_Extensions_Hosting)' == '' ">/home/runner/.nuget/packages/opentelemetry.extensions.hosting/1.12.0</PkgOpenTelemetry_Extensions_Hosting>
+    <PkgOpenAI Condition=" '$(PkgOpenAI)' == '' ">/home/runner/.nuget/packages/openai/2.0.0</PkgOpenAI>
+    <PkgNewtonsoft_Json Condition=" '$(PkgNewtonsoft_Json)' == '' ">/home/runner/.nuget/packages/newtonsoft.json/13.0.3</PkgNewtonsoft_Json>
+    <PkgMicrosoft_Extensions_Logging_Console Condition=" '$(PkgMicrosoft_Extensions_Logging_Console)' == '' ">/home/runner/.nuget/packages/microsoft.extensions.logging.console/9.0.4</PkgMicrosoft_Extensions_Logging_Console>
+    <PkgMicrosoft_Azure_Cosmos Condition=" '$(PkgMicrosoft_Azure_Cosmos)' == '' ">/home/runner/.nuget/packages/microsoft.azure.cosmos/3.46.0</PkgMicrosoft_Azure_Cosmos>
+    <PkgFSharp_Core Condition=" '$(PkgFSharp_Core)' == '' ">/home/runner/.nuget/packages/fsharp.core/10.1.201</PkgFSharp_Core>
+    <PkgAzure_Monitor_OpenTelemetry_Exporter Condition=" '$(PkgAzure_Monitor_OpenTelemetry_Exporter)' == '' ">/home/runner/.nuget/packages/azure.monitor.opentelemetry.exporter/1.4.0</PkgAzure_Monitor_OpenTelemetry_Exporter>
+    <PkgAzure_Messaging_WebPubSub Condition=" '$(PkgAzure_Messaging_WebPubSub)' == '' ">/home/runner/.nuget/packages/azure.messaging.webpubsub/1.4.0</PkgAzure_Messaging_WebPubSub>
+    <PkgAzure_Messaging_EventGrid_Namespaces Condition=" '$(PkgAzure_Messaging_EventGrid_Namespaces)' == '' ">/home/runner/.nuget/packages/azure.messaging.eventgrid.namespaces/1.0.0</PkgAzure_Messaging_EventGrid_Namespaces>
+    <PkgAzure_Identity Condition=" '$(PkgAzure_Identity)' == '' ">/home/runner/.nuget/packages/azure.identity/1.13.2</PkgAzure_Identity>
+    <PkgAzure_AI_OpenAI Condition=" '$(PkgAzure_AI_OpenAI)' == '' ">/home/runner/.nuget/packages/azure.ai.openai/2.0.0</PkgAzure_AI_OpenAI>
+  </PropertyGroup>
+</Project>

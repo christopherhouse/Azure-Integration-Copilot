@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<linker>
+  <assembly fullname="IntegrisightWorkerAnalysis">
+    <resource name="FSharpSignatureData.IntegrisightWorkerAnalysis" action="remove"></resource>
+    <resource name="FSharpSignatureCompressedData.IntegrisightWorkerAnalysis" action="remove"></resource>
+    <resource name="FSharpSignatureDataB.IntegrisightWorkerAnalysis" action="remove"></resource>
+    <resource name="FSharpSignatureCompressedDataB.IntegrisightWorkerAnalysis" action="remove"></resource>
+    <resource name="FSharpOptimizationData.IntegrisightWorkerAnalysis" action="remove"></resource>
+    <resource name="FSharpOptimizationCompressedData.IntegrisightWorkerAnalysis" action="remove"></resource>
+    <resource name="FSharpOptimizationDataB.IntegrisightWorkerAnalysis" action="remove"></resource>
+    <resource name="FSharpOptimizationCompressedDataB.IntegrisightWorkerAnalysis" action="remove"></resource>
+    <resource name="FSharpOptimizationInfo.IntegrisightWorkerAnalysis" action="remove"></resource>
+    <resource name="FSharpSignatureInfo.IntegrisightWorkerAnalysis" action="remove"></resource>
+  </assembly>
+</linker>
