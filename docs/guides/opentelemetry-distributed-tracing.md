@@ -74,19 +74,21 @@ Browser generates trace_id: xyz789
            └─ All log entries include frontend.trace_id
 ```
 
-### Phase 3: Full Distributed Tracing (Optional) ✅
+### Phase 3: Full Distributed Tracing ✅
 
 **Problem:** Browser-side operations (page views, clicks, exceptions) are not captured or correlated with backend traces.
 
-**Solution:** Application Insights browser SDK with W3C Trace Context injection.
+**Solution:** Application Insights browser SDK with W3C Trace Context injection, enabled by default.
 
 #### Implementation
 
-**Browser SDK:**
+**Browser SDK (auto-enabled):**
 - `src/frontend/src/lib/appinsights.ts`: Application Insights browser client
+- `src/frontend/src/components/app-insights-telemetry.tsx`: Client component that initializes the SDK on mount
 - Automatically tracks page views, AJAX/fetch calls, exceptions, performance
 - Injects W3C `traceparent` headers into all outbound requests
 - Creates true end-to-end traces from browser → API → workers
+- Rendered in root layout (`src/frontend/src/app/layout.tsx`)
 
 **Configuration:**
 - `src/frontend/src/types/runtime-config.d.ts`: Type definitions for connection string
@@ -134,14 +136,17 @@ The `instrumentation.ts` file is automatically loaded by Next.js 16+ when placed
 
 ### Usage in React Components (Phase 3)
 
-Initialize Application Insights in root layout:
-```typescript
-import { useAppInsights } from "@/lib/appinsights";
+The browser SDK is initialized automatically via the `<AppInsightsTelemetry />` component
+in the root layout. No manual setup is required. The connection string is read from
+`window.__RUNTIME_CONFIG__.applicationInsightsConnectionString`, which is injected by the
+`<RuntimeConfig />` server component.
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  useAppInsights(); // Auto-initializes from runtime config
-  return <html>{children}</html>;
-}
+To access the Application Insights instance for custom events:
+```typescript
+import { getAppInsights } from "@/lib/appinsights";
+
+const ai = getAppInsights();
+ai?.trackEvent({ name: "custom_event", properties: { ... } });
 ```
 
 ## Observability Features
@@ -227,9 +232,9 @@ npm install @microsoft/applicationinsights-react-js@latest
 
 To disable Phase 3 (browser SDK) while keeping Phases 1 & 2:
 
-1. Remove or comment out `useAppInsights()` call in root layout
+1. Remove or comment out `<AppInsightsTelemetry />` in `src/frontend/src/app/layout.tsx`
 2. Connection string will still be available for server-side instrumentation
-3. `X-Trace-ID` header will still provide correlation
+3. `X-Trace-ID` header will still provide lightweight correlation
 
 ## Best Practices
 
