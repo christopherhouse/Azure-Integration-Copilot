@@ -7,8 +7,6 @@
     <RootNamespace>IntegrisightWorkerAnalysis</RootNamespace>
     <Nullable>enable</Nullable>
     <Optimize>true</Optimize>
-    <!-- Suppress the experimental-API warning from OpenAI.Assistants (preview SDK) -->
-    <NoWarn>$(NoWarn);OPENAI001</NoWarn>
   </PropertyGroup>
 
   <!-- F# source files — order matters (dependencies first) -->
@@ -29,12 +27,15 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Azure AI Foundry — agents via OpenAI Assistants API -->
-    <PackageReference Include="Azure.AI.OpenAI" Version="2.0.0" />
-    <PackageReference Include="OpenAI" Version="2.0.0" />
+    <!-- Microsoft Semantic Kernel — agent framework (Azure AI Foundry backend) -->
+    <PackageReference Include="Microsoft.SemanticKernel" Version="1.71.0" />
+    <PackageReference Include="Microsoft.SemanticKernel.Agents.AzureAI" Version="1.71.0-preview" />
+
+    <!-- Azure AI Agents Persistent — Azure AI Foundry Agents Service SDK -->
+    <PackageReference Include="Azure.AI.Agents.Persistent" Version="1.1.0" />
 
     <!-- Azure Identity -->
-    <PackageReference Include="Azure.Identity" Version="1.13.2" />
+    <PackageReference Include="Azure.Identity" Version="1.17.1" />
 
     <!-- Azure Event Grid Namespace (pull delivery) -->
     <PackageReference Include="Azure.Messaging.EventGrid.Namespaces" Version="1.0.0" />

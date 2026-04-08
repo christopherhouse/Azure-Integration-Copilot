@@ -1,22 +1,29 @@
-/// Agent orchestrator — analyst + evaluator using OpenAI Assistants API via Azure AI Foundry.
+/// Agent orchestrator — analyst + evaluator using Microsoft Semantic Kernel
+/// with the Azure AI Foundry Agents Service backend (AzureAIAgent).
 ///
-/// Mirrors Python workers/analysis/agent.py.
+/// Mirrors Python workers/analysis/agent.py which uses the
+/// ``agent-framework-core`` + ``agent-framework-foundry`` packages.
 ///
-/// The analyst agent uses 4 function tools to query the dependency graph.
-/// The evaluator validates the analyst response and returns a JSON verdict.
-/// On FAILED verdict, the analyst is re-prompted once (max 1 retry).
+/// Pattern:
+///   AzureAIAgent + AzureAIAgentThread — Semantic Kernel's high-level
+///   agent abstraction that handles run polling, tool-call dispatch, and
+///   thread management automatically.  Analyst tools are registered as
+///   KernelPlugin functions; SK dispatches them and feeds results back.
+///
+/// On FAILED evaluation verdict, the analyst is re-prompted once (max 1 retry).
 module IntegrisightWorkerAnalysis.AgentOrchestrator
 
-#nowarn "57" // OpenAI.Assistants is marked [<Experimental>] in the preview SDK
-
 open System
-open System.ClientModel
 open System.Collections.Generic
 open System.Text.Json
+open System.Threading
 open System.Threading.Tasks
-open Azure.AI.OpenAI
-open OpenAI.Assistants
+open Azure.AI.Agents.Persistent
 open Microsoft.Extensions.Logging
+open Microsoft.SemanticKernel
+open Microsoft.SemanticKernel.ChatCompletion
+open Microsoft.SemanticKernel.Agents
+open Microsoft.SemanticKernel.Agents.AzureAI
 open Models
 open JsonHelpers
 open Tools
@@ -88,241 +95,226 @@ let private buildEvaluatorPrompt
 
 
 // ---------------------------------------------------------------------------
-// Run loop — handles polling and tool call dispatch
+// SK KernelPlugin builder — wraps the four F# tool functions
 // ---------------------------------------------------------------------------
 
-/// Collect all messages from an AsyncCollectionResult into a list.
-let private collectMessages (result: AsyncCollectionResult<ThreadMessage>) =
+/// Build a KernelPlugin that wraps the four analysis tools as KernelFunctions.
+/// SK uses these to auto-dispatch tool calls during an agent run.
+let private buildAnalystPlugin (toolDefs: AnalysisToolDefinition list) : KernelPlugin =
+    let functions =
+        toolDefs
+        |> List.map (fun td ->
+            // Wrap the tool as a KernelFunction with a string input / string output
+            let func =
+                KernelFunctionFactory.CreateFromMethod(
+                    Func<string, Task<string>>(fun (args: string) -> td.Execute(args)),
+                    td.Name,
+                    td.Description
+                )
+            func)
+
+    KernelPluginFactory.CreateFromFunctions("analysis_tools", functions)
+
+
+// ---------------------------------------------------------------------------
+// Parse evaluator response
+// ---------------------------------------------------------------------------
+
+let private parseEvaluation (evalText: string) (logger: ILogger) : EvaluationResult =
+    try
+        let cleaned =
+            let s = evalText.Trim()
+            if s.StartsWith("```") then
+                s.Split('\n')
+                |> Array.filter (fun l -> not (l.TrimStart().StartsWith("```")))
+                |> String.concat "\n"
+            else
+                s
+
+        let doc = JsonDocument.Parse(cleaned)
+        let root = doc.RootElement
+
+        let verdict =
+            match tryGetProp "verdict" root with
+            | true, v ->
+                EvaluationVerdict.ofString (v.GetString() |> Option.ofObj |> Option.defaultValue "PASSED")
+            | _ -> Passed
+
+        let confidence =
+            match tryGetProp "confidence" root with
+            | true, v -> v.GetDouble()
+            | _ -> 0.5
+
+        let issues =
+            match tryGetProp "issues" root with
+            | true, v when v.ValueKind = JsonValueKind.Array ->
+                [ for i in v.EnumerateArray() ->
+                      i.GetString() |> Option.ofObj |> Option.defaultValue "" ]
+            | _ -> []
+
+        let summary =
+            match tryGetProp "summary" root with
+            | true, v -> v.GetString() |> Option.ofObj |> Option.defaultValue ""
+            | _ -> ""
+
+        { Verdict = verdict; Confidence = confidence; Issues = issues; Summary = summary }
+
+    with ex ->
+        logger.LogWarning(ex, "evaluator_parse_failed raw={Raw}", evalText)
+        {
+            Verdict = Passed
+            Confidence = 0.3
+            Issues = []
+            Summary = "Evaluator response could not be parsed; defaulting to PASSED."
+        }
+
+
+// ---------------------------------------------------------------------------
+// Run analyst with SK AzureAIAgent
+// ---------------------------------------------------------------------------
+
+/// Collect all messages from an IAsyncEnumerable.
+let private collectAsync<'T> (seq: IAsyncEnumerable<'T>) (ct: CancellationToken) =
     task {
-        let mutable msgs: ThreadMessage list = []
-        let enumerator = result.GetAsyncEnumerator()
+        let mutable items: 'T list = []
+        let enumerator = seq.GetAsyncEnumerator(ct)
         let mutable keepGoing = true
         while keepGoing do
             let! hasNext = enumerator.MoveNextAsync()
             if hasNext then
-                msgs <- enumerator.Current :: msgs
+                items <- enumerator.Current :: items
             else
                 keepGoing <- false
-        return List.rev msgs
+        return List.rev items
     }
 
-/// Get text from the last assistant message in a thread.
-let private getLastAssistantText (assistantClient: AssistantClient) (threadId: string) =
-    task {
-        let messagesResult = assistantClient.GetMessagesAsync(threadId, null)
-        let! allMessages = collectMessages messagesResult
-        return
-            allMessages
-            |> List.tryFind (fun m -> m.Role = MessageRole.Assistant)
-            |> Option.map (fun m ->
-                m.Content
-                |> Seq.tryFind (fun c -> c.Text <> null)
-                |> Option.map (fun c -> c.Text)
-                |> Option.defaultValue "")
-            |> Option.defaultValue ""
-    }
-
-/// Execute a single assistant run on a new thread, dispatching tool calls.
-/// Returns (assistantText, toolCallRecords).
-let private runWithTools
-    (assistantClient: AssistantClient)
-    (assistantId: string)
+/// Run the analyst agent on a single prompt.  Returns the text response and
+/// a list of tool calls extracted from the message items.
+let private runAgent
+    (agent: AzureAIAgent)
     (userPrompt: string)
-    (toolMap: Map<string, string -> Task<string>>)
     (logger: ILogger)
+    (ct: CancellationToken)
     : Task<string * ToolCallRecord list>
     =
     task {
-        // Create thread
-        let! threadResult = assistantClient.CreateThreadAsync(ThreadCreationOptions())
-        let thread = threadResult.Value
-        let mutable threadCreated = true
-
-        let cleanup () =
-            task {
-                if threadCreated then
-                    try
-                        let! _ = assistantClient.DeleteThreadAsync(thread.Id)
-                        ()
-                    with ex ->
-                        logger.LogWarning(ex, "thread_delete_failed thread_id={ThreadId}", thread.Id)
-            }
-
-        try
-            // Add user message
-            let content = [| MessageContent.FromText(userPrompt) |] :> IEnumerable<MessageContent>
-            let! _ = assistantClient.CreateMessageAsync(thread.Id, MessageRole.User, content)
-
-            // Start run
-            let! runResult = assistantClient.CreateRunAsync(thread.Id, assistantId, RunCreationOptions())
-            let mutable run = runResult.Value
-            let mutable keepPolling = true
-            let mutable collectedToolCalls: ToolCallRecord list = []
-
-            while keepPolling do
-                let status = run.Status
-
-                if status = RunStatus.Completed
-                   || status = RunStatus.Failed
-                   || status = RunStatus.Cancelled
-                   || status = RunStatus.Expired then
-                    keepPolling <- false
-
-                elif status = RunStatus.RequiresAction then
-                    // Dispatch tool calls and submit outputs
-                    let toolOutputs = List<ToolOutput>()
-
-                    for action in run.RequiredActions do
-                        let toolName = action.FunctionName
-                        let argsJson = action.FunctionArguments
-
-                        let! output =
-                            match Map.tryFind toolName toolMap with
-                            | Some f ->
-                                task {
-                                    try
-                                        return! f argsJson
-                                    with ex ->
-                                        logger.LogWarning(ex, "tool_execution_failed tool={Tool}", toolName)
-                                        return JsonSerializer.Serialize({| error = ex.Message |})
-                                }
-                            | None ->
-                                Task.FromResult(
-                                    JsonSerializer.Serialize({| error = $"Unknown tool: {toolName}" |})
-                                )
-
-                        toolOutputs.Add(ToolOutput(action.ToolCallId, output))
-
-                        collectedToolCalls <-
-                            collectedToolCalls
-                            @ [ { ToolName = toolName
-                                  Arguments =
-                                      try
-                                          JsonDocument.Parse(argsJson).RootElement
-                                      with _ ->
-                                          JsonDocument.Parse("{}").RootElement
-                                  Output = Some output } ]
-
-                    let! r = assistantClient.SubmitToolOutputsToRunAsync(thread.Id, run.Id, toolOutputs)
-                    run <- r.Value
-
-                else
-                    // Queued or InProgress — wait then poll
-                    do! Task.Delay(TimeSpan.FromMilliseconds(500.0))
-                    let! r = assistantClient.GetRunAsync(thread.Id, run.Id)
-                    run <- r.Value
-
-            // Extract the last assistant message
-            let! assistantText = getLastAssistantText assistantClient thread.Id
-            do! cleanup ()
-            threadCreated <- false
-            return assistantText, collectedToolCalls
-
-        with ex ->
-            do! cleanup ()
-            threadCreated <- false
-            raise ex
-            return "", []
-    }
-
-/// Run the evaluator agent (no tools) and parse its JSON verdict.
-let private runEvaluator
-    (assistantClient: AssistantClient)
-    (evaluatorAssistantId: string)
-    (userPrompt: string)
-    (analystResponse: string)
-    (toolCalls: ToolCallRecord list)
-    (logger: ILogger)
-    : Task<EvaluationResult>
-    =
-    task {
-        let evalPrompt = buildEvaluatorPrompt userPrompt analystResponse toolCalls
-
-        let! threadResult = assistantClient.CreateThreadAsync(ThreadCreationOptions())
-        let thread = threadResult.Value
+        let thread = AzureAIAgentThread(agent.Client)
 
         let cleanup () =
             task {
                 try
-                    let! _ = assistantClient.DeleteThreadAsync(thread.Id)
-                    ()
+                    do! thread.DeleteAsync()
                 with ex ->
-                    logger.LogWarning(ex, "eval_thread_delete_failed thread_id={ThreadId}", thread.Id)
+                    logger.LogWarning(ex, "thread_delete_failed")
             }
 
         try
-            let content = [| MessageContent.FromText(evalPrompt) |] :> IEnumerable<MessageContent>
-            let! _ = assistantClient.CreateMessageAsync(thread.Id, MessageRole.User, content)
-            let! runResult = assistantClient.CreateRunAsync(thread.Id, evaluatorAssistantId, RunCreationOptions())
-            let mutable run = runResult.Value
+            let messages =
+                [| ChatMessageContent(AuthorRole.User, userPrompt) |]
+                :> ICollection<ChatMessageContent>
 
-            while run.Status = RunStatus.Queued || run.Status = RunStatus.InProgress do
-                do! Task.Delay(TimeSpan.FromMilliseconds(500.0))
-                let! r = assistantClient.GetRunAsync(thread.Id, run.Id)
-                run <- r.Value
+            let! responseItems = collectAsync (agent.InvokeAsync(messages, thread, AgentInvokeOptions(), ct)) ct
 
-            let! evalText = getLastAssistantText assistantClient thread.Id
+            let mutable toolCalls: ToolCallRecord list = []
+            let mutable responseText = ""
+
+            for item in responseItems do
+                let msg = item.Message
+                if msg <> null then
+                    for contentItem in msg.Items do
+                        match contentItem with
+                        | :? FunctionCallContent as fc ->
+                            let argsJson =
+                                if fc.Arguments <> null then
+                                    try
+                                        JsonSerializer.Serialize(fc.Arguments :> IDictionary<string, obj>)
+                                    with _ -> "{}"
+                                else "{}"
+                            let argsElem =
+                                try JsonDocument.Parse(argsJson).RootElement
+                                with _ -> JsonDocument.Parse("{}").RootElement
+                            toolCalls <-
+                                toolCalls
+                                @ [ { ToolName = fc.FunctionName |> Option.ofObj |> Option.defaultValue ""
+                                      Arguments = argsElem
+                                      Output = None } ]
+                        | :? FunctionResultContent as fr ->
+                            let result : string =
+                                match box fr.Result with
+                                | null -> ""
+                                | r ->
+                                    match r.ToString() with
+                                    | null -> ""
+                                    | s -> s
+                            // Attach result to the most recent matching tool call
+                            toolCalls <-
+                                let frFuncName = fr.FunctionName |> Option.ofObj |> Option.defaultValue ""
+                                let rec attachResult lst =
+                                    match lst with
+                                    | [] -> []
+                                    | tc :: rest when tc.Output.IsNone && tc.ToolName = frFuncName ->
+                                        { tc with Output = Some result } :: rest
+                                    | tc :: rest -> tc :: attachResult rest
+                                List.rev (attachResult (List.rev toolCalls))
+                        | _ -> ()
+
+                    if msg.Role = AuthorRole.Assistant && not (String.IsNullOrEmpty msg.Content) then
+                        responseText <- msg.Content |> Option.ofObj |> Option.defaultValue responseText
+
             do! cleanup ()
+            return responseText, toolCalls
 
-            // Parse JSON verdict
-            try
-                let cleaned =
-                    let s = evalText.Trim()
-                    if s.StartsWith("```") then
-                        s.Split('\n')
-                        |> Array.filter (fun l -> not (l.TrimStart().StartsWith("```")))
-                        |> String.concat "\n"
-                    else
-                        s
+        with ex ->
+            do! cleanup ()
+            raise ex
+            return "", []
+    }
 
-                let doc = JsonDocument.Parse(cleaned)
-                let root = doc.RootElement
 
-                let verdict =
-                    match tryGetProp "verdict" root with
-                    | true, v ->
-                        EvaluationVerdict.ofString (v.GetString() |> Option.ofObj |> Option.defaultValue "PASSED")
-                    | _ -> Passed
+/// Run the evaluator agent (no tools) on the eval prompt. Returns raw text.
+let private runEvaluatorAgent
+    (agent: AzureAIAgent)
+    (evalPrompt: string)
+    (logger: ILogger)
+    (ct: CancellationToken)
+    : Task<string>
+    =
+    task {
+        let thread = AzureAIAgentThread(agent.Client)
 
-                let confidence =
-                    match tryGetProp "confidence" root with
-                    | true, v -> v.GetDouble()
-                    | _ -> 0.5
+        let cleanup () =
+            task {
+                try
+                    do! thread.DeleteAsync()
+                with ex ->
+                    logger.LogWarning(ex, "eval_thread_delete_failed")
+            }
 
-                let issues =
-                    match tryGetProp "issues" root with
-                    | true, v when v.ValueKind = JsonValueKind.Array ->
-                        [ for i in v.EnumerateArray() ->
-                              i.GetString() |> Option.ofObj |> Option.defaultValue "" ]
-                    | _ -> []
+        try
+            let messages =
+                [| ChatMessageContent(AuthorRole.User, evalPrompt) |]
+                :> ICollection<ChatMessageContent>
 
-                let summary =
-                    match tryGetProp "summary" root with
-                    | true, v -> v.GetString() |> Option.ofObj |> Option.defaultValue ""
-                    | _ -> ""
+            let! responseItems = collectAsync (agent.InvokeAsync(messages, thread, AgentInvokeOptions(), ct)) ct
 
-                return { Verdict = verdict; Confidence = confidence; Issues = issues; Summary = summary }
+            let text =
+                responseItems
+                |> List.tryFindBack (fun item ->
+                    let msg = item.Message
+                    not (isNull (box msg))
+                    && msg.Role = AuthorRole.Assistant
+                    && not (String.IsNullOrEmpty msg.Content))
+                |> Option.map (fun item ->
+                    item.Message.Content |> Option.ofObj |> Option.defaultValue "")
+                |> Option.defaultValue ""
 
-            with ex ->
-                logger.LogWarning(ex, "evaluator_parse_failed raw={Raw}", evalText)
-                return
-                    {
-                        Verdict = Passed
-                        Confidence = 0.3
-                        Issues = []
-                        Summary = "Evaluator response could not be parsed; defaulting to PASSED."
-                    }
+            do! cleanup ()
+            return text
 
         with ex ->
             do! cleanup ()
             logger.LogWarning(ex, "evaluator_run_failed")
-            return
-                {
-                    Verdict = Passed
-                    Confidence = 0.0
-                    Issues = []
-                    Summary = $"Evaluator failed: {ex.Message}"
-                }
+            return ""
     }
 
 
@@ -330,129 +322,130 @@ let private runEvaluator
 // Orchestrator
 // ---------------------------------------------------------------------------
 
-type AgentOrchestrator(settings: Config.Settings, toolDefs: AnalysisToolDefinition list, logger: ILogger) =
+type AgentOrchestrator
+    (
+        settings: Config.Settings,
+        toolDefs: AnalysisToolDefinition list,
+        logger: ILogger
+    ) =
 
-    let mutable assistantClient: AssistantClient option = None
-    let mutable analystAssistantId: string option = None
-    let mutable evaluatorAssistantId: string option = None
-
-    let toolMap: Map<string, string -> Task<string>> =
-        toolDefs
-        |> List.map (fun td -> td.Name, td.Execute)
-        |> Map.ofList
+    let mutable agentsClient: PersistentAgentsClient option = None
+    let mutable analystAgent: AzureAIAgent option = None
+    let mutable evaluatorAgent: AzureAIAgent option = None
 
     let ensureClient () =
-        match assistantClient with
+        match agentsClient with
         | Some c -> c
         | None ->
             let credential = Credential.createCredential settings.AzureClientId
-            let azureClient = AzureOpenAIClient(Uri(settings.FoundryProjectEndpoint), credential)
-            let c = azureClient.GetAssistantClient()
-            assistantClient <- Some c
-            c
+            let client = AzureAIAgent.CreateAgentsClient(settings.FoundryProjectEndpoint, credential)
+            agentsClient <- Some client
+            client
 
-    let ensureAssistants () =
+    let ensureAgents () =
         task {
-            let client = ensureClient ()
+            if analystAgent.IsNone then
+                let client = ensureClient ()
 
-            if analystAssistantId.IsNone then
-                // Build analyst tool definitions (OpenAI.Assistants.FunctionToolDefinition)
-                let azureToolDefs =
-                    toolDefs
-                    |> List.map (fun td ->
-                        let funcDef = FunctionToolDefinition(FunctionName = td.Name)
-                        funcDef.Description <- td.Description
-                        funcDef.Parameters <- BinaryData.FromString(td.ParametersSchema)
-                        funcDef :> OpenAI.Assistants.ToolDefinition)
+                // Build the analyst Kernel with tool plugin
+                let analystPlugin = buildAnalystPlugin toolDefs
+                let analystKernel =
+                    Kernel.CreateBuilder()
+                        .Build()
+                analystKernel.Plugins.Add(analystPlugin)
 
-                let analystOptions = AssistantCreationOptions()
-                analystOptions.Name <- "integration-analyst"
-                analystOptions.Instructions <- analystSystemPrompt
-                for t in azureToolDefs do
-                    analystOptions.Tools.Add(t)
+                // Create the persistent agent definition via Foundry
+                let! analystDef =
+                    client.Administration.CreateAgentAsync(
+                        settings.FoundryModelDeploymentName,
+                        name = "integration-analyst",
+                        description = null,
+                        instructions = analystSystemPrompt
+                    )
 
-                let! analystResult = client.CreateAssistantAsync(settings.FoundryModelDeploymentName, analystOptions)
-                analystAssistantId <- Some analystResult.Value.Id
-                logger.LogInformation("analyst_assistant_created assistant_id={AssistantId}", analystResult.Value.Id)
+                let analyst = AzureAIAgent(analystDef.Value, client, [ analystPlugin ])
+                analystAgent <- Some analyst
+                logger.LogInformation("analyst_agent_created agent_id={AgentId}", analystDef.Value.Id)
 
-                let evaluatorOptions = AssistantCreationOptions()
-                evaluatorOptions.Name <- "quality-evaluator"
-                evaluatorOptions.Instructions <- evaluatorSystemPrompt
+                // Evaluator has no tools
+                let! evalDef =
+                    client.Administration.CreateAgentAsync(
+                        settings.FoundryModelDeploymentName,
+                        name = "quality-evaluator",
+                        description = null,
+                        instructions = evaluatorSystemPrompt
+                    )
 
-                let! evalResult = client.CreateAssistantAsync(settings.FoundryModelDeploymentName, evaluatorOptions)
-                evaluatorAssistantId <- Some evalResult.Value.Id
-                logger.LogInformation("evaluator_assistant_created assistant_id={AssistantId}", evalResult.Value.Id)
+                let evaluator = AzureAIAgent(evalDef.Value, client)
+                evaluatorAgent <- Some evaluator
+                logger.LogInformation("evaluator_agent_created agent_id={AgentId}", evalDef.Value.Id)
         }
 
     /// Run the full analyst → evaluator flow with up to 1 retry on FAILED.
-    member _.RunAnalysisAsync(userPrompt: string) =
+    member _.RunAnalysisAsync(userPrompt: string, ?ct: CancellationToken) =
         task {
-            do! ensureAssistants ()
+            let ct = defaultArg ct CancellationToken.None
+            do! ensureAgents ()
 
-            let client = ensureClient ()
-            let analystId = analystAssistantId.Value
-            let evaluatorId = evaluatorAssistantId.Value
+            let analyst = analystAgent.Value
+            let evaluator = evaluatorAgent.Value
 
             let mutable retryCount = 0
 
             // Step 1: Run analyst
-            let! (analystResponse, toolCallRecords) =
-                runWithTools client analystId userPrompt toolMap logger
+            let! (analystResponse, toolCallRecords) = runAgent analyst userPrompt logger ct
 
             // Step 2: Evaluate
-            let! evalResult =
-                runEvaluator client evaluatorId userPrompt analystResponse toolCallRecords logger
+            let evalPrompt = buildEvaluatorPrompt userPrompt analystResponse toolCallRecords
+            let! evalText = runEvaluatorAgent evaluator evalPrompt logger ct
+            let mutable evalResult = parseEvaluation evalText logger
 
             // Step 3: Retry once on FAILED
-            let! finalResponse, finalToolCalls, finalEval =
-                task {
-                    if evalResult.Verdict = EvalFailed && retryCount < 1 then
-                        retryCount <- retryCount + 1
-                        let issuesText =
-                            if evalResult.Issues.IsEmpty then
-                                evalResult.Summary
-                            else
-                                String.concat "; " evalResult.Issues
-                        let revisionPrompt =
-                            $"Your previous response had issues: {issuesText}. \
-                              Please revise your answer using the tools to verify your claims."
+            if evalResult.Verdict = EvalFailed && retryCount < 1 then
+                retryCount <- retryCount + 1
+                let issuesText =
+                    if evalResult.Issues.IsEmpty then evalResult.Summary
+                    else String.concat "; " evalResult.Issues
+                let revisionPrompt =
+                    $"Your previous response had issues: {issuesText}. \
+                      Please revise your answer using the tools to verify your claims."
 
-                        let! (r2, tc2) = runWithTools client analystId revisionPrompt toolMap logger
-                        let! eval2 = runEvaluator client evaluatorId userPrompt r2 tc2 logger
-                        return r2, tc2, eval2
-                    else
-                        return analystResponse, toolCallRecords, evalResult
-                }
+                let! (r2, tc2) = runAgent analyst revisionPrompt logger ct
+                let evalPrompt2 = buildEvaluatorPrompt userPrompt r2 tc2
+                let! evalText2 = runEvaluatorAgent evaluator evalPrompt2 logger ct
+                evalResult <- parseEvaluation evalText2 logger
 
-            return
-                {
-                    Response = finalResponse
-                    ToolCalls = finalToolCalls
-                    Evaluation = Some finalEval
-                    RetryCount = retryCount
-                }
+                return { Response = r2; ToolCalls = tc2; Evaluation = Some evalResult; RetryCount = retryCount }
+            else
+                return
+                    {
+                        Response = analystResponse
+                        ToolCalls = toolCallRecords
+                        Evaluation = Some evalResult
+                        RetryCount = retryCount
+                    }
         }
 
-    /// Clean up assistants from Azure AI Foundry.
+    /// Clean up agents from Azure AI Foundry.
     member _.CloseAsync() =
         task {
             let client = ensureClient ()
 
-            let deleteAssistant (assistantIdOpt: string option) =
+            let deleteAgent (agentOpt: AzureAIAgent option) =
                 task {
-                    match assistantIdOpt with
+                    match agentOpt with
                     | None -> ()
-                    | Some id ->
+                    | Some a ->
                         try
-                            let! _ = client.DeleteAssistantAsync(id)
+                            let! _ = client.Administration.DeleteAgentAsync(a.Definition.Id)
                             ()
                         with ex ->
-                            logger.LogWarning(ex, "assistant_delete_failed assistant_id={AssistantId}", id)
+                            logger.LogWarning(ex, "agent_delete_failed agent_id={AgentId}", a.Definition.Id)
                 }
 
-            do! deleteAssistant analystAssistantId
-            do! deleteAssistant evaluatorAssistantId
-            analystAssistantId <- None
-            evaluatorAssistantId <- None
-            assistantClient <- None
+            do! deleteAgent analystAgent
+            do! deleteAgent evaluatorAgent
+            analystAgent <- None
+            evaluatorAgent <- None
+            agentsClient <- None
         }
