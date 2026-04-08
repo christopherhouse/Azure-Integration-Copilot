@@ -140,20 +140,22 @@ class TestCreateAnalysisEndpoint:
         with mock1, mock2, mock3, mock4:
             with patch("domains.analysis.service.tenant_repository") as mock_tenant_repo:
                 mock_tenant_repo.increment_usage = AsyncMock()
-                with patch.object(
-                    analysis_service._repo,
-                    "create",
-                    new_callable=AsyncMock,
-                ):
+                with patch("domains.analysis.service.build_cloud_event") as mock_build_event:
+                    mock_build_event.return_value = None  # We don't care about the event object
                     with patch.object(
-                        analysis_service._publisher,
-                        "publish_event",
+                        analysis_service._repo,
+                        "create",
                         new_callable=AsyncMock,
                     ):
-                        resp = await client.post(
-                            "/api/v1/projects/p1/analyses",
-                            json={"prompt": "test"},
-                        )
+                        with patch.object(
+                            analysis_service._publisher,
+                            "publish_event",
+                            new_callable=AsyncMock,
+                        ):
+                            resp = await client.post(
+                                "/api/v1/projects/p1/analyses",
+                                json={"prompt": "test"},
+                            )
 
         assert resp.status_code == 202
         mock_tenant_repo.increment_usage.assert_called_once_with("t-001", "daily_analysis_count")
