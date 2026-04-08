@@ -240,9 +240,9 @@ describe("AnalysisMessage", () => {
           toolCalls: [
             {
               id: "tc-1",
-              name: "search_graph",
+              toolName: "search_graph",
               arguments: { query: "api" },
-              result: "found 3",
+              output: "found 3",
             },
           ],
         })}
