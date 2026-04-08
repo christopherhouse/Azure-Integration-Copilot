@@ -218,7 +218,52 @@ jobs:
           cargo test -- --format=pretty 2>&1 | tee ../../test-results/rust-results.txt
 
   # -------------------------------------------------------------------------
-  # Job 5 — Bicep: lint, build, publish artifacts
+  # Job 5 — F# analysis worker: build, test
+  # -------------------------------------------------------------------------
+  build-and-test-analysis-fsharp:
+    name: "F# Analysis Worker — Build & Test"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/worker-analysis-fsharp/**/*.fsproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Restore NuGet dependencies
+        working-directory: src/worker-analysis-fsharp
+        run: dotnet restore
+
+      - name: Build (Release)
+        working-directory: src/worker-analysis-fsharp
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        working-directory: src/worker-analysis-fsharp
+        continue-on-error: true
+        run: dotnet test --no-build --configuration Release --logger "trx;LogFileName=../../test-results/analysis-fsharp-results.trx"
+
+      - name: Publish test results
+        if: always() && hashFiles('test-results/analysis-fsharp-results.trx') != ''
+        uses: dorny/test-reporter@v1
+        with:
+          name: F# Analysis Worker Tests
+          path: test-results/analysis-fsharp-results.trx
+          reporter: dotnet-trx
+          fail-on-error: true
+
+  # -------------------------------------------------------------------------
+  # Job 6 — Bicep: lint, build, publish artifacts
   # -------------------------------------------------------------------------
   bicep-build:
     name: "Bicep — Lint & Build"
@@ -263,12 +308,12 @@ jobs:
           retention-days: 7
 
   # -------------------------------------------------------------------------
-  # Job 6 — Container build matrix: build, scan, push (parallel per image)
+  # Job 7 — Container build matrix: build, scan, push (parallel per image)
   # -------------------------------------------------------------------------
   container-build:
     name: "Container — ${{ matrix.image_name }}"
     runs-on: ubuntu-latest
-    needs: [build-and-test-frontend, build-and-test-backend, build-and-test-rust, e2e-frontend]
+    needs: [build-and-test-frontend, build-and-test-backend, build-and-test-rust, e2e-frontend, build-and-test-analysis-fsharp]
 
     strategy:
       fail-fast: false
@@ -314,6 +359,11 @@ jobs:
             context: src/worker-parser-rust
             dockerfile: Dockerfile
             cache_scope: worker-parser-rust
+          - name: worker-analysis-fsharp
+            image_name: integrisight-worker-analysis-fsharp
+            context: src/worker-analysis-fsharp
+            dockerfile: Dockerfile
+            cache_scope: worker-analysis-fsharp
 
     env:
       REGISTRY: ghcr.io
