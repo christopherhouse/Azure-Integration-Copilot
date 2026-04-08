@@ -63,7 +63,7 @@ jobs:
 
       - name: Publish test results
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: Frontend Tests
           path: test-results/frontend-results.xml
@@ -111,7 +111,7 @@ jobs:
 
       - name: Publish e2e test results
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: Frontend E2E Tests (Playwright)
           path: tests/playwright/playwright-results.xml
@@ -163,7 +163,7 @@ jobs:
 
       - name: Publish test results
         if: always()
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@v3
         with:
           name: Backend Tests
           path: test-results/backend-results.xml
