@@ -86,7 +86,7 @@ let getGraphNeighbors (graphRepo: GraphRepository) (args: string) =
         let ctx = getContext ()
         let pk = $"{ctx.TenantId}:{ctx.ProjectId}"
 
-        let doc = JsonDocument.Parse(args)
+        use doc = JsonDocument.Parse(args)
         let root = doc.RootElement
 
         let componentId =
@@ -135,7 +135,7 @@ let getComponentDetails (graphRepo: GraphRepository) (args: string) =
         let ctx = getContext ()
         let pk = $"{ctx.TenantId}:{ctx.ProjectId}"
 
-        let doc = JsonDocument.Parse(args)
+        use doc = JsonDocument.Parse(args)
         let root = doc.RootElement
 
         let componentId =
@@ -181,7 +181,7 @@ let runImpactAnalysis (graphRepo: GraphRepository) (args: string) =
         let ctx = getContext ()
         let pk = $"{ctx.TenantId}:{ctx.ProjectId}"
 
-        let doc = JsonDocument.Parse(args)
+        use doc = JsonDocument.Parse(args)
         let root = doc.RootElement
 
         let componentId =
@@ -223,16 +223,20 @@ let runImpactAnalysis (graphRepo: GraphRepository) (args: string) =
                 for (_, _, comp) in neighbors do
                     if not (visited.Contains(comp.Id)) then
                         visited.Add(comp.Id) |> ignore
+                        // Prepend (O(1)) instead of append; reversed at end.
                         impacted <-
-                            impacted
-                            @ [ {|
-                                    id = comp.Id
-                                    name = comp.Name
-                                    displayName = comp.DisplayName
-                                    componentType = comp.ComponentType
-                                    depth = depth + 1
-                                |} ]
+                            {|
+                                id = comp.Id
+                                name = comp.Name
+                                displayName = comp.DisplayName
+                                componentType = comp.ComponentType
+                                depth = depth + 1
+                            |}
+                            :: impacted
                         queue.Enqueue(struct (comp.Id, depth + 1))
+
+        // Reverse once (O(n)) to restore BFS order.
+        let impacted = List.rev impacted
 
         // Get root component info
         let! rootOpt = graphRepo.GetComponentAsync(pk, componentId)

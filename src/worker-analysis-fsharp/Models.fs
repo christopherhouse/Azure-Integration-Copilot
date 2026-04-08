@@ -62,6 +62,9 @@ module EvaluationVerdict =
 type ToolCallRecord =
     {
         ToolName: string
+        /// Call identifier emitted by the agent framework.  Used to pair results
+        /// with their originating call when a CallId is available.
+        CallId: string option
         Arguments: JsonElement
         Output: string option
     }
@@ -161,9 +164,18 @@ let cosmosJsonOptions =
     opts.DefaultIgnoreCondition <- JsonIgnoreCondition.WhenWritingNull
     opts
 
+/// A standalone empty JSON object element used as a safe fallback.
+/// Created once at module load; cloned from a locally-disposed JsonDocument so
+/// it is not tied to any parent document lifetime.
+let private emptyJsonObject : JsonElement =
+    let doc = JsonDocument.Parse("{}")
+    let e = doc.RootElement.Clone()
+    doc.Dispose()
+    e
+
 /// Parse an Analysis document from a Cosmos DB JSON string.
 let analysisOfJson (json: string) : Analysis =
-    let doc = JsonDocument.Parse(json)
+    use doc = JsonDocument.Parse(json)
     let root = doc.RootElement
 
     let getString name =
@@ -202,15 +214,19 @@ let analysisOfJson (json: string) : Analysis =
                     match tryGetProp "toolName" item with
                     | true, v -> v.GetString() |> Option.ofObj |> Option.defaultValue ""
                     | _ -> ""
+                let callId =
+                    match tryGetProp "callId" item with
+                    | true, v -> v.GetString() |> Option.ofObj
+                    | _ -> None
                 let arguments =
                     match tryGetProp "arguments" item with
-                    | true, v -> v
-                    | _ -> JsonDocument.Parse("{}").RootElement
+                    | true, v -> v.Clone()  // Clone: ToolCallRecord outlives the parent JsonDocument
+                    | _ -> emptyJsonObject
                 let output =
                     match tryGetProp "output" item with
                     | true, v when v.ValueKind <> JsonValueKind.Null -> v.GetString() |> Option.ofObj
                     | _ -> None
-                yield { ToolName = toolName; Arguments = arguments; Output = output } ]
+                yield { ToolName = toolName; CallId = callId; Arguments = arguments; Output = output } ]
 
     let parseEvaluation (el: JsonElement) : EvaluationResult option =
         if el.ValueKind = JsonValueKind.Null || el.ValueKind = JsonValueKind.Undefined then None
@@ -304,6 +320,9 @@ let analysisToDict (analysis: Analysis) : System.Collections.Generic.Dictionary<
             |> List.map (fun tc ->
                 let tcd = System.Collections.Generic.Dictionary<string, obj>()
                 tcd["toolName"] <- tc.ToolName
+                match tc.CallId with
+                | Some id -> tcd["callId"] <- id
+                | None -> ()
                 tcd["arguments"] <- JsonSerializer.Deserialize<obj>(tc.Arguments.GetRawText())
                 match tc.Output with
                 | Some o -> tcd["output"] <- o
@@ -339,10 +358,11 @@ let componentOfElement (el: JsonElement) : Component =
         match tryGetProp name el with
         | true, v -> v.GetInt32()
         | _ -> 0
+    // Clone stored JsonElement fields so they are not tied to the parent document.
     let gEl name =
         match tryGetProp name el with
-        | true, v -> v
-        | _ -> JsonDocument.Parse("{}").RootElement
+        | true, v -> v.Clone()
+        | _ -> emptyJsonObject
     let tags =
         match tryGetProp "tags" el with
         | true, v when v.ValueKind = JsonValueKind.Array ->
@@ -396,10 +416,11 @@ let graphSummaryOfElement (el: JsonElement) : GraphSummary =
         match tryGetProp name el with
         | true, v -> v.GetInt32()
         | _ -> 0
+    // Clone stored JsonElement fields so they are not tied to the parent document.
     let gEl name =
         match tryGetProp name el with
-        | true, v -> v
-        | _ -> JsonDocument.Parse("{}").RootElement
+        | true, v -> v.Clone()
+        | _ -> emptyJsonObject
     {
         Id = g "id"
         PartitionKey = g "partitionKey"

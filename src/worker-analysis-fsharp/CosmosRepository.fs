@@ -96,11 +96,10 @@ type GraphRepository(provider: CosmosClientProvider) =
                 if response.IsSuccessStatusCode then
                     use reader = new System.IO.StreamReader(response.Content)
                     let! json = reader.ReadToEndAsync()
-                    let doc = JsonDocument.Parse(json)
-                    let root = doc.RootElement
-                    match tryGetProp "type" root with
+                    use doc = JsonDocument.Parse(json)
+                    match tryGetProp "type" doc.RootElement with
                     | true, t when t.GetString() = "component" ->
-                        return Some(componentOfElement root)
+                        return Some(componentOfElement doc.RootElement)
                     | _ -> return None
                 else
                     return None
@@ -127,7 +126,7 @@ type GraphRepository(provider: CosmosClientProvider) =
                 if page.IsSuccessStatusCode then
                     use reader = new System.IO.StreamReader(page.Content)
                     let! json = reader.ReadToEndAsync()
-                    let doc = JsonDocument.Parse(json)
+                    use doc = JsonDocument.Parse(json)
                     match tryGetProp "Documents" doc.RootElement with
                     | true, docs when docs.ValueKind = JsonValueKind.Array ->
                         match docs.EnumerateArray() |> Seq.tryHead with
@@ -163,7 +162,7 @@ type GraphRepository(provider: CosmosClientProvider) =
                     if page.IsSuccessStatusCode then
                         use reader = new System.IO.StreamReader(page.Content)
                         let! json = reader.ReadToEndAsync()
-                        let doc = JsonDocument.Parse(json)
+                        use doc = JsonDocument.Parse(json)
                         match tryGetProp "Documents" doc.RootElement with
                         | true, docs when docs.ValueKind = JsonValueKind.Array ->
                             for item in docs.EnumerateArray() do
@@ -191,7 +190,7 @@ type GraphRepository(provider: CosmosClientProvider) =
                     if page.IsSuccessStatusCode then
                         use reader = new System.IO.StreamReader(page.Content)
                         let! json = reader.ReadToEndAsync()
-                        let doc = JsonDocument.Parse(json)
+                        use doc = JsonDocument.Parse(json)
                         match tryGetProp "Documents" doc.RootElement with
                         | true, docs when docs.ValueKind = JsonValueKind.Array ->
                             for item in docs.EnumerateArray() do

@@ -196,11 +196,16 @@ let private extractToolCalls (response: AgentResponse) : ToolCallRecord list =
                     try JsonSerializer.Serialize(fc.Arguments :> IDictionary<string, obj>)
                     with _ -> "{}"
                 let argsElem =
-                    try JsonDocument.Parse(argsJson).RootElement
-                    with _ -> JsonDocument.Parse("{}").RootElement
+                    try
+                        use doc = JsonDocument.Parse(argsJson)
+                        doc.RootElement.Clone()
+                    with _ ->
+                        use doc = JsonDocument.Parse("{}")
+                        doc.RootElement.Clone()
                 calls <-
                     calls
                     @ [ { ToolName = fc.Name |> Option.ofObj |> Option.defaultValue ""
+                          CallId = fc.CallId |> Option.ofObj
                           Arguments = argsElem
                           Output = None } ]
             | :? FunctionResultContent as fr ->
@@ -211,31 +216,24 @@ let private extractToolCalls (response: AgentResponse) : ToolCallRecord list =
                         match r.ToString() with
                         | null -> ""
                         | s -> s
-                // Pair by CallId when both sides have one; otherwise pair
-                // sequentially (first unmatched call gets this result).
-                // The agent framework emits calls and results in order, so
-                // sequential pairing is always correct.
                 let frCallId = fr.CallId |> Option.ofObj |> Option.defaultValue ""
                 calls <-
-                    let rec attach lst =
-                        match lst with
-                        | [] -> []
-                        | tc :: rest when tc.Output.IsNone ->
-                            { tc with Output = Some result } :: rest
-                        | tc :: rest ->
-                            tc :: attach rest
-                    // If we have a CallId, try to find the specific matching call.
-                    // Otherwise fall back to sequential first-unmatched pairing.
                     if frCallId <> "" then
-                        // Build a local lookup to find the matching pending call
-                        let mutable found = false
+                        // Match by CallId for accurate pairing, even if results arrive out of order.
                         calls
                         |> List.map (fun tc ->
-                            if not found && tc.Output.IsNone then
-                                found <- true
+                            match tc.CallId with
+                            | Some id when id = frCallId && tc.Output.IsNone ->
                                 { tc with Output = Some result }
-                            else tc)
+                            | _ -> tc)
                     else
+                        // No CallId available: sequential first-unmatched pairing.
+                        let rec attach lst =
+                            match lst with
+                            | [] -> []
+                            | tc :: rest when tc.Output.IsNone ->
+                                { tc with Output = Some result } :: rest
+                            | tc :: rest -> tc :: attach rest
                         attach calls
             | _ -> ()
 

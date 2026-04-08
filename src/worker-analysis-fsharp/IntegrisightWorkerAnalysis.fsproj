@@ -22,6 +22,7 @@
     <Compile Include="Tools.fs" />
     <Compile Include="AgentOrchestrator.fs" />
     <Compile Include="AnalysisHandler.fs" />
+    <Compile Include="Telemetry.fs" />
     <Compile Include="Worker.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

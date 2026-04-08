@@ -57,18 +57,21 @@ type EventGridConsumer
             if details = null then
                 return []
             else
+                // Helper: parse JSON into a standalone JsonElement (document is disposed immediately).
+                let parseData (s: string) =
+                    use doc = JsonDocument.Parse(s)
+                    doc.RootElement.Clone()
+
                 return
                     [ for detail in details do
                           let evt : CloudEvent = detail.Event
                           if evt <> null then
                               let data =
                                   if evt.Data <> null then
-                                      try
-                                          JsonDocument.Parse(evt.Data.ToString()).RootElement
-                                      with _ ->
-                                          JsonDocument.Parse("{}").RootElement
+                                      try parseData (evt.Data.ToString())
+                                      with _ -> parseData "{}"
                                   else
-                                      JsonDocument.Parse("{}").RootElement
+                                      parseData "{}"
 
                               let traceParent =
                                   if evt.ExtensionAttributes <> null then
@@ -161,6 +164,15 @@ type EventGridPublisher
                     evt.Id <- id
                     evt.Subject <- subject
                     evt.Time <- DateTimeOffset.UtcNow
+
+                    // Inject W3C Trace Context into CloudEvent extension attributes so
+                    // downstream consumers can continue the distributed trace.
+                    // Mirrors Python shared/events.py inject(carrier).
+                    let currentActivity = System.Diagnostics.Activity.Current
+                    if not (isNull currentActivity) && not (String.IsNullOrEmpty currentActivity.Id) then
+                        evt.ExtensionAttributes.["traceparent"] <- currentActivity.Id :> obj
+                        if not (String.IsNullOrEmpty currentActivity.TraceStateString) then
+                            evt.ExtensionAttributes.["tracestate"] <- currentActivity.TraceStateString :> obj
 
                     let! _ = client.Value.SendAsync(evt)
                     logger.LogInformation("event_published event_type={EventType} subject={Subject}", eventType, subject)

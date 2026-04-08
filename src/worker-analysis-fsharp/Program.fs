@@ -17,13 +17,11 @@ open EventGridClient
 open Tools
 open AgentOrchestrator
 open AnalysisHandler
+open Telemetry
 open Worker
 
 [<Literal>]
 let SubscriptionName = "analysis-execution"
-
-[<Literal>]
-let ServiceName = "integrisight-worker-analysis"
 
 /// Configure OpenTelemetry tracing with optional Azure Monitor export.
 let private setupTelemetry (settings: Config.Settings) =
