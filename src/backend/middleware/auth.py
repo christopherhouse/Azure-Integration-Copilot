@@ -4,7 +4,7 @@ import uuid
 import httpx
 import structlog
 from jose import JWTError, jwt
-from opentelemetry import trace
+from opentelemetry import baggage, trace
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -120,114 +120,133 @@ class AuthMiddleware(BaseHTTPMiddleware):
         structlog.contextvars.clear_contextvars()
         structlog.contextvars.bind_contextvars(request_id=request_id)
 
-        # Skip auth for health and OpenAPI documentation endpoints
-        if request.url.path.startswith("/api/v1/health") or request.url.path in (
-            "/docs",
-            "/redoc",
-            "/openapi.json",
-        ):
-            request.state.external_id = "anonymous"
-            request.state.email = ""
-            request.state.display_name = ""
-            return await call_next(request)
-
-        # Dev mode: skip JWT validation
-        if settings.skip_auth:
-            request.state.external_id = _DEV_EXTERNAL_ID
-            request.state.email = _DEV_EMAIL
-            request.state.display_name = _DEV_DISPLAY_NAME
-            return await call_next(request)
-
-        # Extract Bearer token
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
-            logger.warning(
-                "auth_failure",
-                auth_failure_reason="missing_header",
-                auth_request_path=request.url.path,
-            )
-            _set_auth_span_attributes(result="failure", failure_reason="missing_header")
-            auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "missing_header"})
-            auth_failure_tracker.record(request.client.host if request.client else "unknown")
-            return _make_401_response("Missing or invalid Authorization header.", request_id)
-
-        token = auth_header[7:]
+        # Extract frontend trace ID for correlation.
+        # The frontend sends X-Trace-ID to link user actions with backend
+        # operations. We add this to OpenTelemetry baggage so it flows through
+        # the entire request trace and appears in all downstream spans/logs.
+        frontend_trace_id = request.headers.get("X-Trace-ID")
+        if frontend_trace_id:
+            span = trace.get_current_span()
+            if span and span.is_recording():
+                span.set_attribute("frontend.trace_id", frontend_trace_id)
+            # Also set as baggage so it propagates to child spans
+            ctx = baggage.set_baggage("frontend.trace_id", frontend_trace_id)
+            token = baggage.attach(ctx)
+        else:
+            token = None
 
         try:
-            # Fetch JWKS and OIDC issuer, with TTL-based caching
-            jwks, issuer = await _fetch_oidc_metadata(settings.entra_ciam_tenant_subdomain)
-            unverified_header = jwt.get_unverified_header(token)
-            kid = unverified_header.get("kid")
+            # Skip auth for health and OpenAPI documentation endpoints
+            if request.url.path.startswith("/api/v1/health") or request.url.path in (
+                "/docs",
+                "/redoc",
+                "/openapi.json",
+            ):
+                request.state.external_id = "anonymous"
+                request.state.email = ""
+                request.state.display_name = ""
+                return await call_next(request)
 
-            # Find the matching key; on KID miss, refresh JWKS once before rejecting
-            rsa_key = _find_signing_key(jwks, kid)
-            if not rsa_key:
-                logger.info("jwks_kid_miss_refreshing", kid=kid)
-                jwks = await _refresh_jwks(settings.entra_ciam_tenant_subdomain)
+            # Dev mode: skip JWT validation
+            if settings.skip_auth:
+                request.state.external_id = _DEV_EXTERNAL_ID
+                request.state.email = _DEV_EMAIL
+                request.state.display_name = _DEV_DISPLAY_NAME
+                return await call_next(request)
+
+            # Extract Bearer token
+            auth_header = request.headers.get("Authorization", "")
+            if not auth_header.startswith("Bearer "):
+                logger.warning(
+                    "auth_failure",
+                    auth_failure_reason="missing_header",
+                    auth_request_path=request.url.path,
+                )
+                _set_auth_span_attributes(result="failure", failure_reason="missing_header")
+                auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "missing_header"})
+                auth_failure_tracker.record(request.client.host if request.client else "unknown")
+                return _make_401_response("Missing or invalid Authorization header.", request_id)
+
+            jwt_token = auth_header[7:]
+
+            try:
+                # Fetch JWKS and OIDC issuer, with TTL-based caching
+                jwks, issuer = await _fetch_oidc_metadata(settings.entra_ciam_tenant_subdomain)
+                unverified_header = jwt.get_unverified_header(jwt_token)
+                kid = unverified_header.get("kid")
+
+                # Find the matching key; on KID miss, refresh JWKS once before rejecting
                 rsa_key = _find_signing_key(jwks, kid)
+                if not rsa_key:
+                    logger.info("jwks_kid_miss_refreshing", kid=kid)
+                    jwks = await _refresh_jwks(settings.entra_ciam_tenant_subdomain)
+                    rsa_key = _find_signing_key(jwks, kid)
 
-            if not rsa_key:
-                logger.warning(
-                    "auth_failure",
-                    auth_failure_reason="key_not_found",
-                    auth_request_path=request.url.path,
-                    kid=kid,
+                if not rsa_key:
+                    logger.warning(
+                        "auth_failure",
+                        auth_failure_reason="key_not_found",
+                        auth_request_path=request.url.path,
+                        kid=kid,
+                    )
+                    _set_auth_span_attributes(result="failure", failure_reason="key_not_found")
+                    auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "key_not_found"})
+                    auth_failure_tracker.record(request.client.host if request.client else "unknown")
+                    return _make_401_response("Unable to find appropriate signing key.", request_id)
+
+                payload = jwt.decode(
+                    jwt_token,
+                    rsa_key,
+                    algorithms=["RS256"],
+                    audience=settings.entra_ciam_client_id,
+                    issuer=issuer,
                 )
-                _set_auth_span_attributes(result="failure", failure_reason="key_not_found")
-                auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "key_not_found"})
-                auth_failure_tracker.record(request.client.host if request.client else "unknown")
-                return _make_401_response("Unable to find appropriate signing key.", request_id)
 
-            payload = jwt.decode(
-                token,
-                rsa_key,
-                algorithms=["RS256"],
-                audience=settings.entra_ciam_client_id,
-                issuer=issuer,
-            )
+                request.state.external_id = payload.get("oid", payload.get("sub", ""))
 
-            request.state.external_id = payload.get("oid", payload.get("sub", ""))
-
-            # CIAM tokens may carry the email in the singular "email" claim,
-            # the "emails" array claim, or "preferred_username".
-            raw_emails = payload.get("emails")
-            emails_claim = raw_emails if isinstance(raw_emails, list) else []
-            request.state.email = (
-                payload.get("email")
-                or (emails_claim[0] if len(emails_claim) > 0 else None)
-                or payload.get("preferred_username")
-                or ""
-            )
-
-            request.state.display_name = payload.get(
-                "name", payload.get("preferred_username", "")
-            )
-
-            if not request.state.external_id:
-                logger.warning(
-                    "auth_failure",
-                    auth_failure_reason="missing_claims",
-                    auth_request_path=request.url.path,
+                # CIAM tokens may carry the email in the singular "email" claim,
+                # the "emails" array claim, or "preferred_username".
+                raw_emails = payload.get("emails")
+                emails_claim = raw_emails if isinstance(raw_emails, list) else []
+                request.state.email = (
+                    payload.get("email")
+                    or (emails_claim[0] if len(emails_claim) > 0 else None)
+                    or payload.get("preferred_username")
+                    or ""
                 )
-                _set_auth_span_attributes(result="failure", failure_reason="missing_claims")
-                auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "missing_claims"})
+
+                request.state.display_name = payload.get(
+                    "name", payload.get("preferred_username", "")
+                )
+
+                if not request.state.external_id:
+                    logger.warning(
+                        "auth_failure",
+                        auth_failure_reason="missing_claims",
+                        auth_request_path=request.url.path,
+                    )
+                    _set_auth_span_attributes(result="failure", failure_reason="missing_claims")
+                    auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "missing_claims"})
+                    auth_failure_tracker.record(request.client.host if request.client else "unknown")
+                    return _make_401_response("Token missing required claims.", request_id)
+
+            except JWTError as exc:
+                logger.warning("auth_failure", auth_failure_reason="invalid_token", error=str(exc))
+                _set_auth_span_attributes(result="failure", failure_reason="invalid_token")
+                auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "invalid_token"})
                 auth_failure_tracker.record(request.client.host if request.client else "unknown")
-                return _make_401_response("Token missing required claims.", request_id)
+                return _make_401_response("Invalid or expired token.", request_id)
+            except httpx.HTTPError as exc:
+                logger.error("auth_failure", auth_failure_reason="jwks_fetch_failed", error=str(exc))
+                _set_auth_span_attributes(result="failure", failure_reason="jwks_fetch_failed")
+                auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "jwks_fetch_failed"})
+                auth_failure_tracker.record(request.client.host if request.client else "unknown")
+                return _make_401_response("Unable to validate token at this time.", request_id)
 
-        except JWTError as exc:
-            logger.warning("auth_failure", auth_failure_reason="invalid_token", error=str(exc))
-            _set_auth_span_attributes(result="failure", failure_reason="invalid_token")
-            auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "invalid_token"})
-            auth_failure_tracker.record(request.client.host if request.client else "unknown")
-            return _make_401_response("Invalid or expired token.", request_id)
-        except httpx.HTTPError as exc:
-            logger.error("auth_failure", auth_failure_reason="jwks_fetch_failed", error=str(exc))
-            _set_auth_span_attributes(result="failure", failure_reason="jwks_fetch_failed")
-            auth_attempts_counter.add(1, {"result": "failure", "failure_reason": "jwks_fetch_failed"})
-            auth_failure_tracker.record(request.client.host if request.client else "unknown")
-            return _make_401_response("Unable to validate token at this time.", request_id)
-
-        _set_auth_span_attributes(result="success")
-        auth_attempts_counter.add(1, {"result": "success", "failure_reason": ""})
-        return await call_next(request)
+            _set_auth_span_attributes(result="success")
+            auth_attempts_counter.add(1, {"result": "success", "failure_reason": ""})
+            return await call_next(request)
+        finally:
+            if token is not None:
+                baggage.detach(token)
 

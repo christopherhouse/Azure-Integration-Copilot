@@ -1,5 +1,6 @@
 import { getSession } from "next-auth/react";
 import type { ApiError, ResponseEnvelope } from "@/types/api";
+import { getOrCreateTraceId } from "@/lib/trace";
 
 /**
  * Error thrown by API helpers when the backend returns a non-OK response.
@@ -55,7 +56,8 @@ export function getApiBaseUrl(): string {
 
 /**
  * Build a headers object that merges caller-supplied headers with an
- * Authorization header from the current NextAuth session (when available).
+ * Authorization header from the current NextAuth session (when available)
+ * and a correlation trace ID for linking frontend operations to backend traces.
  */
 async function buildHeaders(
   extra?: HeadersInit,
@@ -69,6 +71,12 @@ async function buildHeaders(
   if (session?.accessToken) {
     headers["Authorization"] = `Bearer ${session.accessToken}`;
   }
+
+  // Add trace ID for frontend-to-backend correlation.
+  // This enables linking user actions in the frontend to backend API
+  // operations in Application Insights, even without full browser-side
+  // distributed tracing instrumentation.
+  headers["X-Trace-ID"] = getOrCreateTraceId();
 
   return headers;
 }
