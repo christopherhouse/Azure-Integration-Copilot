@@ -24,6 +24,9 @@ export function middleware(request: NextRequest) {
     "https://www.google-analytics.com",
     "https://region1.google-analytics.com",
     "wss://*.webpubsub.azure.com",
+    // Application Insights browser SDK telemetry ingestion
+    "https://*.in.applicationinsights.azure.com",
+    "https://dc.services.visualstudio.com",
   ];
 
   const apiBaseUrl = process.env.API_BASE_URL;
