@@ -59,7 +59,7 @@ API POST /api/v1/artifacts/upload
 - Appears in all log entries and traces for correlation
 
 **Next.js Server-Side Instrumentation:**
-- `src/frontend/instrumentation.ts`: Azure Monitor OpenTelemetry distro for Next.js server
+- `src/frontend/src/instrumentation.ts`: Azure Monitor OpenTelemetry distro for Next.js server
 - Automatically instruments server-side rendering, API routes, and middleware
 - Propagates W3C traceparent headers to backend API calls made server-side
 
@@ -130,14 +130,7 @@ APPLICATIONINSIGHTS_CONNECTION_STRING="InstrumentationKey=...;IngestionEndpoint=
 
 ### Next.js Configuration
 
-Enable experimental instrumentation hook in `next.config.ts`:
-```typescript
-const nextConfig: NextConfig = {
-  experimental: {
-    instrumentationHook: true,
-  },
-};
-```
+The `instrumentation.ts` file is automatically loaded by Next.js 16+ when placed in the `src/` folder (for projects using src directory structure) or in the project root. No additional configuration in `next.config.ts` is required.
 
 ### Usage in React Components (Phase 3)
 
