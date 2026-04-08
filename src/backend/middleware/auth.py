@@ -4,7 +4,7 @@ import uuid
 import httpx
 import structlog
 from jose import JWTError, jwt
-from opentelemetry import baggage, trace
+from opentelemetry import baggage, context, trace
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -131,7 +131,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 span.set_attribute("frontend.trace_id", frontend_trace_id)
             # Also set as baggage so it propagates to child spans
             ctx = baggage.set_baggage("frontend.trace_id", frontend_trace_id)
-            token = baggage.attach(ctx)
+            token = context.attach(ctx)
         else:
             token = None
 
@@ -248,5 +248,5 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         finally:
             if token is not None:
-                baggage.detach(token)
+                context.detach(token)
 
