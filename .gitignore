@@ -20,14 +20,6 @@ build/
 *.egg
 .ruff_cache/
 
-# Rust
-target/
-
-# Go
-*.exe
-*.test
-*.out
-
 # Node / Next.js
 node_modules/
 .next/
