@@ -10,12 +10,15 @@ import (
 
 // --- Mock implementations ---
 
+// mockCosmos is a test double for CosmosClient.
+// queryResultsByContainer lets individual tests return different rows for
+// queries against different containers.
 type mockCosmos struct {
-	readItems     map[string]map[string]any // key: "db/container/id/pk"
-	upsertedItems []map[string]any
-	replacedItems []map[string]any
-	queryResults  []map[string]any
-	sprocResult   map[string]any
+	readItems              map[string]map[string]any // key: "db/container/id/pk"
+	upsertedItems          []map[string]any
+	replacedItems          []map[string]any
+	queryResultsByContainer map[string][]map[string]any // key: container name
+	defaultQueryResults    []map[string]any
 }
 
 func (m *mockCosmos) ReadItem(_ context.Context, database, container, id, partitionKey string) (map[string]any, error) {
@@ -24,10 +27,6 @@ func (m *mockCosmos) ReadItem(_ context.Context, database, container, id, partit
 		return doc, nil
 	}
 	return nil, nil
-}
-
-func (m *mockCosmos) CreateItem(_ context.Context, _, _, _ string, doc map[string]any) (map[string]any, error) {
-	return doc, nil
 }
 
 func (m *mockCosmos) ReplaceItem(_ context.Context, _, _, _, _ string, doc map[string]any, _ string) (map[string]any, error) {
@@ -40,20 +39,11 @@ func (m *mockCosmos) UpsertItem(_ context.Context, _, _, _ string, doc map[strin
 	return doc, nil
 }
 
-func (m *mockCosmos) QueryItems(_ context.Context, _, _, _, _ string, _ []cosmos.QueryParam) ([]map[string]any, error) {
-	return m.queryResults, nil
-}
-
-func (m *mockCosmos) ExecuteStoredProcedure(_ context.Context, _, _, _, _ string, _ []any) (map[string]any, error) {
-	if m.sprocResult != nil {
-		return m.sprocResult, nil
+func (m *mockCosmos) QueryItems(_ context.Context, _, container, _, _ string, _ []cosmos.QueryParam) ([]map[string]any, error) {
+	if results, ok := m.queryResultsByContainer[container]; ok {
+		return results, nil
 	}
-	return map[string]any{
-		"componentCounts": map[string]any{},
-		"edgeCounts":      map[string]any{},
-		"totalComponents": float64(0),
-		"totalEdges":      float64(0),
-	}, nil
+	return m.defaultQueryResults, nil
 }
 
 type mockPublisher struct {
@@ -183,11 +173,13 @@ func TestHandle_HappyPath(t *testing.T) {
 				"_etag":        `"etag2"`,
 			},
 		},
-		sprocResult: map[string]any{
-			"componentCounts": map[string]any{"logic_app": float64(1)},
-			"edgeCounts":      map[string]any{},
-			"totalComponents": float64(1),
-			"totalEdges":      float64(0),
+		// countByField queries against GraphContainer.
+		// Component query returns one row with componentType="logic_app".
+		// Edge query returns empty (handled by default empty return).
+		queryResultsByContainer: map[string][]map[string]any{
+			GraphContainer: {
+				{"componentType": "logic_app"},
+			},
 		},
 	}
 	pub := &mockPublisher{}

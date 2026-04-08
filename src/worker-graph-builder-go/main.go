@@ -45,22 +45,42 @@ func main() {
 	shutdownOTel := setupOTel(ctx, settings)
 	defer shutdownOTel()
 
-	// Managed identity credential.
-	cred := credential.New(settings.AzureClientID)
+	// Managed identity credential (azidentity SDK).
+	cred, err := credential.New(settings.AzureClientID)
+	if err != nil {
+		slog.Error("credential_init_failed", "error", err)
+		os.Exit(1)
+	}
 
-	// Azure service clients.
-	cosmosClient := cosmos.New(settings.CosmosDBEndpoint, cred)
-	consumer := eventgrid.NewConsumer(
+	// Cosmos DB client (azcosmos SDK).
+	cosmosClient, err := cosmos.New(settings.CosmosDBEndpoint, cred)
+	if err != nil {
+		slog.Error("cosmos_client_init_failed", "error", err)
+		os.Exit(1)
+	}
+
+	// Event Grid Namespace consumer (aznamespaces SDK).
+	consumer, err := eventgrid.NewConsumer(
 		settings.EventGridNamespaceEndpoint,
 		settings.EventGridTopic,
 		worker.SubscriptionName,
 		cred,
 	)
-	publisher := eventgrid.NewPublisher(
+	if err != nil {
+		slog.Error("eventgrid_consumer_init_failed", "error", err)
+		os.Exit(1)
+	}
+
+	// Event Grid Namespace publisher (aznamespaces SDK).
+	publisher, err := eventgrid.NewPublisher(
 		settings.EventGridNamespaceEndpoint,
 		settings.EventGridTopic,
 		cred,
 	)
+	if err != nil {
+		slog.Error("eventgrid_publisher_init_failed", "error", err)
+		os.Exit(1)
+	}
 
 	// Domain handler.
 	handler := worker.NewGraphBuilderHandler(cosmosClient, publisher)
@@ -98,6 +118,7 @@ func (a *consumerAdapter) Acknowledge(ctx context.Context, lockTokens []string) 
 func (a *consumerAdapter) Release(ctx context.Context, lockTokens []string) error {
 	return a.c.Release(ctx, lockTokens)
 }
+
 
 // setupOTel configures OTLP tracing and metrics exporters when the endpoint is set.
 // Returns a shutdown function.

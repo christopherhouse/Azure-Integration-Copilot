@@ -1,109 +1,73 @@
-// Package eventgrid provides Event Grid Namespace pull-delivery consumer and publisher.
+// Package eventgrid wraps the Azure Event Grid Namespace SDK (aznamespaces)
+// for pull-delivery event consumption and CloudEvent publishing.
 package eventgrid
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"time"
 
-	"github.com/christopherhouse/integrisight/worker-graph-builder-go/internal/azure/credential"
-)
-
-const (
-	eventGridResource   = "https://eventgrid.azure.net/"
-	apiVersion          = "2024-06-01"
-	consumerTimeout     = 60 * time.Second
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/messaging"
+	"github.com/Azure/azure-sdk-for-go/sdk/messaging/eventgrid/aznamespaces"
 )
 
 // CloudEvent is a received CloudEvents v1.0 envelope.
+// Extensions holds CloudEvent extension attributes (e.g. traceparent/tracestate
+// for W3C distributed tracing).
 type CloudEvent struct {
-	ID         string            `json:"id"`
-	Type       string            `json:"type"`
-	Source     string            `json:"source"`
-	Subject    string            `json:"subject,omitempty"`
-	Data       json.RawMessage   `json:"data,omitempty"`
-	Extensions map[string]any    `json:"extensions,omitempty"`
+	ID         string         `json:"id"`
+	Type       string         `json:"type"`
+	Source     string         `json:"source"`
+	Subject    string         `json:"subject,omitempty"`
+	Data       json.RawMessage
+	Extensions map[string]any
 }
 
 // BrokerProperties contains Event Grid broker metadata for a received event.
 type BrokerProperties struct {
-	LockToken string `json:"lockToken"`
+	LockToken string
 }
 
 // ReceiveDetails bundles a CloudEvent with its broker metadata.
 type ReceiveDetails struct {
-	BrokerProperties BrokerProperties `json:"brokerProperties"`
-	Event            CloudEvent       `json:"event"`
+	BrokerProperties BrokerProperties
+	Event            CloudEvent
 }
 
-type receiveResponse struct {
-	Details []ReceiveDetails `json:"details"`
-}
-
-type lockTokensBody struct {
-	LockTokens []string `json:"lockTokens"`
-}
-
-// EventGridConsumer pulls events from an Event Grid Namespace subscription.
+// EventGridConsumer pulls events from an Event Grid Namespace subscription
+// using the official Azure SDK (aznamespaces.ReceiverClient).
 type EventGridConsumer struct {
-	client       *http.Client
-	credential   *credential.ManagedIdentityCredential
-	endpoint     string
-	topic        string
-	subscription string
+	receiver *aznamespaces.ReceiverClient
 }
 
-// NewConsumer creates an EventGridConsumer.
-func NewConsumer(endpoint, topic, subscription string, cred *credential.ManagedIdentityCredential) *EventGridConsumer {
-	return &EventGridConsumer{
-		client:       &http.Client{Timeout: consumerTimeout},
-		credential:   cred,
-		endpoint:     trimSlash(endpoint),
-		topic:        topic,
-		subscription: subscription,
+// NewConsumer creates an EventGridConsumer backed by the official aznamespaces SDK.
+func NewConsumer(endpoint, topic, subscription string, cred azcore.TokenCredential) (*EventGridConsumer, error) {
+	receiver, err := aznamespaces.NewReceiverClient(endpoint, topic, subscription, cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create event grid receiver client: %w", err)
 	}
+	return &EventGridConsumer{receiver: receiver}, nil
 }
 
 // ReceiveEvents pulls up to maxEvents events, waiting up to maxWaitSecs seconds.
 func (c *EventGridConsumer) ReceiveEvents(ctx context.Context, maxEvents, maxWaitSecs int) ([]ReceiveDetails, error) {
-	token, err := c.getToken()
+	maxEventsI32 := int32(maxEvents)
+	maxWaitI32 := int32(maxWaitSecs)
+	resp, err := c.receiver.ReceiveEvents(ctx, &aznamespaces.ReceiveEventsOptions{
+		MaxEvents:   &maxEventsI32,
+		MaxWaitTime: &maxWaitI32,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("receive events: %w", err)
 	}
 
-	url := fmt.Sprintf(
-		"%s/topics/%s/eventsubscriptions/%s:receive?api-version=%s&maxEvents=%d&maxWaitTime=%d",
-		c.endpoint, c.topic, c.subscription, apiVersion, maxEvents, maxWaitSecs,
-	)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBufferString("{}"))
-	if err != nil {
-		return nil, fmt.Errorf("build receive request: %w", err)
+	details := make([]ReceiveDetails, 0, len(resp.Details))
+	for _, d := range resp.Details {
+		details = append(details, mapReceiveDetails(d))
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("receive request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("receive HTTP %d: %s", resp.StatusCode, body)
-	}
-
-	var rr receiveResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rr); err != nil {
-		return nil, fmt.Errorf("decode receive response: %w", err)
-	}
-	return rr.Details, nil
+	return details, nil
 }
 
 // Acknowledge removes the given events from the subscription.
@@ -111,70 +75,104 @@ func (c *EventGridConsumer) Acknowledge(ctx context.Context, lockTokens []string
 	if len(lockTokens) == 0 {
 		return nil
 	}
-	return c.lockTokenAction(ctx, "acknowledge", lockTokens)
-}
-
-// Release returns the events to the subscription for redelivery.
-func (c *EventGridConsumer) Release(ctx context.Context, lockTokens []string) error {
-	if len(lockTokens) == 0 {
-		return nil
-	}
-	return c.lockTokenAction(ctx, "release", lockTokens)
-}
-
-func (c *EventGridConsumer) lockTokenAction(ctx context.Context, action string, lockTokens []string) error {
-	token, err := c.getToken()
+	_, err := c.receiver.AcknowledgeEvents(ctx, lockTokens, nil)
 	if err != nil {
-		return err
-	}
-
-	url := fmt.Sprintf(
-		"%s/topics/%s/eventsubscriptions/%s:%s?api-version=%s",
-		c.endpoint, c.topic, c.subscription, action, apiVersion,
-	)
-
-	body := lockTokensBody{LockTokens: lockTokens}
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		return fmt.Errorf("marshal lock tokens: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return fmt.Errorf("build %s request: %w", action, err)
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("%s request: %w", action, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
-		// Non-fatal: partial failures are best-effort; log and continue.
-		slog.Warn("eventgrid_lock_token_action_partial_failure",
-			"action", action,
-			"status", resp.StatusCode,
-			"body", string(respBody),
-		)
+		slog.Warn("eventgrid_acknowledge_partial_failure", "error", err)
 	}
 	return nil
 }
 
-func (c *EventGridConsumer) getToken() (string, error) {
-	tok, err := c.credential.GetToken(eventGridResource)
-	if err != nil {
-		return "", fmt.Errorf("eventgrid consumer auth: %w", err)
+// Release returns the given events to the subscription for redelivery.
+func (c *EventGridConsumer) Release(ctx context.Context, lockTokens []string) error {
+	if len(lockTokens) == 0 {
+		return nil
 	}
-	return tok, nil
+	_, err := c.receiver.ReleaseEvents(ctx, lockTokens, nil)
+	if err != nil {
+		slog.Warn("eventgrid_release_partial_failure", "error", err)
+	}
+	return nil
 }
 
-func trimSlash(s string) string {
-	for len(s) > 0 && s[len(s)-1] == '/' {
-		s = s[:len(s)-1]
+// mapReceiveDetails converts an aznamespaces.ReceiveDetails to our local type.
+func mapReceiveDetails(d aznamespaces.ReceiveDetails) ReceiveDetails {
+	ce := d.Event
+	var lockToken string
+	if d.BrokerProperties != nil && d.BrokerProperties.LockToken != nil {
+		lockToken = *d.BrokerProperties.LockToken
 	}
-	return s
+
+	// Marshal the CloudEvent data to JSON bytes so base.go can unmarshal it uniformly.
+	var dataBytes json.RawMessage
+	if ce.Data != nil {
+		if b, err := json.Marshal(ce.Data); err == nil {
+			dataBytes = b
+		}
+	}
+
+	var subject string
+	if ce.Subject != nil {
+		subject = *ce.Subject
+	}
+
+	return ReceiveDetails{
+		BrokerProperties: BrokerProperties{LockToken: lockToken},
+		Event: CloudEvent{
+			ID:         ce.ID,
+			Type:       ce.Type,
+			Source:     ce.Source,
+			Subject:    subject,
+			Data:       dataBytes,
+			Extensions: ce.Extensions,
+		},
+	}
+}
+
+// EventGridPublisher publishes CloudEvents to an Event Grid Namespace topic
+// using the official Azure SDK (aznamespaces.SenderClient).
+type EventGridPublisher struct {
+	sender *aznamespaces.SenderClient
+}
+
+// NewPublisher creates an EventGridPublisher backed by the official aznamespaces SDK.
+// When endpoint is empty the publisher is a no-op (useful in testing / local dev).
+func NewPublisher(endpoint, topic string, cred azcore.TokenCredential) (*EventGridPublisher, error) {
+	if endpoint == "" {
+		return &EventGridPublisher{}, nil
+	}
+	sender, err := aznamespaces.NewSenderClient(endpoint, topic, cred, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create event grid sender client: %w", err)
+	}
+	return &EventGridPublisher{sender: sender}, nil
+}
+
+// CloudEventOut is the outbound CloudEvents v1.0 envelope.
+// It wraps messaging.CloudEvent for compatibility with the rest of the codebase.
+type CloudEventOut = messaging.CloudEvent
+
+// BuildCloudEvent constructs a CloudEventOut ready for publishing.
+// The ID is set to a new UUID; specversion is always "1.0".
+func BuildCloudEvent(eventType, source, subject string, data any) CloudEventOut {
+	ce, err := messaging.NewCloudEvent(source, eventType, data, &messaging.CloudEventOptions{
+		Subject: &subject,
+	})
+	if err != nil {
+		// NewCloudEvent only errors on nil source/type; panic is appropriate here.
+		panic(fmt.Sprintf("build cloud event: %v", err))
+	}
+	return ce
+}
+
+// PublishEvent publishes a single CloudEvent. A no-op when no sender is configured.
+func (p *EventGridPublisher) PublishEvent(ctx context.Context, event CloudEventOut) error {
+	if p.sender == nil {
+		slog.Warn("event_grid_not_configured_skipping_publish", "event_type", event.Type)
+		return nil
+	}
+	if _, err := p.sender.SendEvent(ctx, &event, nil); err != nil {
+		return fmt.Errorf("publish event %q: %w", event.Type, err)
+	}
+	slog.Info("event_published", "event_type", event.Type, "subject", event.Subject)
+	return nil
 }

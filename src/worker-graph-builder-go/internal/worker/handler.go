@@ -39,11 +39,9 @@ var postGraphStatuses = map[string]bool{
 // CosmosClient abstracts Cosmos DB operations (enables testing via mocks).
 type CosmosClient interface {
 	ReadItem(ctx context.Context, database, container, id, partitionKey string) (map[string]any, error)
-	CreateItem(ctx context.Context, database, container, partitionKey string, document map[string]any) (map[string]any, error)
 	ReplaceItem(ctx context.Context, database, container, id, partitionKey string, document map[string]any, etag string) (map[string]any, error)
 	UpsertItem(ctx context.Context, database, container, partitionKey string, document map[string]any) (map[string]any, error)
 	QueryItems(ctx context.Context, database, container, partitionKey, query string, params []cosmos.QueryParam) ([]map[string]any, error)
-	ExecuteStoredProcedure(ctx context.Context, database, container, partitionKey, sprocName string, params []any) (map[string]any, error)
 }
 
 // Publisher abstracts event publishing (enables testing via mocks).
@@ -267,16 +265,17 @@ func (h *GraphBuilderHandler) Handle(ctx context.Context, eventData map[string]a
 		}
 	}
 
-	// Step 10: Compute graph summary via stored procedure.
-	summaryResult, err := h.cosmos.ExecuteStoredProcedure(ctx, DatabaseName, GraphContainer, partitionKey, "graphCountByTypes", nil)
+	// Step 10: Compute graph summary counts natively via Cosmos queries.
+	// (The azcosmos SDK does not expose stored procedures; we replicate the
+	// graphCountByTypes sproc logic with two lightweight projection queries.)
+	componentCounts, totalComponents, err := h.countByField(ctx, partitionKey, "component", "componentType")
 	if err != nil {
-		return Transient(fmt.Sprintf("failed to execute graphCountByTypes sproc: %v", err))
+		return Transient(fmt.Sprintf("failed to compute component counts: %v", err))
 	}
-
-	componentCounts := toMapAny(summaryResult["componentCounts"])
-	edgeCounts := toMapAny(summaryResult["edgeCounts"])
-	totalComponents := toInt64(summaryResult["totalComponents"])
-	totalEdges := toInt64(summaryResult["totalEdges"])
+	edgeCounts, totalEdges, err := h.countByField(ctx, partitionKey, "edge", "edgeType")
+	if err != nil {
+		return Transient(fmt.Sprintf("failed to compute edge counts: %v", err))
+	}
 
 	summaryID := "gs_" + partitionKey
 	summaryDoc := map[string]any{
@@ -435,6 +434,42 @@ func (h *GraphBuilderHandler) loadParseResult(ctx context.Context, tenantID, par
 		return nil, nil
 	}
 	return docs[0], nil
+}
+
+// countByField queries the graph container within partitionKey for all
+// documents of the given docType, then groups and counts by fieldName.
+// Returns (countsByType map, total count, error).
+// This replicates the graphCountByTypes stored-procedure logic natively,
+// since the azcosmos SDK does not expose stored procedure execution.
+func (h *GraphBuilderHandler) countByField(ctx context.Context, partitionKey, docType, fieldName string) (map[string]any, int64, error) {
+	// Use a named projection (SELECT c.field FROM c) so each row is a
+	// JSON object {"fieldName": "value"} — compatible with QueryItems which
+	// unmarshals into map[string]any.
+	query := fmt.Sprintf("SELECT c.%s FROM c WHERE c.partitionKey = @pk AND c.type = @type", fieldName)
+	params := []cosmos.QueryParam{
+		{Name: "@pk", Value: partitionKey},
+		{Name: "@type", Value: docType},
+	}
+	rows, err := h.cosmos.QueryItems(ctx, DatabaseName, GraphContainer, partitionKey, query, params)
+	if err != nil {
+		return nil, 0, fmt.Errorf("count %s by %s: %w", docType, fieldName, err)
+	}
+
+	counts := make(map[string]any)
+	var total int64
+	for _, row := range rows {
+		typeVal, _ := row[fieldName].(string)
+		if typeVal == "" {
+			typeVal = "unknown"
+		}
+		if n, ok := counts[typeVal].(int64); ok {
+			counts[typeVal] = n + 1
+		} else {
+			counts[typeVal] = int64(1)
+		}
+		total++
+	}
+	return counts, total, nil
 }
 
 // --- JSON coercion helpers ---
