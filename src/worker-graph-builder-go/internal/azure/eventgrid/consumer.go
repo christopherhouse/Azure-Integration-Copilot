@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -153,8 +154,12 @@ func (c *EventGridConsumer) lockTokenAction(ctx context.Context, action string, 
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
-		// Non-fatal: log only. Partial failures are best-effort.
-		_ = fmt.Sprintf("eventgrid %s partial failure HTTP %d: %s", action, resp.StatusCode, respBody)
+		// Non-fatal: partial failures are best-effort; log and continue.
+		slog.Warn("eventgrid_lock_token_action_partial_failure",
+			"action", action,
+			"status", resp.StatusCode,
+			"body", string(respBody),
+		)
 	}
 	return nil
 }
