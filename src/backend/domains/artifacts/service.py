@@ -209,7 +209,15 @@ class ArtifactService:
         await graph_repository.delete_by_artifact_id(partition_key, artifact_id)
 
         # Delete parse result documents linked to this artifact (best-effort)
-        await artifact_repository.delete_parse_results_by_artifact_id(tenant_id, artifact_id)
+        try:
+            await artifact_repository.delete_parse_results_by_artifact_id(tenant_id, artifact_id)
+        except Exception:
+            logger.warning(
+                "parse_result_cleanup_failed",
+                tenant_id=tenant_id,
+                artifact_id=artifact_id,
+                exc_info=True,
+            )
 
         # Hard-delete the artifact metadata document
         deleted = await artifact_repository.hard_delete(tenant_id, artifact_id)
