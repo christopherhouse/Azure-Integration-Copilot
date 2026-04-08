@@ -10,7 +10,7 @@ open System.Reflection
 [<assembly: System.Reflection.AssemblyCompanyAttribute("IntegrisightWorkerAnalysis")>]
 [<assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")>]
 [<assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")>]
-[<assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+330263633cdac14c46cbdef888c96940ec17e2a4")>]
+[<assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2662834c62719e7c02454867251b681addd7d5e8")>]
 [<assembly: System.Reflection.AssemblyProductAttribute("IntegrisightWorkerAnalysis")>]
 [<assembly: System.Reflection.AssemblyTitleAttribute("IntegrisightWorkerAnalysis")>]
 [<assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")>]

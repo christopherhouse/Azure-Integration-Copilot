@@ -26,7 +26,7 @@ let private processEvent
         let eventData = detail.Data
 
         let tenantId =
-            match (eventData.TryGetProperty("tenantId") : bool * JsonElement) with
+            match tryGetProp "tenantId" eventData with
             | true, v -> v.GetString() |> Option.ofObj |> Option.defaultValue ""
             | _ -> ""
 

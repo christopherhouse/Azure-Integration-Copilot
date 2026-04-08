@@ -7,6 +7,8 @@
 /// On FAILED verdict, the analyst is re-prompted once (max 1 retry).
 module IntegrisightWorkerAnalysis.AgentOrchestrator
 
+#nowarn "57" // OpenAI.Assistants is marked [<Experimental>] in the preview SDK
+
 open System
 open System.ClientModel
 open System.Collections.Generic
@@ -16,6 +18,7 @@ open Azure.AI.OpenAI
 open OpenAI.Assistants
 open Microsoft.Extensions.Logging
 open Models
+open JsonHelpers
 open Tools
 
 // ---------------------------------------------------------------------------
@@ -276,25 +279,25 @@ let private runEvaluator
                 let root = doc.RootElement
 
                 let verdict =
-                    match (root.TryGetProperty("verdict") : bool * JsonElement) with
+                    match tryGetProp "verdict" root with
                     | true, v ->
                         EvaluationVerdict.ofString (v.GetString() |> Option.ofObj |> Option.defaultValue "PASSED")
                     | _ -> Passed
 
                 let confidence =
-                    match (root.TryGetProperty("confidence") : bool * JsonElement) with
+                    match tryGetProp "confidence" root with
                     | true, v -> v.GetDouble()
                     | _ -> 0.5
 
                 let issues =
-                    match (root.TryGetProperty("issues") : bool * JsonElement) with
+                    match tryGetProp "issues" root with
                     | true, v when v.ValueKind = JsonValueKind.Array ->
                         [ for i in v.EnumerateArray() ->
                               i.GetString() |> Option.ofObj |> Option.defaultValue "" ]
                     | _ -> []
 
                 let summary =
-                    match (root.TryGetProperty("summary") : bool * JsonElement) with
+                    match tryGetProp "summary" root with
                     | true, v -> v.GetString() |> Option.ofObj |> Option.defaultValue ""
                     | _ -> ""
 
