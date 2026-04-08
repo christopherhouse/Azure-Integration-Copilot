@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 import structlog
 from ulid import ULID
 
+from domains.tenants.repository import tenant_repository
 from shared.event_types import EVENT_ANALYSIS_REQUESTED
 from shared.events import EventGridPublisher, build_cloud_event
 
@@ -55,6 +56,9 @@ class AnalysisService:
         )
 
         await self._repo.create(analysis)
+
+        # Increment daily analysis usage counter
+        await tenant_repository.increment_usage(tenant_id, "daily_analysis_count")
 
         event = build_cloud_event(
             event_type=EVENT_ANALYSIS_REQUESTED,

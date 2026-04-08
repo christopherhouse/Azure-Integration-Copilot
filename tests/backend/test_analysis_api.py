@@ -131,6 +131,36 @@ class TestCreateAnalysisEndpoint:
         assert body["data"]["prompt"] == "What are the main integration patterns?"
 
     @pytest.mark.asyncio
+    async def test_increments_daily_analysis_count(self, client):
+        """Verify that creating an analysis increments the daily_analysis_count."""
+        tenant = _make_tenant()
+        analysis = _make_analysis()
+        mock1, mock2, mock3, mock4 = _setup_context_mocks(tenant)
+
+        with mock1, mock2, mock3, mock4:
+            with patch("domains.analysis.service.tenant_repository") as mock_tenant_repo:
+                mock_tenant_repo.increment_usage = AsyncMock()
+                with patch("domains.analysis.service.build_cloud_event") as mock_build_event:
+                    mock_build_event.return_value = None  # We don't care about the event object
+                    with patch.object(
+                        analysis_service._repo,
+                        "create",
+                        new_callable=AsyncMock,
+                    ):
+                        with patch.object(
+                            analysis_service._publisher,
+                            "publish_event",
+                            new_callable=AsyncMock,
+                        ):
+                            resp = await client.post(
+                                "/api/v1/projects/p1/analyses",
+                                json={"prompt": "test"},
+                            )
+
+        assert resp.status_code == 202
+        mock_tenant_repo.increment_usage.assert_called_once_with("t-001", "daily_analysis_count")
+
+    @pytest.mark.asyncio
     async def test_returns_401_when_no_tenant_context(self, client):
         """When auth is skipped and cosmos_db_endpoint is empty, tenant is None → 401."""
         resp = await client.post(
@@ -303,7 +333,8 @@ class TestGetAnalysisEndpoint:
 
         assert resp.status_code == 200
         body = resp.json()
-        assert body["data"]["result"]["response"] == "The main patterns are..."
+        # Response is now flattened
+        assert body["data"]["response"] == "The main patterns are..."
 
 
 class TestAnalysisRoutesRegistered:

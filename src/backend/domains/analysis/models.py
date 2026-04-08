@@ -96,8 +96,11 @@ class AnalysisResponse(BaseModel):
     project_id: str = Field(alias="projectId")
     prompt: str
     status: AnalysisStatus
-    result: AnalysisResult | None = None
-    error: str | None = None
+    response: str | None = None
+    verdict: str | None = None
+    confidence_score: float | None = Field(default=None, alias="confidenceScore")
+    tool_calls: list[ToolCallRecord] | None = Field(default=None, alias="toolCalls")
+    error_message: str | None = Field(default=None, alias="errorMessage")
     requested_by: str = Field(alias="requestedBy")
     created_at: datetime = Field(alias="createdAt")
     completed_at: datetime | None = Field(alias="completedAt")
@@ -107,13 +110,29 @@ class AnalysisResponse(BaseModel):
     @classmethod
     def from_analysis(cls, analysis: Analysis) -> AnalysisResponse:
         """Build a response from an Analysis domain model."""
+        # Flatten the result object for frontend consumption
+        response = None
+        verdict = None
+        confidence_score = None
+        tool_calls = None
+
+        if analysis.result:
+            response = analysis.result.response or None
+            if analysis.result.evaluation:
+                verdict = analysis.result.evaluation.verdict
+                confidence_score = analysis.result.evaluation.confidence
+            tool_calls = analysis.result.tool_calls if analysis.result.tool_calls else None
+
         return cls(
             id=analysis.id,
             projectId=analysis.project_id,
             prompt=analysis.prompt,
             status=analysis.status,
-            result=analysis.result,
-            error=analysis.error,
+            response=response,
+            verdict=verdict,
+            confidenceScore=confidence_score,
+            toolCalls=tool_calls,
+            errorMessage=analysis.error,
             requestedBy=analysis.requested_by,
             createdAt=analysis.created_at,
             completedAt=analysis.completed_at,

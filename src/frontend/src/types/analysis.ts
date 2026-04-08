@@ -10,10 +10,9 @@ export type AnalysisVerdict = "PASSED" | "FAILED" | "INCONCLUSIVE";
 
 /** A tool call made during analysis. */
 export interface AnalysisToolCall {
-  id: string;
-  name: string;
+  toolName: string;
   arguments: Record<string, unknown>;
-  result?: string;
+  output?: Record<string, unknown> | string | null;
 }
 
 /** Single analysis record returned by the API. */
