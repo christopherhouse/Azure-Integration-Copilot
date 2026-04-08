@@ -24,7 +24,8 @@ export function middleware(request: NextRequest) {
     "https://www.google-analytics.com",
     "https://region1.google-analytics.com",
     "wss://*.webpubsub.azure.com",
-    // Application Insights browser SDK telemetry ingestion
+    // Application Insights browser SDK config + telemetry ingestion
+    "https://js.monitor.azure.com",
     "https://*.in.applicationinsights.azure.com",
     "https://dc.services.visualstudio.com",
   ];
