@@ -42,7 +42,12 @@ import { ComponentPanel } from "@/components/graph/component-panel";
 import { GraphSummary } from "@/components/graph/graph-summary";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { useProject, useDeleteProject } from "@/hooks/use-projects";
-import { useArtifacts, useUploadArtifact } from "@/hooks/use-artifacts";
+import {
+  useArtifacts,
+  useUploadArtifact,
+  useDeleteArtifact,
+  useRenameArtifact,
+} from "@/hooks/use-artifacts";
 import {
   useGraphSummary,
   useGraphComponents,
@@ -71,6 +76,8 @@ export default function ProjectDetailPage() {
   const { data: artifactData, isLoading: artifactsLoading } =
     useArtifacts(projectId);
   const uploadMutation = useUploadArtifact(projectId);
+  const deleteArtifactMutation = useDeleteArtifact(projectId);
+  const renameArtifactMutation = useRenameArtifact(projectId);
   const deleteMutation = useDeleteProject();
 
   // Graph data
@@ -80,6 +87,12 @@ export default function ProjectDetailPage() {
   const [selectedComponent, setSelectedComponent] =
     useState<GraphComponent | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingArtifactId, setDeletingArtifactId] = useState<string | null>(
+    null,
+  );
+  const [renamingArtifactId, setRenamingArtifactId] = useState<string | null>(
+    null,
+  );
 
   const graphComponents = componentData?.data ?? [];
   const graphEdges = edgeData?.data ?? [];
@@ -108,6 +121,41 @@ export default function ProjectDetailPage() {
         toast.error(err instanceof Error ? err.message : "Upload failed");
       },
     });
+  };
+
+  const handleDeleteArtifact = (artifactId: string) => {
+    setDeletingArtifactId(artifactId);
+    deleteArtifactMutation.mutate(artifactId, {
+      onSuccess: () => {
+        toast.success("Artifact deleted");
+        setDeletingArtifactId(null);
+      },
+      onError: (err) => {
+        toast.error(
+          err instanceof Error ? err.message : "Failed to delete artifact",
+        );
+        setDeletingArtifactId(null);
+      },
+    });
+  };
+
+  const handleRenameArtifact = (artifactId: string, newName: string) => {
+    setRenamingArtifactId(artifactId);
+    renameArtifactMutation.mutate(
+      { artifactId, name: newName },
+      {
+        onSuccess: () => {
+          toast.success("Artifact renamed");
+          setRenamingArtifactId(null);
+        },
+        onError: (err) => {
+          toast.error(
+            err instanceof Error ? err.message : "Failed to rename artifact",
+          );
+          setRenamingArtifactId(null);
+        },
+      },
+    );
   };
 
   const handleDelete = () => {
@@ -267,6 +315,10 @@ export default function ProjectDetailPage() {
               <ArtifactList
                 artifacts={artifactData.data}
                 projectId={projectId}
+                onDelete={handleDeleteArtifact}
+                onRename={handleRenameArtifact}
+                isDeletingId={deletingArtifactId}
+                isRenamingId={renamingArtifactId}
               />
             </div>
           )}
