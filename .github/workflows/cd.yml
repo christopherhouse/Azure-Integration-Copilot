@@ -252,7 +252,6 @@ jobs:
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
-            CORS_ALLOWED_ORIGINS=https://${{ needs.deploy-infra-dev.outputs.frontend_custom_domain }}
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
@@ -276,7 +275,7 @@ jobs:
             --resource-group "${{ needs.deploy-infra-dev.outputs.resource_group }}" \
             --allowed-origins "https://${{ needs.deploy-infra-dev.outputs.frontend_custom_domain }}" \
             --allowed-methods "GET" "POST" "PUT" "PATCH" "DELETE" "OPTIONS" \
-            --allowed-headers "Content-Type" "Authorization" "X-Request-ID" "X-Trace-ID" "traceparent" "tracestate" \
+            --allowed-headers "Content-Type" "Authorization" "X-Request-ID" "X-Trace-ID" "traceparent" "tracestate" "Request-Id" "Request-Context" \
             --allow-credentials true
 
       - name: Deploy frontend Container App
@@ -808,7 +807,6 @@ jobs:
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
-            CORS_ALLOWED_ORIGINS=https://${{ needs.deploy-infra-prod.outputs.frontend_custom_domain }}
         run: |
           chmod +x infra/scripts/deploy-container-app.sh
           ./infra/scripts/deploy-container-app.sh \
@@ -832,7 +830,7 @@ jobs:
             --resource-group "${{ needs.deploy-infra-prod.outputs.resource_group }}" \
             --allowed-origins "https://${{ needs.deploy-infra-prod.outputs.frontend_custom_domain }}" \
             --allowed-methods "GET" "POST" "PUT" "PATCH" "DELETE" "OPTIONS" \
-            --allowed-headers "Content-Type" "Authorization" "X-Request-ID" "X-Trace-ID" "traceparent" "tracestate" \
+            --allowed-headers "Content-Type" "Authorization" "X-Request-ID" "X-Trace-ID" "traceparent" "tracestate" "Request-Id" "Request-Context" \
             --allow-credentials true
 
       - name: Deploy frontend Container App
