@@ -156,6 +156,63 @@ class ArtifactRepository:
         logger.info("artifact_soft_deleted", artifact_id=artifact_id)
         return Artifact.model_validate(result)
 
+    async def hard_delete(self, tenant_id: str, artifact_id: str) -> bool:
+        """Permanently delete an artifact document from Cosmos DB.
+
+        Returns ``True`` if the document was deleted, ``False`` if it was not found.
+        """
+        container = await self._get_container()
+        try:
+            await container.delete_item(item=artifact_id, partition_key=tenant_id)
+            logger.info("artifact_hard_deleted", artifact_id=artifact_id)
+            return True
+        except cosmos_exceptions.CosmosResourceNotFoundError:
+            logger.info("artifact_not_found_for_hard_delete", artifact_id=artifact_id)
+            return False
+
+    async def delete_parse_results_by_artifact_id(
+        self, tenant_id: str, artifact_id: str
+    ) -> int:
+        """Hard-delete all parse_result documents linked to a specific artifact.
+
+        Returns the number of documents deleted.
+        """
+        container = await self._get_container()
+
+        query = (
+            "SELECT c.id FROM c WHERE c.partitionKey = @tenantId "
+            "AND c.type = 'parse_result' AND c.artifactId = @artifactId"
+        )
+        params = [
+            {"name": "@tenantId", "value": tenant_id},
+            {"name": "@artifactId", "value": artifact_id},
+        ]
+
+        doc_ids: list[str] = []
+        async for item in container.query_items(query=query, parameters=params):
+            doc_ids.append(item["id"])
+
+        count = 0
+        for doc_id in doc_ids:
+            try:
+                await container.delete_item(item=doc_id, partition_key=tenant_id)
+                count += 1
+            except Exception as exc:
+                logger.warning(
+                    "failed_to_delete_parse_result",
+                    doc_id=doc_id,
+                    artifact_id=artifact_id,
+                    error=str(exc),
+                )
+
+        if count > 0:
+            logger.info(
+                "parse_results_deleted_for_artifact",
+                artifact_id=artifact_id,
+                count=count,
+            )
+        return count
+
     async def soft_delete_all_by_project(
         self, tenant_id: str, project_id: str
     ) -> int:

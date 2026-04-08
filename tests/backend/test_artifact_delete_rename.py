@@ -72,7 +72,8 @@ async def test_delete_artifact_cleans_up_blob():
         patch("domains.artifacts.service.project_repository") as mock_project,
     ):
         mock_repo.get_by_id = AsyncMock(return_value=artifact)
-        mock_repo.soft_delete = AsyncMock(return_value=artifact)
+        mock_repo.hard_delete = AsyncMock(return_value=True)
+        mock_repo.delete_parse_results_by_artifact_id = AsyncMock(return_value=0)
         mock_blob.delete_blob = AsyncMock()
         mock_graph.delete_by_artifact_id = AsyncMock(return_value=0)
         mock_tenant.increment_usage = AsyncMock()
@@ -98,7 +99,8 @@ async def test_delete_artifact_cleans_up_graph_docs():
         patch("domains.artifacts.service.project_repository") as mock_project,
     ):
         mock_repo.get_by_id = AsyncMock(return_value=artifact)
-        mock_repo.soft_delete = AsyncMock(return_value=artifact)
+        mock_repo.hard_delete = AsyncMock(return_value=True)
+        mock_repo.delete_parse_results_by_artifact_id = AsyncMock(return_value=0)
         mock_blob.delete_blob = AsyncMock()
         mock_graph.delete_by_artifact_id = AsyncMock(return_value=3)
         mock_tenant.increment_usage = AsyncMock()
@@ -109,6 +111,68 @@ async def test_delete_artifact_cleans_up_graph_docs():
         assert result is not None
         mock_graph.delete_by_artifact_id.assert_called_once_with(
             "t-001:prj-001", "art-001"
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_artifact_cleans_up_parse_results():
+    """delete_artifact should delete parse result documents linked to the artifact."""
+    artifact = _make_artifact()
+    svc = ArtifactService()
+
+    with (
+        patch("domains.artifacts.service.artifact_repository") as mock_repo,
+        patch("domains.artifacts.service.blob_service") as mock_blob,
+        patch("domains.artifacts.service.graph_repository") as mock_graph,
+        patch("domains.artifacts.service.tenant_repository") as mock_tenant,
+        patch("domains.artifacts.service.project_repository") as mock_project,
+    ):
+        mock_repo.get_by_id = AsyncMock(return_value=artifact)
+        mock_repo.hard_delete = AsyncMock(return_value=True)
+        mock_repo.delete_parse_results_by_artifact_id = AsyncMock(return_value=2)
+        mock_blob.delete_blob = AsyncMock()
+        mock_graph.delete_by_artifact_id = AsyncMock(return_value=0)
+        mock_tenant.increment_usage = AsyncMock()
+        mock_project.increment_artifact_count = AsyncMock()
+
+        result = await svc.delete_artifact("t-001", "prj-001", "art-001")
+
+        assert result is not None
+        mock_repo.delete_parse_results_by_artifact_id.assert_called_once_with(
+            "t-001", "art-001"
+        )
+
+
+@pytest.mark.asyncio
+async def test_delete_artifact_hard_deletes_document():
+    """delete_artifact should hard-delete the artifact document from Cosmos DB."""
+    artifact = _make_artifact()
+    svc = ArtifactService()
+
+    with (
+        patch("domains.artifacts.service.artifact_repository") as mock_repo,
+        patch("domains.artifacts.service.blob_service") as mock_blob,
+        patch("domains.artifacts.service.graph_repository") as mock_graph,
+        patch("domains.artifacts.service.tenant_repository") as mock_tenant,
+        patch("domains.artifacts.service.project_repository") as mock_project,
+    ):
+        mock_repo.get_by_id = AsyncMock(return_value=artifact)
+        mock_repo.hard_delete = AsyncMock(return_value=True)
+        mock_repo.delete_parse_results_by_artifact_id = AsyncMock(return_value=0)
+        mock_blob.delete_blob = AsyncMock()
+        mock_graph.delete_by_artifact_id = AsyncMock(return_value=0)
+        mock_tenant.increment_usage = AsyncMock()
+        mock_project.increment_artifact_count = AsyncMock()
+
+        result = await svc.delete_artifact("t-001", "prj-001", "art-001")
+
+        assert result is not None
+        mock_repo.hard_delete.assert_called_once_with("t-001", "art-001")
+        mock_tenant.increment_usage.assert_called_once_with(
+            "t-001", "total_artifact_count", amount=-1
+        )
+        mock_project.increment_artifact_count.assert_called_once_with(
+            "t-001", "prj-001", amount=-1
         )
 
 
@@ -126,7 +190,8 @@ async def test_delete_artifact_without_blob_path():
         patch("domains.artifacts.service.project_repository") as mock_project,
     ):
         mock_repo.get_by_id = AsyncMock(return_value=artifact)
-        mock_repo.soft_delete = AsyncMock(return_value=artifact)
+        mock_repo.hard_delete = AsyncMock(return_value=True)
+        mock_repo.delete_parse_results_by_artifact_id = AsyncMock(return_value=0)
         mock_blob.delete_blob = AsyncMock()
         mock_graph.delete_by_artifact_id = AsyncMock(return_value=0)
         mock_tenant.increment_usage = AsyncMock()
@@ -157,6 +222,34 @@ async def test_delete_artifact_returns_none_for_missing():
         assert result is None
         mock_blob.delete_blob.assert_not_called()
         mock_graph.delete_by_artifact_id.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_delete_artifact_skips_counters_when_hard_delete_fails():
+    """delete_artifact should not decrement counters if hard_delete returns False."""
+    artifact = _make_artifact()
+    svc = ArtifactService()
+
+    with (
+        patch("domains.artifacts.service.artifact_repository") as mock_repo,
+        patch("domains.artifacts.service.blob_service") as mock_blob,
+        patch("domains.artifacts.service.graph_repository") as mock_graph,
+        patch("domains.artifacts.service.tenant_repository") as mock_tenant,
+        patch("domains.artifacts.service.project_repository") as mock_project,
+    ):
+        mock_repo.get_by_id = AsyncMock(return_value=artifact)
+        mock_repo.hard_delete = AsyncMock(return_value=False)
+        mock_repo.delete_parse_results_by_artifact_id = AsyncMock(return_value=0)
+        mock_blob.delete_blob = AsyncMock()
+        mock_graph.delete_by_artifact_id = AsyncMock(return_value=0)
+        mock_tenant.increment_usage = AsyncMock()
+        mock_project.increment_artifact_count = AsyncMock()
+
+        result = await svc.delete_artifact("t-001", "prj-001", "art-001")
+
+        assert result is not None
+        mock_tenant.increment_usage.assert_not_called()
+        mock_project.increment_artifact_count.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
