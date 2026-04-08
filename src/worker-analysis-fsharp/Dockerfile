@@ -43,9 +43,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN groupadd --gid 1000 worker && \
-    useradd --uid 1000 --gid worker --shell /bin/false worker
+# Create a non-root user.
+# GID/UID 1000 is already reserved in the .NET runtime base image (Debian Bookworm),
+# so use 10001 to avoid a conflict.
+RUN groupadd --gid 10001 worker && \
+    useradd --uid 10001 --gid worker --shell /bin/false worker
 
 WORKDIR /app
 
