@@ -156,4 +156,17 @@ describe("middleware", () => {
     expect(pattern).toContain("_next/image");
     expect(pattern).toContain("favicon.ico");
   });
+
+  it("exports config.matcher that excludes health check routes", async () => {
+    jest.resetModules();
+    jest.mock("next/server", () => ({
+      NextResponse: mockNextResponse,
+    }));
+    const mod = await import("@/middleware");
+
+    // The matcher pattern should exclude v1/health to avoid unnecessary
+    // middleware processing on Azure Container Apps health probes.
+    const pattern = mod.config.matcher[0];
+    expect(pattern).toContain("v1/health");
+  });
 });
