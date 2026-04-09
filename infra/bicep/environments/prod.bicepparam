@@ -14,6 +14,7 @@ param subnetContainerAppsPrefix = '10.1.0.0/23'
 param subnetPrivateEndpointsPrefix = '10.1.3.0/26'
 param subnetIntegrationPrefix = '10.1.3.64/26'
 param subnetBastionPrefix = '10.1.4.0/26'
+param subnetVirtualMachinesPrefix = '10.1.5.0/24'
 
 // Service tiers — production grade
 param containerRegistrySku = 'Standard'
