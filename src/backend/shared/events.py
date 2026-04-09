@@ -52,8 +52,11 @@ def build_cloud_event(
     # continue the trace.
     carrier: dict[str, str] = {}
     inject(carrier)
-    for key, value in carrier.items():
-        event.extensions[key] = value
+    if carrier:
+        if event.extensions is None:
+            event.extensions = {}
+        for key, value in carrier.items():
+            event.extensions[key] = value
 
     return event
 
