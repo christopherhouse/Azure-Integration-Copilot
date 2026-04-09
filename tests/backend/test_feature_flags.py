@@ -38,8 +38,7 @@ def client():
 
 def test_get_feature_flags_empty_when_no_cache(client):
     """Returns an empty flags map when App Config has no feature.* keys."""
-    with patch.object(app_config_service, "_cache", {}), \
-         patch.object(app_config_service, "_loaded", True):
+    with patch.object(app_config_service, "get_by_prefix", return_value={}):
         response = client.get("/api/v1/feature-flags")
 
     assert response.status_code == 200
@@ -49,14 +48,12 @@ def test_get_feature_flags_empty_when_no_cache(client):
 
 def test_get_feature_flags_returns_boolean_flags(client):
     """feature.* keys from App Config are returned as booleans."""
-    cache = {
+    prefix_result = {
         "feature.new-dashboard": "true",
         "feature.dark-mode": "false",
         "feature.beta-analysis": "True",  # case-insensitive
-        "other.setting": "some-value",     # non-feature key — excluded
     }
-    with patch.object(app_config_service, "_cache", cache), \
-         patch.object(app_config_service, "_loaded", True):
+    with patch.object(app_config_service, "get_by_prefix", return_value=prefix_result):
         response = client.get("/api/v1/feature-flags")
 
     assert response.status_code == 200
@@ -64,15 +61,35 @@ def test_get_feature_flags_returns_boolean_flags(client):
     assert flags["new-dashboard"] is True
     assert flags["dark-mode"] is False
     assert flags["beta-analysis"] is True
-    assert "other.setting" not in flags
     assert len(flags) == 3
+
+
+def test_get_feature_flags_non_feature_keys_excluded(client):
+    """Only keys returned by get_by_prefix('feature.') are included."""
+    # The router delegates filtering to get_by_prefix, so non-feature keys
+    # must not appear. Simulate get_by_prefix correctly returning only
+    # feature-prefixed keys.
+    with patch.object(
+        app_config_service,
+        "get_by_prefix",
+        return_value={"feature.my-flag": "true"},
+    ) as mock_gbp:
+        response = client.get("/api/v1/feature-flags")
+
+    # get_by_prefix was called with the feature prefix
+    mock_gbp.assert_called_once_with("feature.")
+    flags = response.json()["data"]["flags"]
+    assert "my-flag" in flags
+    assert "feature.my-flag" not in flags
 
 
 def test_get_feature_flags_strips_feature_prefix(client):
     """The 'feature.' prefix is stripped from returned flag names."""
-    cache = {"feature.my-flag": "true"}
-    with patch.object(app_config_service, "_cache", cache), \
-         patch.object(app_config_service, "_loaded", True):
+    with patch.object(
+        app_config_service,
+        "get_by_prefix",
+        return_value={"feature.my-flag": "true"},
+    ):
         response = client.get("/api/v1/feature-flags")
 
     flags = response.json()["data"]["flags"]
@@ -82,14 +99,13 @@ def test_get_feature_flags_strips_feature_prefix(client):
 
 def test_get_feature_flags_non_true_values_are_false(client):
     """Values other than 'true' (case-insensitive) are treated as disabled."""
-    cache = {
+    prefix_result = {
         "feature.flag-a": "1",
         "feature.flag-b": "yes",
         "feature.flag-c": "enabled",
         "feature.flag-d": "",
     }
-    with patch.object(app_config_service, "_cache", cache), \
-         patch.object(app_config_service, "_loaded", True):
+    with patch.object(app_config_service, "get_by_prefix", return_value=prefix_result):
         response = client.get("/api/v1/feature-flags")
 
     flags = response.json()["data"]["flags"]
@@ -101,8 +117,7 @@ def test_get_feature_flags_non_true_values_are_false(client):
 
 def test_get_feature_flags_response_has_meta(client):
     """Response includes the standard meta envelope."""
-    with patch.object(app_config_service, "_cache", {}), \
-         patch.object(app_config_service, "_loaded", True):
+    with patch.object(app_config_service, "get_by_prefix", return_value={}):
         response = client.get("/api/v1/feature-flags")
 
     body = response.json()
@@ -119,8 +134,10 @@ def test_get_feature_flags_calls_ensure_loaded(client):
         nonlocal ensure_loaded_called
         ensure_loaded_called = True
 
-    with patch.object(app_config_service, "ensure_loaded", side_effect=_fake_ensure_loaded), \
-         patch.object(app_config_service, "_cache", {}):
+    with (
+        patch.object(app_config_service, "ensure_loaded", side_effect=_fake_ensure_loaded),
+        patch.object(app_config_service, "get_by_prefix", return_value={}),
+    ):
         client.get("/api/v1/feature-flags")
 
     assert ensure_loaded_called

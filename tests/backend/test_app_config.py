@@ -145,6 +145,41 @@ async def test_get_returns_default_for_missing_key():
 
 
 # ---------------------------------------------------------------------------
+# get_by_prefix
+# ---------------------------------------------------------------------------
+
+
+def test_get_by_prefix_returns_matching_keys():
+    svc = AppConfigService()
+    svc._cache = {
+        "feature.new-ui": "true",
+        "feature.dark-mode": "false",
+        "other.setting": "value",
+    }
+    result = svc.get_by_prefix("feature.")
+    assert result == {"feature.new-ui": "true", "feature.dark-mode": "false"}
+
+
+def test_get_by_prefix_returns_empty_when_no_match():
+    svc = AppConfigService()
+    svc._cache = {"other.setting": "value"}
+    assert svc.get_by_prefix("feature.") == {}
+
+
+def test_get_by_prefix_returns_empty_when_cache_is_empty():
+    svc = AppConfigService()
+    assert svc.get_by_prefix("feature.") == {}
+
+
+def test_get_by_prefix_does_not_strip_prefix():
+    """Keys in the returned dict retain their original names."""
+    svc = AppConfigService()
+    svc._cache = {"feature.my-flag": "true"}
+    result = svc.get_by_prefix("feature.")
+    assert "feature.my-flag" in result
+
+
+# ---------------------------------------------------------------------------
 # on_config_changed
 # ---------------------------------------------------------------------------
 

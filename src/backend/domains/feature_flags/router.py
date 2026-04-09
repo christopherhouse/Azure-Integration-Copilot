@@ -48,10 +48,9 @@ async def get_feature_flags(request: Request):
     await app_config_service.ensure_loaded()
 
     flags: dict[str, bool] = {}
-    for key, value in app_config_service._cache.items():
-        if key.startswith(_FEATURE_PREFIX):
-            flag_name = key[len(_FEATURE_PREFIX):]
-            flags[flag_name] = value.strip().lower() == "true"
+    for key, value in app_config_service.get_by_prefix(_FEATURE_PREFIX).items():
+        flag_name = key[len(_FEATURE_PREFIX):]
+        flags[flag_name] = value.strip().lower() == "true"
 
     logger.debug("feature_flags_fetched", flag_count=len(flags))
 

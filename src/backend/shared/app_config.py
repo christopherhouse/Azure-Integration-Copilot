@@ -90,6 +90,15 @@ class AppConfigService:
         """Return the cached value for *key*, or *default* if not present."""
         return self._cache.get(key, default)
 
+    def get_by_prefix(self, prefix: str) -> dict[str, str]:
+        """Return all cached key-value pairs whose keys start with *prefix*.
+
+        The returned dictionary contains the original, unmodified keys (the
+        prefix is **not** stripped).  Callers are responsible for any key
+        transformation they need.
+        """
+        return {k: v for k, v in self._cache.items() if k.startswith(prefix)}
+
     async def on_config_changed(self) -> None:
         """Invalidate and refresh the cache.
 
