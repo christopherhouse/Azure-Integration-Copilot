@@ -14,6 +14,7 @@ import structlog
 
 from config import settings
 from domains.analysis.repository import analysis_repository
+from shared.app_config import app_config_service
 from shared.event_consumer import EventGridConsumer
 from shared.events import event_grid_publisher
 from shared.logging import setup_logging, setup_telemetry
@@ -31,6 +32,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 async def main() -> None:
     setup_logging()
     setup_telemetry(service_name="integrisight-worker-analysis")
+    await app_config_service.ensure_loaded()
 
     consumer = EventGridConsumer(
         endpoint=settings.event_grid_namespace_endpoint,

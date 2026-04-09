@@ -22,6 +22,7 @@ from domains.users.router import router as user_router
 from middleware.auth import AuthMiddleware
 from middleware.quota import QuotaMiddleware
 from middleware.tenant_context import TenantContextMiddleware
+from shared.app_config import app_config_service
 from shared.blob import blob_service
 from shared.cosmos import cosmos_service
 from shared.events import event_grid_publisher
@@ -44,7 +45,9 @@ async def lifespan(_app: FastAPI):
         )
 
     logger.info("app_started", environment=settings.environment)
+    await app_config_service.ensure_loaded()
     yield
+    await app_config_service.close()
     await cosmos_service.close()
     await blob_service.close()
     await event_grid_publisher.close()

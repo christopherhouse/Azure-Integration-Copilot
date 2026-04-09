@@ -15,6 +15,7 @@ import structlog
 
 from config import settings
 from domains.artifacts.repository import artifact_repository
+from shared.app_config import app_config_service
 from shared.blob import blob_service
 from shared.clamav import clamav_scanner
 from shared.event_consumer import EventGridConsumer
@@ -31,6 +32,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 async def main() -> None:
     setup_logging()
     setup_telemetry(service_name="integrisight-worker-scan-gate")
+    await app_config_service.ensure_loaded()
 
     consumer = EventGridConsumer(
         endpoint=settings.event_grid_namespace_endpoint,

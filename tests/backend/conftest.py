@@ -19,6 +19,7 @@ _test_env = {
     "AZURE_CLIENT_ID": "",
     "APPLICATIONINSIGHTS_CONNECTION_STRING": "",
     "SKIP_AUTH": "true",
+    "APP_CONFIG_ENDPOINT": "",
 }
 with patch.dict(os.environ, _test_env):
     from main import app  # noqa: E402
