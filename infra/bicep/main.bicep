@@ -122,6 +122,7 @@ var resourceNames = {
   idWorker: 'id-worker-${namePrefix}'
   bastion: 'bas-${namePrefix}'
   aiServices: 'ais-${workload}-${environment}-${aiFoundryLocation}'
+  appConfig: 'appcs-${namePrefix}'
 }
 
 var commonTags = union(tags, {
@@ -479,6 +480,28 @@ resource workerWebPubSubOwner 'Microsoft.Authorization/roleAssignments@2022-04-0
   }
 }
 
+// App Configuration Data Reader for backend identity
+resource backendAppConfigDataReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.appConfig, resourceNames.idBackend, 'AppConfigDataReader')
+  scope: appConfigResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '516239f1-63e1-4d78-a4de-a74fb236a071')
+    principalId: identityBackend.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+// App Configuration Data Reader for worker identity
+resource workerAppConfigDataReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(resourceGroup().id, resourceNames.appConfig, resourceNames.idWorker, 'AppConfigDataReader')
+  scope: appConfigResource
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '516239f1-63e1-4d78-a4de-a74fb236a071')
+    principalId: identityWorker.outputs.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 // Existing resource references for RBAC scoping
 resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: resourceNames.containerRegistry
@@ -533,6 +556,10 @@ resource aiServicesResource 'Microsoft.CognitiveServices/accounts@2024-10-01' ex
   name: resourceNames.aiServices
 }
 
+resource appConfigResource 'Microsoft.AppConfiguration/configurationStores@2024-05-01' existing = {
+  name: resourceNames.appConfig
+}
+
 // ---------------------------------------------------------------------------
 // Container Apps Environment
 // ---------------------------------------------------------------------------
@@ -576,6 +603,22 @@ module aiFoundry 'modules/ai-foundry.bicep' = {
     name: resourceNames.aiServices
     modelDeploymentSkuName: aiModelDeploymentSku
     modelDeploymentCapacity: aiModelDeploymentCapacity
+    logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
+    tags: commonTags
+  }
+}
+
+// ---------------------------------------------------------------------------
+// App Configuration
+// ---------------------------------------------------------------------------
+
+module appConfiguration 'modules/app-configuration.bicep' = {
+  name: 'app-configuration'
+  params: {
+    location: location
+    appConfigName: resourceNames.appConfig
+    subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
+    privateDnsZoneId: networking.outputs.privateDnsZoneIdAppConfig
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     tags: commonTags
   }
@@ -718,3 +761,6 @@ output aiServicesEndpoint string = aiFoundry.outputs.endpoint
 
 @description('Name of the AI Services account')
 output aiServicesName string = aiFoundry.outputs.name
+
+@description('Endpoint of the App Configuration store')
+output appConfigEndpoint string = appConfiguration.outputs.appConfigEndpoint
