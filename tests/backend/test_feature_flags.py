@@ -36,9 +36,9 @@ def client():
 # ---------------------------------------------------------------------------
 
 
-def test_get_feature_flags_empty_when_no_cache(client):
-    """Returns an empty flags map when App Config has no feature.* keys."""
-    with patch.object(app_config_service, "get_by_prefix", return_value={}):
+def test_get_feature_flags_empty_when_no_flags(client):
+    """Returns an empty flags map when App Config has no feature flags."""
+    with patch.object(app_config_service, "get_feature_flags", return_value={}):
         response = client.get("/api/v1/feature-flags")
 
     assert response.status_code == 200
@@ -47,13 +47,13 @@ def test_get_feature_flags_empty_when_no_cache(client):
 
 
 def test_get_feature_flags_returns_boolean_flags(client):
-    """feature.* keys from App Config are returned as booleans."""
-    prefix_result = {
-        "feature.new-dashboard": "true",
-        "feature.dark-mode": "false",
-        "feature.beta-analysis": "True",  # case-insensitive
+    """Feature flags from App Config are returned as booleans."""
+    flags_result = {
+        "new-dashboard": True,
+        "dark-mode": False,
+        "beta-analysis": True,
     }
-    with patch.object(app_config_service, "get_by_prefix", return_value=prefix_result):
+    with patch.object(app_config_service, "get_feature_flags", return_value=flags_result):
         response = client.get("/api/v1/feature-flags")
 
     assert response.status_code == 200
@@ -64,60 +64,39 @@ def test_get_feature_flags_returns_boolean_flags(client):
     assert flags["beta-analysis"] is True
 
 
-def test_get_feature_flags_non_feature_keys_excluded(client):
-    """Only keys returned by get_by_prefix('feature.') are included."""
-    # The router delegates filtering to get_by_prefix, so non-feature keys
-    # must not appear. Simulate get_by_prefix correctly returning only
-    # feature-prefixed keys.
+def test_get_feature_flags_prefix_stripped(client):
+    """The '.appconfig.featureflag/' prefix is stripped from flag names."""
     with patch.object(
         app_config_service,
-        "get_by_prefix",
-        return_value={"feature.my-flag": "true"},
-    ) as mock_gbp:
-        response = client.get("/api/v1/feature-flags")
-
-    # get_by_prefix was called with the feature prefix
-    mock_gbp.assert_called_once_with("feature.")
-    flags = response.json()["data"]["flags"]
-    assert "my-flag" in flags
-    assert "feature.my-flag" not in flags
-
-
-def test_get_feature_flags_strips_feature_prefix(client):
-    """The 'feature.' prefix is stripped from returned flag names."""
-    with patch.object(
-        app_config_service,
-        "get_by_prefix",
-        return_value={"feature.my-flag": "true"},
+        "get_feature_flags",
+        return_value={"my-flag": True},
     ):
         response = client.get("/api/v1/feature-flags")
 
     flags = response.json()["data"]["flags"]
     assert "my-flag" in flags
-    assert "feature.my-flag" not in flags
+    assert ".appconfig.featureflag/my-flag" not in flags
 
 
-def test_get_feature_flags_non_true_values_are_false(client):
-    """Values other than 'true' (case-insensitive) are treated as disabled."""
-    prefix_result = {
-        "feature.flag-a": "1",
-        "feature.flag-b": "yes",
-        "feature.flag-c": "enabled",
-        "feature.flag-d": "",
+def test_get_feature_flags_disabled_flags(client):
+    """Disabled flags are returned as False."""
+    flags_result = {
+        "flag-a": False,
+        "flag-b": False,
+        "flag-c": False,
     }
-    with patch.object(app_config_service, "get_by_prefix", return_value=prefix_result):
+    with patch.object(app_config_service, "get_feature_flags", return_value=flags_result):
         response = client.get("/api/v1/feature-flags")
 
     flags = response.json()["data"]["flags"]
     assert flags["flag-a"] is False
     assert flags["flag-b"] is False
     assert flags["flag-c"] is False
-    assert flags["flag-d"] is False
 
 
 def test_get_feature_flags_response_has_meta(client):
     """Response includes the standard meta envelope."""
-    with patch.object(app_config_service, "get_by_prefix", return_value={}):
+    with patch.object(app_config_service, "get_feature_flags", return_value={}):
         response = client.get("/api/v1/feature-flags")
 
     body = response.json()
@@ -136,7 +115,7 @@ def test_get_feature_flags_calls_ensure_loaded(client):
 
     with (
         patch.object(app_config_service, "ensure_loaded", side_effect=_fake_ensure_loaded),
-        patch.object(app_config_service, "get_by_prefix", return_value={}),
+        patch.object(app_config_service, "get_feature_flags", return_value={}),
     ):
         client.get("/api/v1/feature-flags")
 

@@ -15,6 +15,7 @@ that a rapid burst of change events does not flood the service with requests.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Any
 
@@ -29,6 +30,10 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 # Minimum seconds to wait between full cache re-loads, even when change
 # notifications arrive in quick succession.
 _MIN_REFRESH_INTERVAL: float = 30.0
+
+# Azure App Configuration stores feature flags with this key prefix and
+# a JSON value containing an ``enabled`` boolean.
+_FF_PREFIX: str = ".appconfig.featureflag/"
 
 
 class AppConfigService:
@@ -98,6 +103,30 @@ class AppConfigService:
         transformation they need.
         """
         return {k: v for k, v in self._cache.items() if k.startswith(prefix)}
+
+    def get_feature_flags(self) -> dict[str, bool]:
+        """Return all feature flags from Azure App Configuration.
+
+        Feature flags use the key prefix ``.appconfig.featureflag/`` and their
+        values are JSON objects with an ``enabled`` boolean field.  The prefix
+        is stripped so callers receive plain flag names (e.g.
+        ``displayProductLandingPage``, not
+        ``.appconfig.featureflag/displayProductLandingPage``).
+
+        A flag is **enabled** when its JSON value has ``"enabled": true``.
+        Malformed JSON or missing ``enabled`` fields are treated as disabled.
+        """
+        flags: dict[str, bool] = {}
+        for key, value in self._cache.items():
+            if not key.startswith(_FF_PREFIX):
+                continue
+            flag_name = key[len(_FF_PREFIX):]
+            try:
+                flag_data = json.loads(value)
+                flags[flag_name] = bool(flag_data.get("enabled", False))
+            except (json.JSONDecodeError, AttributeError, TypeError):
+                flags[flag_name] = False
+        return flags
 
     async def on_config_changed(self) -> None:
         """Invalidate and refresh the cache.

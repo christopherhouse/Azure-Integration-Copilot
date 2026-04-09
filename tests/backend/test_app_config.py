@@ -180,6 +180,68 @@ def test_get_by_prefix_does_not_strip_prefix():
 
 
 # ---------------------------------------------------------------------------
+# get_feature_flags
+# ---------------------------------------------------------------------------
+
+
+def test_get_feature_flags_returns_enabled_flags():
+    """Feature flags with enabled=true are returned as True."""
+    svc = AppConfigService()
+    svc._cache = {
+        '.appconfig.featureflag/flag-a': '{"id":"flag-a","enabled":true,"conditions":{}}',
+        '.appconfig.featureflag/flag-b': '{"id":"flag-b","enabled":false,"conditions":{}}',
+        'other.setting': 'value',
+    }
+    result = svc.get_feature_flags()
+    assert result == {"flag-a": True, "flag-b": False}
+
+
+def test_get_feature_flags_ignores_non_feature_keys():
+    """Only keys with the .appconfig.featureflag/ prefix are returned."""
+    svc = AppConfigService()
+    svc._cache = {
+        '.appconfig.featureflag/my-flag': '{"id":"my-flag","enabled":true}',
+        'feature.old-style': 'true',
+        'some.config': 'value',
+    }
+    result = svc.get_feature_flags()
+    assert result == {"my-flag": True}
+
+
+def test_get_feature_flags_returns_empty_when_no_flags():
+    svc = AppConfigService()
+    svc._cache = {"other.setting": "value"}
+    assert svc.get_feature_flags() == {}
+
+
+def test_get_feature_flags_returns_empty_when_cache_is_empty():
+    svc = AppConfigService()
+    assert svc.get_feature_flags() == {}
+
+
+def test_get_feature_flags_handles_malformed_json():
+    """Malformed JSON values are treated as disabled."""
+    svc = AppConfigService()
+    svc._cache = {
+        '.appconfig.featureflag/bad-json': 'not-json',
+        '.appconfig.featureflag/good': '{"id":"good","enabled":true}',
+    }
+    result = svc.get_feature_flags()
+    assert result["bad-json"] is False
+    assert result["good"] is True
+
+
+def test_get_feature_flags_handles_missing_enabled_field():
+    """JSON values without an 'enabled' field are treated as disabled."""
+    svc = AppConfigService()
+    svc._cache = {
+        '.appconfig.featureflag/no-enabled': '{"id":"no-enabled","conditions":{}}',
+    }
+    result = svc.get_feature_flags()
+    assert result["no-enabled"] is False
+
+
+# ---------------------------------------------------------------------------
 # on_config_changed
 # ---------------------------------------------------------------------------
 

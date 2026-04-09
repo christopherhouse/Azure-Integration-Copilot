@@ -1,8 +1,11 @@
 """Feature flags API route.
 
-Exposes App Configuration key-values whose keys start with the ``feature.``
-prefix as a simple boolean flag map.  This lets the frontend query flags
-without direct access to App Configuration (which is private).
+Exposes Azure App Configuration feature flags as a simple boolean flag map.
+Feature flags in App Configuration use the key prefix
+``.appconfig.featureflag/`` and store a JSON value with an ``enabled``
+boolean.  This endpoint parses that format and returns a flat
+``{flag_name: bool}`` map so the frontend can query flags without direct
+access to App Configuration (which is private).
 """
 
 import uuid
@@ -20,8 +23,6 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/api/v1/feature-flags", tags=["feature-flags"])
 
-_FEATURE_PREFIX = "feature."
-
 
 def _request_id(request: Request) -> str:
     return request.headers.get("X-Request-ID", str(uuid.uuid4()))
@@ -31,13 +32,10 @@ def _request_id(request: Request) -> str:
 async def get_feature_flags(request: Request):
     """Return all feature flags from App Configuration.
 
-    Keys in App Configuration that begin with ``feature.`` are surfaced as
-    feature flags.  The prefix is stripped so callers receive plain flag
-    names (e.g. ``new-dashboard``, not ``feature.new-dashboard``).
-
-    A flag is **enabled** when its value is the string ``"true"``
-    (case-insensitive).  All other values — or a missing key — are treated
-    as disabled.
+    Feature flags in Azure App Configuration use the key prefix
+    ``.appconfig.featureflag/`` and their values are JSON objects containing
+    an ``enabled`` boolean field.  The prefix is stripped so callers receive
+    plain flag names (e.g. ``displayProductLandingPage``).
 
     When App Configuration is not configured (local dev without
     ``APP_CONFIG_ENDPOINT`` set) an empty flags map is returned so the UI
@@ -47,10 +45,7 @@ async def get_feature_flags(request: Request):
 
     await app_config_service.ensure_loaded()
 
-    flags: dict[str, bool] = {}
-    for key, value in app_config_service.get_by_prefix(_FEATURE_PREFIX).items():
-        flag_name = key[len(_FEATURE_PREFIX):]
-        flags[flag_name] = value.strip().lower() == "true"
+    flags = app_config_service.get_feature_flags()
 
     logger.debug("feature_flags_fetched", flag_count=len(flags))
 
