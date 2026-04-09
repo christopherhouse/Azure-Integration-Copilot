@@ -16,6 +16,7 @@ from config import settings
 from domains.artifacts.repository import artifact_repository
 from domains.graph.repository import graph_repository
 from domains.projects.repository import project_repository
+from shared.app_config import app_config_service
 from shared.cosmos import cosmos_service
 from shared.event_consumer import EventGridConsumer
 from shared.events import event_grid_publisher
@@ -31,6 +32,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 async def main() -> None:
     setup_logging()
     setup_telemetry(service_name="integrisight-worker-graph-builder")
+    await app_config_service.ensure_loaded()
 
     consumer = EventGridConsumer(
         endpoint=settings.event_grid_namespace_endpoint,
@@ -54,7 +56,10 @@ async def main() -> None:
         loop.add_signal_handler(sig, worker.stop)
 
     logger.info("graph_builder_worker_starting", subscription=SUBSCRIPTION_NAME)
-    await worker.run()
+    try:
+        await worker.run()
+    finally:
+        await app_config_service.close()
 
 
 if __name__ == "__main__":

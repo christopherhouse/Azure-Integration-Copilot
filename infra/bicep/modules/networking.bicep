@@ -228,6 +228,7 @@ var privateDnsZoneNames = [
   'privatelink.eventgrid.azure.net'
   'privatelink.azurecr.io'
   'privatelink.webpubsub.azure.com'
+  'privatelink.azconfig.io'
 ]
 
 module privateDnsZones 'br/public:avm/res/network/private-dns-zone:0.7.0' = [
@@ -290,3 +291,6 @@ output privateDnsZoneIdAcr string = privateDnsZones[6].outputs.resourceId
 
 @description('Private DNS zone ID for Web PubSub')
 output privateDnsZoneIdWebpubsub string = privateDnsZones[7].outputs.resourceId
+
+@description('Private DNS zone ID for App Configuration')
+output privateDnsZoneIdAppConfig string = privateDnsZones[8].outputs.resourceId

@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     clamd_host: str = "localhost"
     clamd_port: int = 3310
 
+    # Azure App Configuration
+    app_config_endpoint: str = ""
+
     # CORS settings
     cors_allowed_origins: str = ""
 

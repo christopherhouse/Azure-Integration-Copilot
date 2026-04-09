@@ -10,6 +10,7 @@ dependencies = [
     "pydantic>=2.0",
     "pydantic-settings",
     "aiohttp",
+    "azure-appconfiguration>=1.8.0",
     "azure-identity",
     "azure-cosmos",
     "azure-storage-blob",
