@@ -92,16 +92,12 @@ resource configStoreTelemetry 'Microsoft.AppConfiguration/configurationStores@20
 
 // ---------------------------------------------------------------------------
 // Feature Flag — displayProductLandingPage
-// Uses an existing reference to the store created by the AVM module so that
-// the keyValues child resource is parented correctly.
+// Parented on the configStoreTelemetry resource which already depends on the
+// AVM module, ensuring correct deployment ordering.
 // ---------------------------------------------------------------------------
 
-resource existingConfigStore 'Microsoft.AppConfiguration/configurationStores@2024-05-01' existing = {
-  name: appConfigName
-}
-
 resource displayProductLandingPageFlag 'Microsoft.AppConfiguration/configurationStores/keyValues@2024-05-01' = {
-  parent: existingConfigStore
+  parent: configStoreTelemetry
   name: '.appconfig.featureflag~2FdisplayProductLandingPage'
   properties: {
     value: string({
@@ -114,9 +110,6 @@ resource displayProductLandingPageFlag 'Microsoft.AppConfiguration/configuration
     })
     contentType: 'application/vnd.microsoft.appconfig.ff+json;charset=utf-8'
   }
-  dependsOn: [
-    configStore
-  ]
 }
 
 @description('Resource ID of the App Configuration store')
