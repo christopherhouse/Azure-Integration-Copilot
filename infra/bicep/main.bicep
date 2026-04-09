@@ -35,6 +35,9 @@ param subnetIntegrationPrefix string = '10.0.3.64/26'
 @description('Address prefix for AzureBastionSubnet (/26 minimum)')
 param subnetBastionPrefix string = '10.0.4.0/26'
 
+@description('Address prefix for virtual machines subnet')
+param subnetVirtualMachinesPrefix string = '10.0.5.0/24'
+
 
 @description('Container Registry SKU')
 @allowed(['Basic', 'Standard', 'Premium'])
@@ -121,6 +124,7 @@ var resourceNames = {
   idBackend: 'id-backend-${namePrefix}'
   idWorker: 'id-worker-${namePrefix}'
   bastion: 'bas-${namePrefix}'
+  natGateway: 'ng-${namePrefix}'
   aiServices: 'ais-${workload}-${environment}-${aiFoundryLocation}'
   appConfig: 'appcs-${namePrefix}'
 }
@@ -175,6 +179,9 @@ module networking 'modules/networking.bicep' = {
     subnetPrivateEndpointsPrefix: subnetPrivateEndpointsPrefix
     subnetIntegrationPrefix: subnetIntegrationPrefix
     subnetBastionPrefix: subnetBastionPrefix
+    subnetVirtualMachinesPrefix: subnetVirtualMachinesPrefix
+    natGatewayName: resourceNames.natGateway
+    logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     tags: commonTags
   }
 }

@@ -23,6 +23,15 @@ param subnetIntegrationPrefix string = '10.0.3.64/26'
 @description('Address prefix for AzureBastionSubnet (/26 minimum)')
 param subnetBastionPrefix string = '10.0.4.0/26'
 
+@description('Address prefix for virtual machines subnet')
+param subnetVirtualMachinesPrefix string = '10.0.5.0/24'
+
+@description('Name of the NAT Gateway')
+param natGatewayName string
+
+@description('Resource ID of the Log Analytics workspace for diagnostics')
+param logAnalyticsWorkspaceId string
+
 @description('Tags to apply')
 param tags object = {}
 
@@ -173,6 +182,61 @@ resource nsgBastion 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
   }
 }
 
+resource nsgVirtualMachines 'Microsoft.Network/networkSecurityGroups@2024-05-01' = {
+  name: 'nsg-virtual-machines-${vnetName}'
+  location: location
+  tags: tags
+  properties: {
+    securityRules: [
+      {
+        name: 'AllowSshFromBastion'
+        properties: {
+          priority: 100
+          direction: 'Inbound'
+          access: 'Allow'
+          protocol: 'Tcp'
+          sourceAddressPrefix: subnetBastionPrefix
+          sourcePortRange: '*'
+          destinationAddressPrefix: '*'
+          destinationPortRanges: [
+            '22'
+            '3389'
+          ]
+        }
+      }
+    ]
+  }
+}
+
+// ---------------------------------------------------------------------------
+// NAT Gateway — provides outbound internet for the VM subnet
+// ---------------------------------------------------------------------------
+
+module natGateway 'br/public:avm/res/network/nat-gateway:2.0.1' = {
+  name: 'natgw-${uniqueString(natGatewayName)}'
+  params: {
+    name: natGatewayName
+    location: location
+    availabilityZone: -1
+    enableTelemetry: false
+    idleTimeoutInMinutes: 4
+    tags: tags
+    publicIPAddresses: [
+      {
+        name: 'pip-${natGatewayName}'
+        skuName: 'Standard'
+        skuTier: 'Regional'
+        diagnosticSettings: [
+          {
+            name: 'pip-natgw-diagnostics'
+            workspaceResourceId: logAnalyticsWorkspaceId
+          }
+        ]
+      }
+    ]
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Virtual Network + subnets — AVM
 // ---------------------------------------------------------------------------
@@ -191,25 +255,32 @@ module vnet 'br/public:avm/res/network/virtual-network:0.5.2' = {
         addressPrefix: subnetContainerAppsPrefix
         networkSecurityGroupResourceId: nsgContainerApps.id
         delegation: 'Microsoft.App/environments'
-        defaultOutboundAccess: true
+        defaultOutboundAccess: false
       }
       {
         name: 'snet-private-endpoints'
         addressPrefix: subnetPrivateEndpointsPrefix
         networkSecurityGroupResourceId: nsgPrivateEndpoints.id
-        defaultOutboundAccess: true
+        defaultOutboundAccess: false
       }
       {
         name: 'snet-integration'
         addressPrefix: subnetIntegrationPrefix
         networkSecurityGroupResourceId: nsgIntegration.id
-        defaultOutboundAccess: true
+        defaultOutboundAccess: false
       }
       {
         name: 'AzureBastionSubnet'
         addressPrefix: subnetBastionPrefix
         networkSecurityGroupResourceId: nsgBastion.id
-        defaultOutboundAccess: true
+        defaultOutboundAccess: false
+      }
+      {
+        name: 'snet-virtual-machines'
+        addressPrefix: subnetVirtualMachinesPrefix
+        networkSecurityGroupResourceId: nsgVirtualMachines.id
+        natGatewayResourceId: natGateway.outputs.resourceId
+        defaultOutboundAccess: false
       }
     ]
   }
@@ -255,7 +326,7 @@ output vnetId string = vnet.outputs.resourceId
 output vnetName string = vnet.outputs.name
 
 // Subnet resource IDs — indices match subnet array order in the vnet module above:
-// [0] snet-container-apps, [1] snet-private-endpoints, [2] snet-integration, [3] AzureBastionSubnet
+// [0] snet-container-apps, [1] snet-private-endpoints, [2] snet-integration, [3] AzureBastionSubnet, [4] snet-virtual-machines
 @description('ID of the container apps subnet')
 output subnetContainerAppsId string = vnet.outputs.subnetResourceIds[0]
 
@@ -267,6 +338,12 @@ output subnetIntegrationId string = vnet.outputs.subnetResourceIds[2]
 
 @description('ID of the AzureBastionSubnet')
 output subnetBastionId string = vnet.outputs.subnetResourceIds[3]
+
+@description('ID of the virtual machines subnet')
+output subnetVirtualMachinesId string = vnet.outputs.subnetResourceIds[4]
+
+@description('Resource ID of the NAT Gateway')
+output natGatewayId string = natGateway.outputs.resourceId
 
 @description('Map of private DNS zone names to resource IDs')
 output privateDnsZoneIdVaultcore string = privateDnsZones[0].outputs.resourceId
