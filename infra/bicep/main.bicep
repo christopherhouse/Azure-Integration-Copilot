@@ -181,6 +181,7 @@ module networking 'modules/networking.bicep' = {
     subnetBastionPrefix: subnetBastionPrefix
     subnetVirtualMachinesPrefix: subnetVirtualMachinesPrefix
     natGatewayName: resourceNames.natGateway
+    logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
     tags: commonTags
   }
 }

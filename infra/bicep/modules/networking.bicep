@@ -29,6 +29,9 @@ param subnetVirtualMachinesPrefix string = '10.0.5.0/24'
 @description('Name of the NAT Gateway')
 param natGatewayName string
 
+@description('Resource ID of the Log Analytics workspace for diagnostics')
+param logAnalyticsWorkspaceId string
+
 @description('Tags to apply')
 param tags object = {}
 
@@ -223,6 +226,12 @@ module natGateway 'br/public:avm/res/network/nat-gateway:2.0.1' = {
         name: 'pip-${natGatewayName}'
         skuName: 'Standard'
         skuTier: 'Regional'
+        diagnosticSettings: [
+          {
+            name: 'pip-natgw-diagnostics'
+            workspaceResourceId: logAnalyticsWorkspaceId
+          }
+        ]
       }
     ]
   }
