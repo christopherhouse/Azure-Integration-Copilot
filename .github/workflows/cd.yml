@@ -62,6 +62,7 @@ jobs:
       frontend_custom_domain: ${{ steps.bicep-outputs.outputs.frontend_custom_domain }}
       backend_custom_domain: ${{ steps.bicep-outputs.outputs.backend_custom_domain }}
       ai_services_endpoint: ${{ steps.bicep-outputs.outputs.ai_services_endpoint }}
+      app_config_endpoint: ${{ steps.bicep-outputs.outputs.app_config_endpoint }}
 
     steps:
       - name: Checkout code
@@ -123,6 +124,7 @@ jobs:
           echo "frontend_custom_domain=$(echo "$OUTPUTS" | jq -r '.frontendCustomDomain.value')" >> "$GITHUB_OUTPUT"
           echo "backend_custom_domain=$(echo "$OUTPUTS" | jq -r '.backendCustomDomain.value')" >> "$GITHUB_OUTPUT"
           echo "ai_services_endpoint=$(echo "$OUTPUTS" | jq -r '.aiServicesEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "app_config_endpoint=$(echo "$OUTPUTS" | jq -r '.appConfigEndpoint.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Dev — Parse Container Metadata (shared output for matrix jobs)
@@ -250,6 +252,7 @@ jobs:
             WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-dev.outputs.web_pubsub_endpoint }}
             AZURE_CLIENT_ID=${{ needs.deploy-infra-dev.outputs.backend_identity_client_id }}
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-dev.outputs.appinsights_connection_string }}
+            APP_CONFIG_ENDPOINT=${{ needs.deploy-infra-dev.outputs.app_config_endpoint }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
         run: |
@@ -617,6 +620,7 @@ jobs:
       frontend_custom_domain: ${{ steps.bicep-outputs.outputs.frontend_custom_domain }}
       backend_custom_domain: ${{ steps.bicep-outputs.outputs.backend_custom_domain }}
       ai_services_endpoint: ${{ steps.bicep-outputs.outputs.ai_services_endpoint }}
+      app_config_endpoint: ${{ steps.bicep-outputs.outputs.app_config_endpoint }}
 
     steps:
       - name: Checkout code
@@ -678,6 +682,7 @@ jobs:
           echo "frontend_custom_domain=$(echo "$OUTPUTS" | jq -r '.frontendCustomDomain.value')" >> "$GITHUB_OUTPUT"
           echo "backend_custom_domain=$(echo "$OUTPUTS" | jq -r '.backendCustomDomain.value')" >> "$GITHUB_OUTPUT"
           echo "ai_services_endpoint=$(echo "$OUTPUTS" | jq -r '.aiServicesEndpoint.value')" >> "$GITHUB_OUTPUT"
+          echo "app_config_endpoint=$(echo "$OUTPUTS" | jq -r '.appConfigEndpoint.value')" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Prod — Parse Container Metadata (shared output for matrix jobs)
@@ -805,6 +810,7 @@ jobs:
             WEB_PUBSUB_ENDPOINT=${{ needs.deploy-infra-prod.outputs.web_pubsub_endpoint }}
             AZURE_CLIENT_ID=${{ needs.deploy-infra-prod.outputs.backend_identity_client_id }}
             APPLICATIONINSIGHTS_CONNECTION_STRING=${{ needs.deploy-infra-prod.outputs.appinsights_connection_string }}
+            APP_CONFIG_ENDPOINT=${{ needs.deploy-infra-prod.outputs.app_config_endpoint }}
             ENTRA_CIAM_TENANT_SUBDOMAIN=${{ secrets.ENTRA_CIAM_TENANT_SUBDOMAIN || vars.ENTRA_CIAM_TENANT_SUBDOMAIN }}
             ENTRA_CIAM_CLIENT_ID=${{ secrets.ENTRA_CIAM_CLIENT_ID || vars.ENTRA_CIAM_CLIENT_ID }}
         run: |

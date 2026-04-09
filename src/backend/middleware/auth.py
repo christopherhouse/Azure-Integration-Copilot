@@ -136,12 +136,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
             token = None
 
         try:
-            # Skip auth for health and OpenAPI documentation endpoints
-            if request.url.path.startswith("/api/v1/health") or request.url.path in (
-                "/docs",
-                "/redoc",
-                "/openapi.json",
-            ):
+            # Skip auth for health, feature flags, and OpenAPI documentation endpoints.
+            # Feature flags are global configuration (not user-specific) that the
+            # frontend needs before and during authentication to gate UI elements.
+            skip_paths = (
+                request.url.path.startswith("/api/v1/health")
+                or request.url.path.startswith("/api/v1/feature-flags")
+                or request.url.path in ("/docs", "/redoc", "/openapi.json")
+            )
+            if skip_paths:
                 request.state.external_id = "anonymous"
                 request.state.email = ""
                 request.state.display_name = ""

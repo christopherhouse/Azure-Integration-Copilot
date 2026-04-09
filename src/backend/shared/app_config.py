@@ -20,6 +20,7 @@ import time
 from typing import Any
 
 import structlog
+from azure.appconfiguration import FeatureFlagConfigurationSetting
 from azure.appconfiguration.aio import AzureAppConfigurationClient
 
 from config import settings
@@ -69,7 +70,21 @@ class AppConfigService:
         client = await self._get_client()
         new_cache: dict[str, str] = {}
         async for kv in client.list_configuration_settings():
-            if kv.key is not None and kv.value is not None:
+            if kv.key is None:
+                continue
+            if isinstance(kv, FeatureFlagConfigurationSetting):
+                # The SDK deserialises feature flags into typed objects whose
+                # .value property re-serialises to JSON.  In some SDK versions
+                # the getter can return None.  Fall back to a minimal JSON
+                # payload built from the typed fields so the flag is never
+                # silently dropped from the cache.
+                raw = kv.value
+                if raw is not None:
+                    new_cache[kv.key] = str(raw)
+                else:
+                    logger.debug("feature_flag_value_fallback", key=kv.key, enabled=kv.enabled)
+                    new_cache[kv.key] = json.dumps({"id": kv.feature_id, "enabled": kv.enabled})
+            elif kv.value is not None:
                 new_cache[kv.key] = str(kv.value)
         self._cache = new_cache
         self._loaded = True

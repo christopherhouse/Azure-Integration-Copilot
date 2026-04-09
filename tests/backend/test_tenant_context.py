@@ -141,6 +141,19 @@ async def test_health_skips_tenant_resolution(client):
 
 
 @pytest.mark.asyncio
+async def test_feature_flags_skips_tenant_resolution(client):
+    """Feature flags endpoint doesn't require tenant resolution."""
+    with patch("domains.feature_flags.router.app_config_service") as mock_svc:
+        mock_svc.ensure_loaded = AsyncMock()
+        mock_svc.get_feature_flags.return_value = {"myFlag": True}
+        response = await client.get("/api/v1/feature-flags")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["flags"]["myFlag"] is True
+
+
+@pytest.mark.asyncio
 async def test_tier_resolved_as_free_tier(client):
     """The resolved tier should be the FREE_TIER for MVP."""
     tenant = _make_tenant()

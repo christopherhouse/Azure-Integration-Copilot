@@ -242,8 +242,71 @@ def test_get_feature_flags_handles_missing_enabled_field():
 
 
 # ---------------------------------------------------------------------------
-# on_config_changed
+# _load with FeatureFlagConfigurationSetting
 # ---------------------------------------------------------------------------
+
+
+def _make_feature_flag_kv(feature_id: str, enabled: bool):
+    """Create a mock FeatureFlagConfigurationSetting.
+
+    The returned mock quacks like the SDK's FeatureFlagConfigurationSetting
+    so that ``isinstance(kv, FeatureFlagConfigurationSetting)`` returns True.
+    """
+    from azure.appconfiguration import FeatureFlagConfigurationSetting
+
+    kv = MagicMock(spec=FeatureFlagConfigurationSetting)
+    kv.key = f".appconfig.featureflag/{feature_id}"
+    kv.feature_id = feature_id
+    kv.enabled = enabled
+    kv.value = f'{{"id":"{feature_id}","enabled":{str(enabled).lower()}}}'
+    return kv
+
+
+@pytest.mark.asyncio
+async def test_load_caches_feature_flag_settings():
+    """Feature flags returned as FeatureFlagConfigurationSetting are cached."""
+    svc = AppConfigService()
+    mock_client = AsyncMock()
+    mock_client.list_configuration_settings = MagicMock(
+        return_value=_async_iter([
+            _make_kv("regular.setting", "value"),
+            _make_feature_flag_kv("displayProductLandingPage", True),
+        ])
+    )
+
+    with (
+        patch.object(_config.settings, "app_config_endpoint", "https://appcs-test.azconfig.io"),
+        patch.object(svc, "_get_client", new_callable=AsyncMock, return_value=mock_client),
+    ):
+        await svc.ensure_loaded()
+
+    assert svc.get("regular.setting") == "value"
+    flags = svc.get_feature_flags()
+    assert flags["displayProductLandingPage"] is True
+
+
+@pytest.mark.asyncio
+async def test_load_feature_flag_fallback_when_value_is_none():
+    """Feature flags with value=None fall back to typed field extraction."""
+    svc = AppConfigService()
+
+    ff_kv = _make_feature_flag_kv("myFlag", True)
+    ff_kv.value = None  # Simulate SDK returning None for value
+
+    mock_client = AsyncMock()
+    mock_client.list_configuration_settings = MagicMock(
+        return_value=_async_iter([ff_kv])
+    )
+
+    with (
+        patch.object(_config.settings, "app_config_endpoint", "https://appcs-test.azconfig.io"),
+        patch.object(svc, "_get_client", new_callable=AsyncMock, return_value=mock_client),
+    ):
+        await svc.ensure_loaded()
+
+    # The flag should still be in the cache despite value being None
+    flags = svc.get_feature_flags()
+    assert flags["myFlag"] is True
 
 
 @pytest.mark.asyncio
