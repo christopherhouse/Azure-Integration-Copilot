@@ -218,6 +218,20 @@ wheels = [
 ]
 
 [[package]]
+name = "azure-appconfiguration"
+version = "1.8.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "azure-core" },
+    { name = "isodate" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0f/de/d75d8f35bc1dbf77ddf005f1b0d61ae43361fa2f654cbe98e0947684b9b2/azure_appconfiguration-1.8.0.tar.gz", hash = "sha256:168e7b01b350f5d806a2d935a8ec3694c59c6394d5a1c409eb05fef0b56b1aa0", size = 131718, upload-time = "2026-01-27T19:54:19.16Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0a/7a/a39fadd3ec377fe669dfa54e37faf27396e1f722cb6ae4adec6f81bec044/azure_appconfiguration-1.8.0-py3-none-any.whl", hash = "sha256:fcfcfaa51712a59067d2cf837004327e73c0649d63f2d298020e5db2c77f7821", size = 106898, upload-time = "2026-01-27T19:54:20.744Z" },
+]
+
+[[package]]
 name = "azure-core"
 version = "1.39.0"
 source = { registry = "https://pypi.org/simple" }
@@ -938,6 +952,7 @@ dependencies = [
     { name = "agent-framework-core" },
     { name = "agent-framework-foundry" },
     { name = "aiohttp" },
+    { name = "azure-appconfiguration" },
     { name = "azure-cosmos" },
     { name = "azure-eventgrid" },
     { name = "azure-identity" },
@@ -974,6 +989,7 @@ requires-dist = [
     { name = "agent-framework-core", specifier = ">=1.0.0" },
     { name = "agent-framework-foundry", specifier = ">=1.0.0" },
     { name = "aiohttp" },
+    { name = "azure-appconfiguration", specifier = ">=1.8.0" },
     { name = "azure-cosmos" },
     { name = "azure-eventgrid" },
     { name = "azure-identity" },
