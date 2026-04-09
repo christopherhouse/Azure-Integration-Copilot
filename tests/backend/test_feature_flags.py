@@ -58,10 +58,10 @@ def test_get_feature_flags_returns_boolean_flags(client):
 
     assert response.status_code == 200
     flags = response.json()["data"]["flags"]
+    assert set(flags.keys()) == {"new-dashboard", "dark-mode", "beta-analysis"}
     assert flags["new-dashboard"] is True
     assert flags["dark-mode"] is False
     assert flags["beta-analysis"] is True
-    assert len(flags) == 3
 
 
 def test_get_feature_flags_non_feature_keys_excluded(client):
