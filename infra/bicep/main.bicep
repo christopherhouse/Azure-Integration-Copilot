@@ -626,6 +626,7 @@ module appConfiguration 'modules/app-configuration.bicep' = {
     subnetPrivateEndpointsId: networking.outputs.subnetPrivateEndpointsId
     privateDnsZoneId: networking.outputs.privateDnsZoneIdAppConfig
     logAnalyticsWorkspaceId: observability.outputs.logAnalyticsWorkspaceId
+    applicationInsightsResourceId: observability.outputs.applicationInsightsResourceId
     tags: commonTags
   }
 }
