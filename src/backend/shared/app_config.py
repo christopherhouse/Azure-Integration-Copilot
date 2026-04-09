@@ -41,6 +41,7 @@ class AppConfigService:
 
     def __init__(self) -> None:
         self._client: AzureAppConfigurationClient | None = None
+        self._credential: Any = None
         self._cache: dict[str, str] = {}
         self._loaded: bool = False
         self._last_refresh: float = 0.0
@@ -51,9 +52,10 @@ class AppConfigService:
 
     async def _get_client(self) -> AzureAppConfigurationClient:
         if self._client is None:
+            self._credential = create_credential()
             self._client = AzureAppConfigurationClient(
                 base_url=settings.app_config_endpoint,
-                credential=create_credential(),
+                credential=self._credential,
             )
         return self._client
 
@@ -122,10 +124,13 @@ class AppConfigService:
                 logger.warning("app_config_refresh_failed", exc_info=True)
 
     async def close(self) -> None:
-        """Close the underlying SDK client and release credentials."""
+        """Close the underlying SDK client and credential, releasing all resources."""
         if self._client is not None:
             await self._client.close()
             self._client = None
+        if self._credential is not None:
+            await self._credential.close()
+            self._credential = None
         self._loaded = False
 
 

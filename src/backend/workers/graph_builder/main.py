@@ -56,7 +56,10 @@ async def main() -> None:
         loop.add_signal_handler(sig, worker.stop)
 
     logger.info("graph_builder_worker_starting", subscription=SUBSCRIPTION_NAME)
-    await worker.run()
+    try:
+        await worker.run()
+    finally:
+        await app_config_service.close()
 
 
 if __name__ == "__main__":

@@ -489,6 +489,9 @@ resource backendAppConfigDataReader 'Microsoft.Authorization/roleAssignments@202
     principalId: identityBackend.outputs.principalId
     principalType: 'ServicePrincipal'
   }
+  dependsOn: [
+    appConfiguration
+  ]
 }
 
 // App Configuration Data Reader for worker identity
@@ -500,6 +503,9 @@ resource workerAppConfigDataReader 'Microsoft.Authorization/roleAssignments@2022
     principalId: identityWorker.outputs.principalId
     principalType: 'ServicePrincipal'
   }
+  dependsOn: [
+    appConfiguration
+  ]
 }
 
 // Existing resource references for RBAC scoping

@@ -60,6 +60,7 @@ async def main() -> None:
     try:
         await worker.run()
     finally:
+        await app_config_service.close()
         await orchestrator.close()
         await pubsub.close()
 

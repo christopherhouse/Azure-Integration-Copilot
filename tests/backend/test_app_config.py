@@ -219,17 +219,21 @@ async def test_on_config_changed_handles_exception_gracefully():
 
 
 @pytest.mark.asyncio
-async def test_close_releases_client():
-    """close() closes the underlying SDK client and clears the reference."""
+async def test_close_releases_client_and_credential():
+    """close() closes both the SDK client and the credential."""
     svc = AppConfigService()
     mock_client = AsyncMock()
+    mock_credential = AsyncMock()
     svc._client = mock_client
+    svc._credential = mock_credential
     svc._loaded = True
 
     await svc.close()
 
     mock_client.close.assert_awaited_once()
+    mock_credential.close.assert_awaited_once()
     assert svc._client is None
+    assert svc._credential is None
     assert svc._loaded is False
 
 
