@@ -74,10 +74,11 @@ class AppConfigService:
                 continue
             if isinstance(kv, FeatureFlagConfigurationSetting):
                 # The SDK deserialises feature flags into typed objects whose
-                # .value property re-serialises to JSON.  In some SDK versions
-                # the getter can return None.  Fall back to a minimal JSON
-                # payload built from the typed fields so the flag is never
-                # silently dropped from the cache.
+                # .value property re-serialises to JSON.  The getter calls
+                # json.loads(self._value) which can raise TypeError when
+                # _value is unexpectedly None, and TypeError is not caught
+                # by the SDK's (json.JSONDecodeError, ValueError) handler.
+                # Build a minimal JSON payload from typed fields as fallback.
                 raw = kv.value
                 if raw is not None:
                     new_cache[kv.key] = str(raw)

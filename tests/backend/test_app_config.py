@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -258,7 +259,7 @@ def _make_feature_flag_kv(feature_id: str, enabled: bool):
     kv.key = f".appconfig.featureflag/{feature_id}"
     kv.feature_id = feature_id
     kv.enabled = enabled
-    kv.value = f'{{"id":"{feature_id}","enabled":{str(enabled).lower()}}}'
+    kv.value = json.dumps({"id": feature_id, "enabled": enabled})
     return kv
 
 
