@@ -90,27 +90,6 @@ resource configStoreTelemetry 'Microsoft.AppConfiguration/configurationStores@20
   ]
 }
 
-// ---------------------------------------------------------------------------
-// Feature Flag — displayProductLandingPage
-// Parented on the configStoreTelemetry resource which already depends on the
-// AVM module, ensuring correct deployment ordering.
-// ---------------------------------------------------------------------------
-
-resource displayProductLandingPageFlag 'Microsoft.AppConfiguration/configurationStores/keyValues@2024-05-01' = {
-  parent: configStoreTelemetry
-  name: '.appconfig.featureflag~2FdisplayProductLandingPage'
-  properties: {
-    value: string({
-      id: 'displayProductLandingPage'
-      description: 'Display Product Landing Page'
-      enabled: false
-      conditions: {
-        client_filters: []
-      }
-    })
-    contentType: 'application/vnd.microsoft.appconfig.ff+json;charset=utf-8'
-  }
-}
 
 @description('Resource ID of the App Configuration store')
 output appConfigId string = configStore.outputs.resourceId
