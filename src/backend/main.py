@@ -14,6 +14,7 @@ from opentelemetry.trace import StatusCode
 from config import settings
 from domains.analysis.router import router as analysis_router
 from domains.artifacts.router import router as artifact_router
+from domains.feature_flags.router import router as feature_flags_router
 from domains.graph.router import router as graph_router
 from domains.projects.router import router as project_router
 from domains.realtime.router import router as realtime_router
@@ -89,6 +90,10 @@ app = FastAPI(
             "description": "AI-powered analysis of integration landscapes.",
         },
         {
+            "name": "feature-flags",
+            "description": "Feature flag retrieval from App Configuration.",
+        },
+        {
             "name": "realtime",
             "description": "Web PubSub token negotiation for realtime updates.",
         },
@@ -148,6 +153,7 @@ app.include_router(artifact_router)
 app.include_router(graph_router)
 app.include_router(analysis_router)
 app.include_router(realtime_router)
+app.include_router(feature_flags_router)
 
 
 
