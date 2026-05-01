@@ -322,7 +322,7 @@ jobs:
       # -- Scan image with Trivy ---------------------------------------------
       - name: Scan ${{ matrix.image_name }} image (Trivy)
         if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@v0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: "${{ steps.meta.outputs.image }}:${{ env.SHORT_SHA }}"
           format: sarif
