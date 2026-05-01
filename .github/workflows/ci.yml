@@ -332,7 +332,7 @@ jobs:
 
       - name: Upload ${{ matrix.image_name }} SARIF
         if: always() && github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ matrix.name }}-trivy-results.sarif
           category: trivy-${{ matrix.name }}
